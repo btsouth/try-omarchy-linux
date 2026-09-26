@@ -26,73 +26,11 @@ import (
 // window, keeps the window branded, and bridges the clipboard. The native
 // launcher edits settings before handing off to the SDL guest window.
 
-const appTitle = "Try Omarchy"
-
-type config struct {
-	desktop                     desktopPreferences
-	audioDevices                audioPreferences
-	dir, hostDir, payloadDir    string
-	winqEmu, share              string
-	fresh, fullscreen, noGpu    bool
-	fullscreenDisplay           string
-	hostCursor                  bool
-	experimentalPinch           bool
-	disablePinch, guestPinch    bool
-	lanPublic                   bool
-	instant, portable           bool
-	guestDir, vmDir, disk       string
-	qmpDir                      string
-	diskFormat                  string
-	qemu                        string
-	useGpu                      bool
-	supportsSharing             bool
-	audio                       string
-	memMiB                      int
-	displays                    int
-	displayWidth, displayHeight int
-	// kernel-irqchip=off keeps WHPX from requesting nested virtualization,
-	// which some hosts advertise and then refuse (issue #19). Set by the
-	// startup retry, never by a flag.
-	forwards []portForward
-	// launchForwards is the list from this launch; forwards follows live
-	// changes from Settings between boots (forward_live.go).
-	launchForwards []portForward
-	sshKey         string
-	// Guest RAM chosen by the user (settings.json or -memory); 0 = automatic.
-	memOverrideMiB int
-	diskGiB        int
-	irqchipOff     bool
-	// Guest vCPUs chosen by the user (settings.json or -cpus); 0 = automatic.
-	cpuOverride  int
-	cpus         int
-	hostTotalMiB int
-	// Rendering decision inputs, see render_probe.go.
-	renderMode    string
-	runtimeID     string
-	displayDriver string
-}
-
 // memoryStarved reports whether the current attempt's QEMU died because the
 // guest RAM couldn't be allocated (stderr is truncated per attempt).
 func memoryStarved(cfg *config) bool {
 	data, err := os.ReadFile(filepath.Join(cfg.vmDir, "qemu-stderr.log"))
 	return err == nil && bytes.Contains(data, []byte("cannot set up guest memory"))
-}
-
-var logFile *os.File
-
-// earlyLog holds lines written before shell.log is opened (update recovery,
-// settings, the restored-payload decision) so they land at the top of the
-// session's log instead of vanishing.
-var earlyLog []string
-
-func logf(format string, a ...any) {
-	line := fmt.Sprintf("%s %s", time.Now().Format("15:04:05"), fmt.Sprintf(format, a...))
-	if logFile != nil {
-		fmt.Fprintln(logFile, line)
-	} else if len(earlyLog) < 200 {
-		earlyLog = append(earlyLog, line)
-	}
 }
 
 func fatal(format string, a ...any) {
@@ -108,10 +46,7 @@ func finishSetupCancellation(cfg *config, err error) bool {
 	}
 	getUI().setStatus("Cancelling and cleaning up...")
 	logf("setup cancelled by user")
-	if logFile != nil {
-		logFile.Close()
-		logFile = nil
-	}
+	closeLog()
 	executable, _ := os.Executable()
 	if cleanupErr := cleanupCancelledSetup(cfg.dir, executable, cancelRemovesAll.Load()); cleanupErr != nil {
 		errorBox(fmt.Sprintf("Setup was cancelled, but some temporary files could not be removed:\n\n%v\n\nOmarchy data folder: %s\n\nKeep this folder. Close Try Omarchy and try again.", cleanupErr, cfg.dir))
@@ -539,17 +474,13 @@ func main() {
 	if err := os.MkdirAll(cfg.hostDir, 0o755); err != nil {
 		fatal("Could not create the Windows host-state directory: %v", err)
 	}
-	logFile, _ = os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if logFile != nil {
-		for _, line := range earlyLog {
-			fmt.Fprintln(logFile, line)
-		}
-		earlyLog = nil
+	if shellLog, _ := os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); shellLog != nil {
+		openLog(shellLog)
 		// A windowsgui process has no console: an unhandled panic (any
 		// goroutine) writes its trace to stderr and vanishes. It happened - the
 		// shell died silently mid-session leaving QEMU orphaned. Route stderr
 		// into the log so the next death has a trace.
-		os.Stderr = logFile
+		os.Stderr = shellLog
 	}
 	logf("---- %s starting ----", appTitle)
 
@@ -592,9 +523,7 @@ func main() {
 			} else if updating {
 				logf("starting authenticated launcher update")
 				uiDone()
-				if logFile != nil {
-					logFile.Close()
-				}
+				closeLog()
 				return
 			}
 		}

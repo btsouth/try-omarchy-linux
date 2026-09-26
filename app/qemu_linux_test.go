@@ -1,70 +1,14 @@
-//go:build !windows
+//go:build linux
 
 package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-const (
-	appTitle = "Try Omarchy"
-)
-
-type config struct {
-	desktop                     desktopPreferences
-	audioDevices                audioPreferences
-	dir, hostDir, payloadDir    string
-	winqEmu, share              string
-	fresh, fullscreen, noGpu    bool
-	fullscreenDisplay           string
-	hostCursor                  bool
-	experimentalPinch           bool
-	disablePinch, guestPinch    bool
-	lanPublic                   bool
-	instant, portable           bool
-	guestDir, vmDir, disk       string
-	qmpDir                      string
-	diskFormat                  string
-	qemu                        string
-	useGpu                      bool
-	supportsSharing             bool
-	audio                       string
-	memMiB                      int
-	displays                    int
-	displayWidth, displayHeight int
-	forwards                    []portForward
-	sshKey                      string
-	// Guest RAM chosen by the user (settings.json or -memory); 0 = automatic.
-	memOverrideMiB int
-	diskGiB        int
-	irqchipOff     bool
-	cpuOverride    int
-	cpus           int
-	hostTotalMiB   int
-	// Rendering decision inputs, see render_probe.go.
-	renderMode    string
-	runtimeID     string
-	displayDriver string
-}
-
-type progressUI struct{}
-
-func getUI() *progressUI                             { return &progressUI{} }
-func (*progressUI) setStatus(string, ...any)         {}
-func (*progressUI) setProgress(current, total int64) {}
-func logf(string, ...any)                            {}
-func setSparse(*os.File) error                       { return nil }
-func displayDriverIdentity() string                  { return "" }
-func punchHole(*os.File, int64, int64) error         { return nil }
-func sparseCopy(dst, src *os.File, total int64, ui *progressUI) error {
-	_, err := io.Copy(dst, src)
-	return err
-}
 
 func TestPrepareDiskPublishesCompleteFile(t *testing.T) {
 	dir := t.TempDir()
@@ -222,12 +166,12 @@ func TestBuildQemuArgsKeepsKernelIrqchipUnlessRefused(t *testing.T) {
 		cfg := &config{vmDir: "/vm", guestDir: "/guest", disk: "/vm/disk.raw",
 			diskFormat: "raw", memMiB: 4096, audio: "none", useGpu: gpu}
 		args := strings.Join(buildQemuArgs(cfg, "root=/dev/vda"), " ")
-		if !strings.Contains(args, "-machine q35,accel=whpx -cpu") {
+		if !strings.Contains(args, "-machine q35,accel="+qemuAccelerator+" -cpu") {
 			t.Fatalf("gpu=%v: default machine missing: %s", gpu, args)
 		}
 		cfg.irqchipOff = true
 		args = strings.Join(buildQemuArgs(cfg, "root=/dev/vda"), " ")
-		if !strings.Contains(args, "-machine q35,accel=whpx,kernel-irqchip=off -cpu") {
+		if !strings.Contains(args, "-machine q35,accel="+qemuAccelerator+",kernel-irqchip=off -cpu") {
 			t.Fatalf("gpu=%v: kernel-irqchip=off missing: %s", gpu, args)
 		}
 	}

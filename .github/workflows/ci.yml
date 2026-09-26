@@ -53,6 +53,10 @@ jobs:
         working-directory: app
         run: GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-H windowsgui -s -w" -o ../TryOmarchy.exe .
 
+      - name: Build Linux launcher
+        working-directory: app
+        run: GOOS=linux GOARCH=amd64 go build -trimpath -o /dev/null .
+
       - name: Validate current release pin
         run: scripts/release/validate-pin.py --require-public "$(sed -n 's/.*releases\/download\/\([^\"]*\).*/\1/p' app/manifest.go)"
 

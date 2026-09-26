@@ -50,7 +50,7 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 	if cfg.cpus <= 0 {
 		smp = fmt.Sprint(minimumAutoGuestCPUs)
 	}
-	machine := "q35,accel=whpx"
+	machine := "q35,accel=" + qemuAccelerator
 	if cfg.irqchipOff {
 		machine += ",kernel-irqchip=off"
 	}

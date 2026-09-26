@@ -116,19 +116,28 @@ Open questions for the Mesa patch before it ships in the shared guest image:
 
 ### Upstream status
 
-Already known, not yet understood upstream:
+Known upstream since March 2026, and the workaround is already public:
 
-- NVIDIA forum thread 364360 (March 22, 2026, RTX 5090, 595.45.04) reports
-  the distortion and the 32-byte workaround. No NVIDIA reply.
-- virglrenderer issue 651 (open, filed by the Venus maintainer) has no root
-  cause; the maintainer cannot reproduce it and is trying a 1024-byte
-  alignment, which would not fix it.
+- virglrenderer issue 651 (open): a user found the 32-byte prime stride fix
+  on March 13, the Venus maintainer concluded it is an NVIDIA EGL bug and
+  cc'd NVIDIA engineers. No activity since March 24, and no Venus or Mesa
+  change has landed for it.
+- virglrenderer MR 1605 (open) switches the fallback bind to
+  `GL_TEXTURE_EXTERNAL_OES` and was reported to make no difference on NVIDIA.
+  On NVIDIA vrend never reaches that line: it takes the
+  `glEGLImageTargetTexStorageEXT` branch because texture storage and
+  `GL_EXT_EGL_image_storage` are available. That is the one piece of new
+  information we have for them (`upstream/virglrenderer-651-comment.md`,
+  optional).
+- NVIDIA forum thread 364360 (March 22, 595.45.04). Brandon replied there
+  on September 26 with the narrowed entry point and the repro.
 - Mesa issue 15149 (closed) is the same NVIDIA pitch behavior with i915
   buffers imported on NVIDIA.
 
-`upstream/` has a reply for the NVIDIA thread and a comment for virglrenderer
-651 with the narrowed root cause and the repro, ready to post from Brandon's
-accounts (NVIDIA forum first, since the virglrenderer comment links to it).
+The product does not wait on any of this: it carries the 32-byte Venus
+workaround. On the Intel devbox, stock Mesa presents correctly at widths that
+shear on NVIDIA (prime blit path, iris honors the pitch), which confirms the
+bug is NVIDIA-only.
 
 ### Llvmpipe and duplicate devices
 

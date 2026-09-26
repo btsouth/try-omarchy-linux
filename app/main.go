@@ -4,7 +4,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -25,13 +23,6 @@ import (
 // supervises it through WHPX's rough edges, scopes the Windows key to the VM
 // window, keeps the window branded, and bridges the clipboard. The native
 // launcher edits settings before handing off to the SDL guest window.
-
-// memoryStarved reports whether the current attempt's QEMU died because the
-// guest RAM couldn't be allocated (stderr is truncated per attempt).
-func memoryStarved(cfg *config) bool {
-	data, err := os.ReadFile(filepath.Join(cfg.vmDir, "qemu-stderr.log"))
-	return err == nil && bytes.Contains(data, []byte("cannot set up guest memory"))
-}
 
 func fatal(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
@@ -639,12 +630,7 @@ func main() {
 		fatal("Cannot parse build-spec.json: %v", err)
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
-	// Serial log only - no console= on the display, so no kernel text or
-	// blinking cursor flashes in the window before SDDM (boot problems: read
-	// vm\serial*.log).
-	cmdline := strings.ReplaceAll(spec.Runtime.KernelCommandLine, "console=tty0 ", "")
-	cmdline = strings.ReplaceAll(cmdline, "console=hvc0", "console=ttyS0")
-	cmdline += " vt.global_cursor_default=0"
+	cmdline := windowedKernelCmdline(spec)
 	if cfg.instant {
 		cmdline += " tryomarchy.instant=1"
 	}
@@ -1055,53 +1041,6 @@ drained:
 	return false
 }
 
-var (
-	pendingReboot atomic.Bool
-	guestReady    atomic.Bool
-)
-
-// runLifecycleListener receives the guest's shutdown intent: the image's
-// try-omarchy-reboot-notify unit connects to 10.0.2.2:4450 (this listener via
-// user-net) and says "reboot" when the guest is rebooting rather than
-// powering off.
-func runLifecycleListener() {
-	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", lifecyclePort))
-	if err != nil {
-		fatal("Try Omarchy looks like it's already running (port %d is in use).", lifecyclePort)
-	}
-	go func() {
-		for {
-			c, err := l.Accept()
-			if err != nil {
-				return
-			}
-			go func(c net.Conn) {
-				defer c.Close()
-				c.SetReadDeadline(time.Now().Add(3 * time.Second))
-				line, err := bufio.NewReader(io.LimitReader(c, 64)).ReadString('\n')
-				if err != nil {
-					return
-				}
-				switch strings.TrimSpace(line) {
-				case "reboot":
-					logf("guest announced reboot")
-					pendingReboot.Store(true)
-				case "ready":
-					logf("guest userspace announced ready")
-					guestReady.Store(true)
-				case "reclaim":
-					c.SetWriteDeadline(time.Now().Add(3 * time.Second))
-					if err := requestReclaimError(); err != nil {
-						fmt.Fprintln(c, "error: "+err.Error())
-					} else {
-						fmt.Fprintln(c, "ok: Preparing free space. Check Reclaim status in the tray before shutting down.")
-					}
-				}
-			}(c)
-		}
-	}()
-}
-
 // waitExit reaps QEMU: stock WHPX wedges instead of exiting after a guest
 // shutdown, so after a grace period the husk is killed. Returns true once the
 // process is gone.
@@ -1121,32 +1060,9 @@ func waitExit(exited <-chan error, grace time.Duration, cfg *config) bool {
 	}
 }
 
-// recordRenderResult remembers which rendering path reached userspace with
-// the current runtime and drivers, so the next launch can skip attempts that
-// this machine cannot pass. A CPU result written while GPU was never tried
-// (settings say CPU) must not later be mistaken for a probe failure, so only
-// automatic and forced-GPU launches record CPU.
-func recordRenderResult(cfg *config) {
-	if cfg.runtimeID == "" || (cfg.renderMode == renderCPU && !cfg.useGpu) {
-		return
-	}
-	result := renderCPU
-	if cfg.useGpu {
-		result = renderGPU
-	}
-	probe := renderProbe{Result: result, RuntimeID: cfg.runtimeID, DisplayDriver: cfg.displayDriver, RecordedAt: time.Now()}
-	if err := saveRenderProbe(cfg.dir, probe); err != nil {
-		logf("could not record the rendering result: %v", err)
-	}
-}
-
 // hostResumed is signalled by the tray window when Windows resumes from
 // sleep, so the guest clock can be corrected right away.
 var hostResumed = make(chan struct{}, 1)
-
-// theAgent is the running launcher's guest agent channel; nil until it is
-// listening.
-var theAgent atomic.Pointer[guestAgent]
 
 func runGuestAgent(dir string) {
 	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", agentPort))
@@ -1161,36 +1077,6 @@ func runGuestAgent(dir string) {
 	a.dropDrag = performDropDrag
 	theAgent.Store(a)
 	a.run(l, hostResumed)
-}
-
-// requestReclaim asks the guest to zero its free space so disk.raw can be
-// compacted after shutdown. Used by the tray, and by "-reclaim" through the
-// lifecycle port.
-// reclaimDir is the data directory whose Windows drive bounds a reclaim pass.
-var reclaimDir atomic.Pointer[string]
-var reclaimSupported atomic.Bool
-
-func requestReclaimError() error {
-	if !reclaimSupported.Load() {
-		return fmt.Errorf("Reclaim is available for standard raw disks only.")
-	}
-	dir := reclaimDir.Load()
-	a := theAgent.Load()
-	if dir == nil || a == nil {
-		return fmt.Errorf("Omarchy is not ready. Wait for the desktop and try again.")
-	}
-	free, err := diskFreeBytes(*dir)
-	if err != nil {
-		return fmt.Errorf("Could not check free space: %w", err)
-	}
-	budget := reclaimBudgetMiB(free)
-	if budget == 0 {
-		return fmt.Errorf("Reclaim needs at least 4.25 GiB free on the Windows drive.")
-	}
-	if !a.requestZeroFill(budget) {
-		return fmt.Errorf("Reclaim was not started. %s", a.reclaimStatus())
-	}
-	return nil
 }
 
 // compactAfterShutdown runs once the guest has powered off, when the disk is

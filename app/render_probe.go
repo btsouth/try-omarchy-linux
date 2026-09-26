@@ -141,3 +141,22 @@ func runtimeIdentity(gpuRoot string) string {
 	}
 	return fmt.Sprintf("stat:%d:%d", info.Size(), info.ModTime().UnixNano())
 }
+
+// recordRenderResult remembers which rendering path reached userspace with
+// the current runtime and drivers, so the next launch can skip attempts that
+// this machine cannot pass. A CPU result written while GPU was never tried
+// (settings say CPU) must not later be mistaken for a probe failure, so only
+// automatic and forced-GPU launches record CPU.
+func recordRenderResult(cfg *config) {
+	if cfg.runtimeID == "" || (cfg.renderMode == renderCPU && !cfg.useGpu) {
+		return
+	}
+	result := renderCPU
+	if cfg.useGpu {
+		result = renderGPU
+	}
+	probe := renderProbe{Result: result, RuntimeID: cfg.runtimeID, DisplayDriver: cfg.displayDriver, RecordedAt: time.Now()}
+	if err := saveRenderProbe(cfg.dir, probe); err != nil {
+		logf("could not record the rendering result: %v", err)
+	}
+}

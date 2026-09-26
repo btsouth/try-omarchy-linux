@@ -31,6 +31,23 @@ func qemuStartupFailureTail(vmDir string) string {
 	return strings.TrimSpace(string(data))
 }
 
+// memoryStarved reports whether the current attempt's QEMU died because the
+// guest RAM couldn't be allocated (stderr is truncated per attempt).
+func memoryStarved(cfg *config) bool {
+	data, err := os.ReadFile(filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+	return err == nil && bytes.Contains(data, []byte("cannot set up guest memory"))
+}
+
+// windowedKernelCmdline is the image's kernel command line for a desktop
+// window. Serial log only - no console= on the display, so no kernel text or
+// blinking cursor flashes in the window before SDDM (boot problems: read
+// serial*.log in the vm folder).
+func windowedKernelCmdline(spec buildSpec) string {
+	cmdline := strings.ReplaceAll(spec.Runtime.KernelCommandLine, "console=tty0 ", "")
+	cmdline = strings.ReplaceAll(cmdline, "console=hvc0", "console=ttyS0")
+	return cmdline + " vt.global_cursor_default=0"
+}
+
 // buildQemuArgs selects the native runtime devices and private controls.
 // Rendering follows scripts/launch-omarchy.ps1: GPU mode is WINQ-EMU's stack (patched WHPX survives -cpu host;
 // virtio-vga-gl IS the VGA device, so no -vga none), CPU mode is stock QEMU
@@ -69,7 +86,7 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		)
 	} else {
 		args = append(args,
-			"-machine", machine, "-cpu", "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+aes",
+			"-machine", machine, "-cpu", cpuRenderingCPUModel,
 			"-smp", smp, "-m", mem,
 			"-vga", "none", "-device", displayDevice(cfg, hostmem),
 			"-display", sdlDisplay(false, cfg.hostCursor),
@@ -127,21 +144,18 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		"-qmp", "unix:"+qemuOptionValue(filepath.Join(cfg.qmpDir, qmpControlName(qmpFwdPort)))+",server=on,wait=off",
 		"-qmp", "unix:"+qemuOptionValue(filepath.Join(cfg.qmpDir, qmpControlName(qmpSupPort)))+",server=on,wait=off",
 		"-D", filepath.Join(vm, "qemu.log"),
-		// In-guest reboot/poweroff wedges upstream WHPX (vCPUs never return
-		// from system reset). Exit instead; the supervisor relaunches on reset.
-		"-no-reboot",
 		"-name", appTitle,
 	)
+	if qemuExitsOnReboot {
+		args = append(args, "-no-reboot")
+	}
 	if cfg.audio == "sdl" && audioRuntimeSupportsLiveRouting(cfg.qemu) {
 		args = append(args,
 			"-chardev", fmt.Sprintf("socket,id=audio0,host=127.0.0.1,port=%d,reconnect-ms=1000", audioBridgePort),
 			"-device", "virtserialport,chardev=audio0,name=dev.tryomarchy.audio",
 		)
 	}
-	// The bundled r19 runtime replaces reported free pages with demand-zero
-	// Windows backing before acknowledging Linux. Earlier Windows QEMU builds
-	// cannot discard these pages and spam errors when reporting is enabled.
-	if runtimeHasPatch(cfg.qemu, "patches/qemu/0015-reclaim-free-guest-pages-on-whpx.patch") {
+	if freePageReportingAvailable(cfg.qemu) {
 		args = append(args, "-device", "virtio-balloon-pci,free-page-reporting=on")
 	}
 	if cfg.share != "" {
@@ -154,7 +168,7 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 	if cfg.fullscreen {
 		args = append(args, "-full-screen")
 	}
-	return args
+	return append(args, platformQemuArgs(cfg)...)
 }
 
 // QEMU's structured option parser uses commas as separators and represents a

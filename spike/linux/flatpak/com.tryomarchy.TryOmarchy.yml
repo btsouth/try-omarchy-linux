@@ -1,0 +1,81 @@
+# Phase 0 spike: the Linux runtime as a Flatpak. Stock QEMU 11.1.1 (the
+# version Arch ships today) with virglrenderer 1.3.0 and Venus, built on the
+# Freedesktop 25.08 runtime so Mesa and the NVIDIA GL extension come from
+# Flatpak rather than the host distro. No Try Omarchy patches yet and no
+# launcher: the command is QEMU itself.
+app-id: com.tryomarchy.TryOmarchy
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: qemu-system-x86_64
+finish-args:
+  - --device=kvm
+  - --device=dri
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # QEMU's user-mode network (slirp) opens ordinary sockets for the guest.
+  - --share=network
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  # Spike only: the guest image and run directory. The product keeps its
+  # data in the app's own data directory.
+  - --filesystem=/data/try-omarchy-linux-spike
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.a'
+  - '*.la'
+modules:
+  - name: libslirp
+    buildsystem: meson
+    sources:
+      - type: archive
+        url: https://gitlab.freedesktop.org/slirp/libslirp/-/archive/v4.9.1/libslirp-v4.9.1.tar.bz2
+        sha256: 3caff6e2de445f4995629d4929c55419f661b2b1d14f12481e155a71c1e8f811
+
+  # virglrenderer's gallium format tables are generated with PyYAML, which
+  # the SDK lacks. Needed at build time only.
+  - name: pyyaml
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-deps --no-build-isolation --prefix=${FLATPAK_DEST} .
+    cleanup:
+      - '*'
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd7729d542c61a4d537767a59645b82a0b521206e1e25c2/pyyaml-6.0.3.tar.gz
+        sha256: d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f
+
+  - name: virglrenderer
+    buildsystem: meson
+    build-options:
+      env:
+        PYTHONPATH: /app/lib/python3.13/site-packages
+    config-opts:
+      - -Dplatforms=egl
+      - -Dvenus=true
+      - -Dvideo=false
+      - -Dtests=false
+    sources:
+      - type: archive
+        url: https://gitlab.freedesktop.org/virgl/virglrenderer/-/archive/1.3.0/virglrenderer-1.3.0.tar.bz2
+        sha256: 088040d130eaa0458a978fe7867fbfb1fcf1fdff52bf3b27a00658828bc4189f
+
+  - name: qemu
+    buildsystem: simple
+    build-commands:
+      - >-
+        ./configure --prefix=/app --target-list=x86_64-softmmu
+        --enable-kvm --enable-sdl --enable-opengl --enable-virglrenderer
+        --enable-pipewire --enable-slirp --enable-virtfs --enable-tools
+        --audio-drv-list=pipewire,sdl
+        --disable-gtk --disable-spice --disable-xen --disable-user
+        --disable-docs --disable-werror --disable-modules --disable-download
+      - make -j${FLATPAK_BUILDER_N_JOBS}
+      - make install
+    sources:
+      - type: archive
+        url: https://download.qemu.org/qemu-11.1.1.tar.xz
+        sha256: 079ffbff8a7111bbc89022107cbabf3bbfd614d5fc9d7cc675991196aca12482

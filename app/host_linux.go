@@ -162,3 +162,33 @@ func checkKVM() error {
 	}
 	return fmt.Errorf("cannot open /dev/kvm: %w", err)
 }
+
+// renderNodeVendors lists the PCI vendor of each DRM render node.
+func renderNodeVendors(sysClassDRM string) []string {
+	matches, _ := filepath.Glob(filepath.Join(sysClassDRM, "renderD*", "device", "vendor"))
+	vendors := make([]string, 0, len(matches))
+	for _, path := range matches {
+		if data, err := os.ReadFile(path); err == nil {
+			vendors = append(vendors, strings.TrimSpace(string(data)))
+		}
+	}
+	return vendors
+}
+
+// onlyNVIDIARenderNodes reports a host whose every GPU is NVIDIA, where
+// QEMU's GL, and so the import of guest Vulkan frames, must run on NVIDIA's
+// driver. That driver reads LINEAR dma-bufs bound with
+// glEGLImageTargetTexStorageEXT at align(width * 4, 32) whatever pitch they
+// were imported with, which shears Venus frames (see the Linux spike
+// findings). Hybrid laptops usually give QEMU's window the integrated GPU.
+func onlyNVIDIARenderNodes(vendors []string) bool {
+	if len(vendors) == 0 {
+		return false
+	}
+	for _, vendor := range vendors {
+		if vendor != "0x10de" {
+			return false
+		}
+	}
+	return true
+}

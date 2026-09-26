@@ -49,6 +49,7 @@ func main() {
 	resourceProfileFlag := flag.String("resource-profile", "", "resource preset: balanced, maximum-performance, or manual")
 	flag.IntVar(&cfg.diskGiB, "disk-size", 0, "guest disk capacity in GiB (0: default; grows existing disks, never shrinks)")
 	renderFlag := flag.String("render", "", "rendering path: auto (default), gpu, or cpu")
+	vulkanPresentFlag := flag.String("vulkan-present", "auto", "how guest Vulkan windows reach the screen: auto, gpu, or cpu (cpu copies frames and avoids the NVIDIA import bug)")
 	timeZoneFlag := flag.String("timezone", "", "guest time zone: blank follows this computer, keep leaves the guest alone, or an IANA name")
 	keyboardFlag := flag.String("keyboard", "", "guest keyboard layout: blank or keep leaves the guest alone, or an XKB layout such as de or us:intl")
 	localeFlag := flag.String("locale", "", "guest language: blank follows this computer, keep leaves the guest alone, or a locale such as de_DE")
@@ -171,6 +172,17 @@ func main() {
 		logf("guest follows this computer's locale:%s", words)
 	}
 
+	if cfg.useGpu {
+		present, err := vulkanPresentMode(*vulkanPresentFlag, onlyNVIDIARenderNodes(renderNodeVendors("/sys/class/drm")))
+		if err != nil {
+			fatal("%v", err)
+		}
+		if present == "cpu" {
+			cmdline += " tryomarchy.vulkan-present=cpu"
+			logf("guest Vulkan windows present through CPU copies (%s)", *vulkanPresentFlag)
+		}
+	}
+
 	if err := prepareDisk(cfg, spec.Runtime.Storage.ExpandedSizeMiB); err != nil {
 		fatal("Preparing the writable disk failed: %v", err)
 	}
@@ -260,4 +272,19 @@ func compactLinuxDisk(cfg *config) {
 	}
 	after, _ := platformAllocatedFileBytes(cfg.disk)
 	getUI().setStatus("Reclaimed %s (%s of zero blocks)", formatGiB(max(before-after, 0)), formatGiB(reclaimed))
+}
+
+// vulkanPresentMode resolves -vulkan-present. Automatic copies frames on
+// hosts where only NVIDIA can import them, since its GL misreads the pitch.
+func vulkanPresentMode(flagValue string, nvidiaOnly bool) (string, error) {
+	switch flagValue {
+	case "auto":
+		if nvidiaOnly {
+			return "cpu", nil
+		}
+		return "gpu", nil
+	case "gpu", "cpu":
+		return flagValue, nil
+	}
+	return "", fmt.Errorf("-vulkan-present must be auto, gpu, or cpu")
 }

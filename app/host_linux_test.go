@@ -115,3 +115,60 @@ func TestWindowedKernelCmdline(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestCloseRequestedMatchesOnlyTheRuntimeEvent(t *testing.T) {
+	if !closeRequested(`{"timestamp": {"seconds": 1, "microseconds": 2}, "event": "DISPLAY_CLOSE_REQUEST", "data": {"display": 0}}`) {
+		t.Fatal("close request not recognised")
+	}
+	if closeRequested(`{"event": "SHUTDOWN", "data": {"guest": true, "reason": "guest-shutdown"}}`) || closeRequested(`{"return": {}}`) {
+		t.Fatal("another message matched")
+	}
+}
+
+func TestLinuxQemuEnvironmentTurnsOnDesktopBehavior(t *testing.T) {
+	env := strings.Join(linuxQemuEnvironment(nil), " ")
+	for _, want := range []string{"SDL_VIDEO_WAYLAND_WMCLASS=" + linuxAppID, "QEMU_SDL_TITLE_FROM_NAME=1", "QEMU_SDL_FOCUS_KEYBOARD_GRAB=1"} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("%s missing from %s", want, env)
+		}
+	}
+}
+
+func TestOnlyNVIDIARenderNodes(t *testing.T) {
+	root := t.TempDir()
+	add := func(node, vendor string) {
+		dir := filepath.Join(root, node, "device")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "vendor"), []byte(vendor+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if onlyNVIDIARenderNodes(renderNodeVendors(root)) {
+		t.Fatal("no GPUs counted as NVIDIA")
+	}
+	add("renderD128", "0x10de")
+	if !onlyNVIDIARenderNodes(renderNodeVendors(root)) {
+		t.Fatal("a single NVIDIA GPU was not recognised")
+	}
+	add("renderD129", "0x8086")
+	if onlyNVIDIARenderNodes(renderNodeVendors(root)) {
+		t.Fatal("a hybrid Intel and NVIDIA laptop counted as NVIDIA only")
+	}
+}
+
+func TestVulkanPresentMode(t *testing.T) {
+	for _, c := range []struct {
+		flag   string
+		nvidia bool
+		want   string
+	}{{"auto", true, "cpu"}, {"auto", false, "gpu"}, {"gpu", true, "gpu"}, {"cpu", false, "cpu"}} {
+		if got, err := vulkanPresentMode(c.flag, c.nvidia); err != nil || got != c.want {
+			t.Errorf("%s nvidia=%v: got %q %v, want %q", c.flag, c.nvidia, got, err, c.want)
+		}
+	}
+	if _, err := vulkanPresentMode("fast", false); err == nil {
+		t.Fatal("an unknown mode was accepted")
+	}
+}

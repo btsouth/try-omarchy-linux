@@ -1,0 +1,43 @@
+sdl2: report close requests on windows started with window-close=off
+
+With window-close=off QEMU ignores the close button, so a launcher that
+wants to shut the guest down cleanly never learns the user asked. Emit a
+DISPLAY_CLOSE_REQUEST event with the console index instead; the VM keeps
+running and the launcher decides what to do.
+
+diff --git i/qapi/ui.json w/qapi/ui.json
+index d3bfaee2c..2c7ebf3d8 100644
+--- i/qapi/ui.json
++++ w/qapi/ui.json
+@@ -1740,3 +1740,17 @@
+ ##
+ { 'event': 'DISPLAY_FILE_DROP',
+   'data': { 'display': 'int', 'files': [ 'str' ] } }
++
++##
++# @DISPLAY_CLOSE_REQUEST:
++#
++# The host user asked to close an SDL display window that was started
++# with window-close=off.  The VM keeps running; the launcher decides
++# whether and how to shut the guest down.
++#
++# @display: QEMU console index of the window.
++#
++# Since: 11.1
++##
++{ 'event': 'DISPLAY_CLOSE_REQUEST',
++  'data': { 'display': 'int' } }
+diff --git i/ui/sdl2.c w/ui/sdl2.c
+index 7993efd9c..21562a634 100644
+--- i/ui/sdl2.c
++++ w/ui/sdl2.c
+@@ -648,6 +648,9 @@ static void handle_windowevent(SDL_Event *ev)
+             if (allow_close) {
+                 shutdown_action = SHUTDOWN_ACTION_POWEROFF;
+                 qemu_system_shutdown_request(SHUTDOWN_CAUSE_HOST_UI);
++            } else {
++                qapi_event_send_display_close_request(
++                    qemu_console_get_index(scon->dcl.con));
+             }
+         } else {
+             SDL_HideWindow(scon->real_window);

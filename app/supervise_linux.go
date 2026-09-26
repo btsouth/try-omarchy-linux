@@ -132,7 +132,7 @@ func linuxAudioUnavailable(cfg *config) bool {
 // the ACPI power button so the guest shuts down cleanly; another one quits.
 func watchLinux(qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan os.Signal) {
 	logf("supervisor: watching guest lifecycle")
-	getUI().setStatus("Omarchy is running. Shut it down from its own menu, or press Ctrl+C here.")
+	getUI().setStatus("Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.")
 	lines := qmp.readLines()
 	reason := ""
 	interrupts := 0
@@ -153,31 +153,68 @@ func watchLinux(qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan o
 			if r := shutdownReason(line); r != "" {
 				reason = r
 			}
-		case <-stop:
-			interrupts++
-			if interrupts == 1 {
-				getUI().setStatus("Asking Omarchy to shut down...")
-				logf("interrupt: requesting guest poweroff")
-				if err := qmp.writeLine(`{"execute":"system_powerdown"}`); err != nil {
-					proc.Process.Kill()
-				}
-			} else {
-				logf("second interrupt: stopping QEMU")
-				if err := qmp.writeLine(`{"execute":"quit"}`); err != nil {
-					proc.Process.Kill()
-				}
+			if closeRequested(line) {
+				logf("window close requested")
+				requestLinuxShutdown(qmp, proc, &interrupts)
 			}
+			if _, _, ok := droppedFilesEvent(line); ok {
+				logf("file drop ignored: dropping files needs the clipboard bridge, which Linux does not have yet")
+			}
+		case <-stop:
+			logf("interrupt")
+			requestLinuxShutdown(qmp, proc, &interrupts)
 		}
 	}
 }
 
+// requestLinuxShutdown presses the ACPI power button so the guest shuts
+// down cleanly; a second request stops QEMU.
+func requestLinuxShutdown(qmp *qmpConn, proc *exec.Cmd, requests *int) {
+	*requests++
+	command := `{"execute":"system_powerdown"}`
+	if *requests == 1 {
+		getUI().setStatus("Asking Omarchy to shut down...")
+	} else {
+		logf("second shutdown request: stopping QEMU")
+		command = `{"execute":"quit"}`
+	}
+	if err := qmp.writeLine(command); err != nil {
+		proc.Process.Kill()
+	}
+}
+
+// closeRequested matches the runtime's DISPLAY_CLOSE_REQUEST event, sent
+// when the window's close button is used (window-close=off).
+func closeRequested(line string) bool {
+	return strings.Contains(line, `"event"`) && strings.Contains(line, `"DISPLAY_CLOSE_REQUEST"`)
+}
+
 // linuxQemuEnvironment names QEMU's window after the app, so desktops group
-// it with the launcher and its icon.
+// it with the launcher and its icon, and turns on the runtime's desktop
+// behavior: the window title is the app name and the keyboard (the Super key
+// included) goes to the guest while the window has focus.
 func linuxQemuEnvironment(env []string) []string {
-	return append(env,
+	env = append(env,
 		"SDL_VIDEO_WAYLAND_WMCLASS="+linuxAppID,
 		"SDL_VIDEO_X11_WMCLASS="+linuxAppID,
+		"QEMU_SDL_TITLE_FROM_NAME=1",
+		"QEMU_SDL_FOCUS_KEYBOARD_GRAB=1",
 	)
+	if inFlatpak() {
+		// The runtime lists each Vulkan driver in two directories, so every
+		// host GPU reached Venus twice, and its llvmpipe made guest apps
+		// render on the host CPU by default.
+		env = append(env,
+			"VK_DRIVER_FILES=/usr/lib/x86_64-linux-gnu/GL/vulkan/icd.d",
+			"VK_LOADER_DRIVERS_DISABLE=*lvp*",
+		)
+	}
+	return env
+}
+
+func inFlatpak() bool {
+	_, err := os.Stat("/.flatpak-info")
+	return err == nil
 }
 
 const linuxAppID = "com.tryomarchy.TryOmarchy"

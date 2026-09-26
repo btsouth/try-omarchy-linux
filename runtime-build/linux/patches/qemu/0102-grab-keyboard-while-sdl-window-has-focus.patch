@@ -1,0 +1,72 @@
+sdl2: grab the keyboard while a window has focus
+
+QEMU_SDL_FOCUS_KEYBOARD_GRAB=1 makes the window take the keyboard, and only
+the keyboard, whenever it has input focus, and give it back when focus
+leaves. System shortcuts such as the Super key then reach the guest without
+a Ctrl-Alt-G mouse grab. On Wayland SDL implements the keyboard grab with
+the keyboard shortcuts inhibitor. Ending a full grab keeps the keyboard grab
+while the window still has focus.
+
+diff --git i/ui/sdl2.c w/ui/sdl2.c
+index 21562a634..4d9c87fff 100644
+--- i/ui/sdl2.c
++++ w/ui/sdl2.c
+@@ -249,6 +249,23 @@ static void sdl_show_cursor(struct sdl2_console *scon)
+     SDL_ShowCursor(SDL_ENABLE);
+ }
+ 
++/*
++ * QEMU_SDL_FOCUS_KEYBOARD_GRAB=1 grabs the keyboard, and nothing else, while
++ * a window has focus, so system shortcuts such as the Super key reach the
++ * guest without a mouse grab.  On Wayland SDL does this with the keyboard
++ * shortcuts inhibitor, which the compositor may ask the user to allow.
++ */
++static bool focus_keyboard_grab;
++
++static void sdl_focus_keyboard_grab(struct sdl2_console *scon, bool grab)
++{
++#if SDL_VERSION_ATLEAST(2, 0, 16)
++    if (focus_keyboard_grab && scon->real_window) {
++        SDL_SetWindowKeyboardGrab(scon->real_window, grab ? SDL_TRUE : SDL_FALSE);
++    }
++#endif
++}
++
+ static void sdl_grab_start(struct sdl2_console *scon)
+ {
+     QemuConsole *con = scon ? scon->dcl.con : NULL;
+@@ -280,6 +297,10 @@ static void sdl_grab_start(struct sdl2_console *scon)
+ static void sdl_grab_end(struct sdl2_console *scon)
+ {
+     SDL_SetWindowGrab(scon->real_window, SDL_FALSE);
++    /* Ending a full grab also dropped the keyboard; keep it while focused. */
++    if (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS) {
++        sdl_focus_keyboard_grab(scon, true);
++    }
+     gui_grab = 0;
+     sdl_show_cursor(scon);
+     sdl_update_caption(scon);
+@@ -615,6 +636,7 @@ static void handle_windowevent(SDL_Event *ev)
+         sdl2_redraw(scon);
+         break;
+     case SDL_WINDOWEVENT_FOCUS_GAINED:
++        sdl_focus_keyboard_grab(scon, true);
+         /* fall through */
+     case SDL_WINDOWEVENT_ENTER:
+         if (!gui_grab && (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled)) {
+@@ -633,6 +655,7 @@ static void handle_windowevent(SDL_Event *ev)
+         if (gui_grab && !gui_fullscreen) {
+             sdl_grab_end(scon);
+         }
++        sdl_focus_keyboard_grab(scon, false);
+         break;
+     case SDL_WINDOWEVENT_RESTORED:
+         qemu_console_listener_set_refresh(&scon->dcl, GUI_REFRESH_INTERVAL_DEFAULT);
+@@ -989,6 +1012,7 @@ static void sdl2_display_init(DisplayState *ds, DisplayOptions *o)
+     SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
+ #endif
+     SDL_SetHint(SDL_HINT_GRAB_KEYBOARD, "1");
++    focus_keyboard_grab = g_strcmp0(g_getenv("QEMU_SDL_FOCUS_KEYBOARD_GRAB"), "1") == 0;
+ #ifdef SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED
+     SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "0");
+ #endif

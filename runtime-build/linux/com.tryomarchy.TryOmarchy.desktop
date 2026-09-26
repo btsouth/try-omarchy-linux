@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Try Omarchy
+Comment=Try the Omarchy desktop in a window
+Exec=try-omarchy
+Icon=com.tryomarchy.TryOmarchy
+Terminal=false
+Categories=System;Emulator;
+StartupWMClass=com.tryomarchy.TryOmarchy

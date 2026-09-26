@@ -33,7 +33,7 @@ and GNOME half is packaged as a live USB kit (`live-usb/`) and not run yet.
 |---|---|
 | Does the release image boot under KVM unchanged? | Yes. SSH in 12-14 s, Hyprland desktop shortly after. CI already boots it under KVM headless. |
 | OpenGL on the host GPU (virgl) | Works on NVIDIA. Guest Hyprland: `Renderer: virgl (NVIDIA GeForce RTX 4070 SUPER/PCIe/SSE2)`; core, compat and ES profiles; GLES gears render correctly. |
-| Vulkan on the host GPU (Venus) | Renders correctly on NVIDIA, but **every presented frame is sheared** unless its rows happen to be a multiple of 256 bytes. Root cause is an NVIDIA GL bug reached through virglrenderer; a four-line Venus patch fixes it (below). |
+| Vulkan on the host GPU (Venus) | Renders correctly on NVIDIA, but **every presented frame is sheared** unless its rows happen to be a multiple of 256 bytes. Root cause is an NVIDIA GL bug reached through virglrenderer, already reported upstream; a small Venus patch works around it (below). |
 | Which device do Vulkan apps get? | **The host's llvmpipe (CPU), by default.** The render server saw the runtime's llvmpipe, and Mesa's device-select layer in the guest prefers it. Fixed from the launcher (below). |
 | Idle cost | QEMU at about 6% of one core with the desktop idle and an SDL window presenting at 60 Hz, measured in a box through the Flatpak. Same as the earlier headless figure. |
 | Display backend: SDL vs GTK | **SDL.** Both follow window resizes and pass Super through when grabbed. SDL hands the guest physical pixels at 2x and 1.5x (sharp); GTK hands it logical pixels (blurry at any scale above 1) and adds a menu bar. SDL also keeps the Windows runtime's SDL patches relevant. |
@@ -47,8 +47,9 @@ and GNOME half is packaged as a live USB kit (`live-usb/`) and not run yet.
 
 ## Venus on NVIDIA: the sheared frames
 
-Reproduced without QEMU by `venus-dmabuf-repro.c`, which replays the
-handoff on the host driver and reads the pixels back.
+Reproduced without QEMU by `nv-dmabuf-pitch.c`, which puts a coordinate
+pattern into a dma-buf exported VkBuffer at a chosen pitch, imports it with
+EGL, binds it one of three ways and reads the pixels back.
 
 How a Venus frame reaches the screen on an NVIDIA host:
 
@@ -62,13 +63,29 @@ How a Venus frame reaches the screen on an NVIDIA host:
    `glEGLImageTargetTexStorageEXT` (`vrend_resource_alloc_texture`).
 3. NVIDIA advertises LINEAR XRGB8888 as external-only. It correctly refuses
    `glEGLImageTargetTexture2DOES(GL_TEXTURE_2D)` with `GL_INVALID_OPERATION`,
-   but `glEGLImageTargetTexStorageEXT` succeeds and then reads the rows at a
-   tight `width * cpp`, ignoring the imported pitch. Sampling the same import
-   as `GL_TEXTURE_EXTERNAL_OES` is correct.
+   but `glEGLImageTargetTexStorageEXT` succeeds and then reads the rows at
+   `align(width * cpp, 32)`, ignoring the imported pitch. Sampling the same
+   import as `GL_TEXTURE_EXTERNAL_OES` honors the pitch.
 
-So frames whose rows are already a multiple of 256 bytes (1024 or 1920 wide
-at 4 bytes a pixel) come out right and everything else shears; a tiled window
-almost never lands on such a width. Confirmed in the guest: vkgears floated at
+So frames come out right only when `align(width * 4, 256)` equals
+`align(width * 4, 32)`, i.e. widths that are a multiple of 64, and a tiled
+window almost never lands on one. Deterministic: identical results over 25
+runs, in GL 4.6 core and GLES 3.2 contexts, with implicit or explicit LINEAR
+modifiers.
+
+A second NVIDIA defect showed up on the way: a pitch that is not a multiple
+of 32 (4004 for 1001 px) is accepted by `eglCreateImageKHR` and then read
+wrong even as `GL_TEXTURE_EXTERNAL_OES`. EGL_EXT_image_dma_buf_import requires
+`EGL_BAD_ACCESS` for a pitch the implementation cannot honor. Both are spec
+violations: EXT_EGL_image_storage makes a successfully bound texture a
+sibling of the EGLImage, and the dma-buf modifiers extension defines
+external-only as usable with `GL_TEXTURE_EXTERNAL_OES` alone (both in the
+Khronos registry).
+
+With a CPU dma-buf from `/dev/udmabuf` instead of a VkBuffer, NVIDIA shows
+the same pitch behavior plus occasional wrong readbacks at a correct pitch
+(about 1 run in 10) that survive `DMA_BUF_IOCTL_SYNC`. That is a separate
+effect whose cause is unclear, so it is kept out of the reports. Confirmed in the guest: vkgears floated at
 1024x768 is clean, at 1000x700 sheared, same session. The earlier `vkcube`
 case also presents FP16 (`XB4H`, 8 bytes a pixel), which the guest's Wayland
 surface lists first, but the format is incidental.
@@ -82,10 +99,10 @@ pitch Mesa computes).
 
 | Option | Where | Cost | Status |
 |---|---|---|---|
-| Tight prime buffer (`mesa/0001-venus-tight-prime-stride-on-nvidia.patch`): a per-device prime stride alignment in common WSI, set to 1 by Venus when the renderer is NVIDIA | Guest Mesa | No per-frame cost; the guest image must carry a patched `vulkan-virtio` until upstream takes it | **Verified**: vkgears at 1000x700 and tiled 1872x982, vkcube FP16 tiled, all clean. NVIDIA's EGL accepts the unaligned pitches. |
+| 32-byte prime buffer (`mesa/0001-venus-32-byte-prime-stride-on-nvidia.patch`): a per-device prime stride alignment in common WSI, set to 32 by Venus when the renderer is NVIDIA | Guest Mesa | No per-frame cost; the guest image must carry a patched `vulkan-virtio` until upstream takes it | **Verified**: vkgears at 997x611, 1001x700 and tiled 1872x982 all clean. A first version used alignment 1, which only worked because every width tried was a multiple of 8. |
 | `MESA_VK_WSI_DEBUG=sw` for Linux NVIDIA hosts, set from a `tryomarchy.*` flag | Guest config | CPU copy per frame: vkgears near full screen went from about 2% to about 25% guest CPU at 60 FPS | Works today, stopgap only |
 | Shadow texture in virglrenderer: sample the import as external and blit into a regular texture before use | Host runtime | A GPU copy per frame; a medium patch in vrend | Not attempted |
-| NVIDIA fixing `glEGLImageTargetTexStorageEXT` (reject external-only imports or honor the pitch) | Driver | None | Worth reporting with the repro |
+| NVIDIA fixing `glEGLImageTargetTexStorageEXT` (reject external-only imports or honor the pitch) | Driver | None | Reported by others in March 2026 on 595.45.04, no NVIDIA reply yet |
 
 Open questions for the Mesa patch before it ships in the shared guest image:
 
@@ -96,6 +113,22 @@ Open questions for the Mesa patch before it ships in the shared guest image:
 - Windows hosts with NVIDIA would get the tight stride too, through a
   different import path in the Windows runtime. Needs a Windows NVIDIA test
   first, or the same launcher switch.
+
+### Upstream status
+
+Already known, not yet understood upstream:
+
+- NVIDIA forum thread 364360 (March 22, 2026, RTX 5090, 595.45.04) reports
+  the distortion and the 32-byte workaround. No NVIDIA reply.
+- virglrenderer issue 651 (open, filed by the Venus maintainer) has no root
+  cause; the maintainer cannot reproduce it and is trying a 1024-byte
+  alignment, which would not fix it.
+- Mesa issue 15149 (closed) is the same NVIDIA pitch behavior with i915
+  buffers imported on NVIDIA.
+
+`upstream/` has a reply for the NVIDIA thread and a comment for virglrenderer
+651 with the narrowed root cause and the repro, ready to post from Brandon's
+accounts (NVIDIA forum first, since the virglrenderer comment links to it).
 
 ### Llvmpipe and duplicate devices
 

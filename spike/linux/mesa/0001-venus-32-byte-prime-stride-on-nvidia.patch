@@ -1,5 +1,5 @@
---- a/src/vulkan/wsi/wsi_common.h	2026-09-26 09:11:03.006550880 -0400
-+++ b/src/vulkan/wsi/wsi_common.h	2026-09-26 09:11:13.399209493 -0400
+--- a/src/vulkan/wsi/wsi_common.h
++++ b/src/vulkan/wsi/wsi_common.h
 @@ -90,6 +90,12 @@
      */
     bool supports_scanout;
@@ -13,8 +13,8 @@
     bool supports_protected[VK_ICD_WSI_PLATFORM_MAX];
  
     bool supports_modifiers;
---- a/src/vulkan/wsi/wsi_common_drm.c	2026-09-26 09:11:03.006550880 -0400
-+++ b/src/vulkan/wsi/wsi_common_drm.c	2026-09-26 09:11:13.399642285 -0400
+--- a/src/vulkan/wsi/wsi_common_drm.c
++++ b/src/vulkan/wsi/wsi_common_drm.c
 @@ -894,9 +894,10 @@
  
     info->explicit_sync = params->explicit_sync;
@@ -29,8 +29,8 @@
     info->prime_use_linear_modifier = use_modifier;
  
     info->create_mem = wsi_create_prime_image_mem;
---- a/src/virtio/vulkan/vn_wsi.c	2026-09-26 09:11:03.007550906 -0400
-+++ b/src/virtio/vulkan/vn_wsi.c	2026-09-26 09:11:13.400098762 -0400
+--- a/src/virtio/vulkan/vn_wsi.c
++++ b/src/virtio/vulkan/vn_wsi.c
 @@ -187,6 +187,16 @@
        return result;
  
@@ -38,12 +38,12 @@
 +
 +   /* The prime buffer reaches the host compositor as a LINEAR dma-buf, which
 +    * virglrenderer binds with glEGLImageTargetTexStorageEXT. Nvidia's GL
-+    * then reads it at a row pitch of width * cpp, ignoring the imported
-+    * pitch, so the default 256-byte padding shears every frame whose row is
-+    * not already a multiple of 256 bytes. Keep the buffer tightly packed.
++    * then reads it at a row pitch of align(width * cpp, 32), ignoring the
++    * imported pitch, so the default 256-byte alignment shears every frame
++    * whose row is not already a multiple of 256 bytes. Align to exactly 32.
 +    */
 +   if (physical_dev->renderer_driver_id == VK_DRIVER_ID_NVIDIA_PROPRIETARY)
-+      physical_dev->wsi_device.prime_linear_stride_align = 1;
++      physical_dev->wsi_device.prime_linear_stride_align = 32;
 +
     physical_dev->wsi_device.supports_modifiers =
        physical_dev->base.vk.supported_extensions.EXT_image_drm_format_modifier;

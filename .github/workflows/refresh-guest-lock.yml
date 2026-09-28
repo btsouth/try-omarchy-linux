@@ -17,6 +17,8 @@ concurrency:
 jobs:
   refresh:
     name: Refresh the guest package lock
+    # Linux copies of this repository take lock refreshes from upstream merges.
+    if: github.repository == 'omacom/try-omarchy-windows'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

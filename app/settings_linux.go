@@ -304,7 +304,7 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 			}
 			status = showLinuxSettingsInWindow(context.Background(), w, dir, false)
 		case "recovery":
-			status = showLinuxRecoveryInWindow(w, dir)
+			status = showLinuxRecoveryInWindow(w, defaultDir, dir)
 		case "attach":
 			selected, err := w.ask(context.Background(), linuxSetupState{Prompt: "attach-folder", Status: "Choose an existing Try Omarchy data folder containing your VM. This only changes which VM Try Omarchy opens. No files are moved or deleted."})
 			if err != nil || selected == "cancel" {

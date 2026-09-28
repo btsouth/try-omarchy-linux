@@ -29,7 +29,7 @@ func TestLinuxRecoveryWindowBackupAndRestoreAsCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := linuxRecoveryTestWindow(t, "linux-recovery-backup", backupFolder, "")
-	result := showLinuxRecoveryInWindow(w, dir)
+	result := showLinuxRecoveryInWindow(w, filepath.Join(t.TempDir(), "try-omarchy"), dir)
 	if !strings.Contains(result, "Backup saved") {
 		t.Fatalf("backup result: %s", result)
 	}
@@ -40,7 +40,7 @@ func TestLinuxRecoveryWindowBackupAndRestoreAsCopy(t *testing.T) {
 	w.stop()
 	restoreParent := t.TempDir()
 	w = linuxRecoveryTestWindow(t, "linux-recovery-restore", restoreParent, archives[0])
-	result = showLinuxRecoveryInWindow(w, dir)
+	result = showLinuxRecoveryInWindow(w, filepath.Join(t.TempDir(), "try-omarchy"), dir)
 	if !strings.Contains(result, "Restored copy saved") {
 		t.Fatalf("restore result: %s", result)
 	}

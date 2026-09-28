@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -20,6 +21,8 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 		return
 	}
 	fmt.Println(`{"event":"ready"}`)
+	// linux-recovery-script answers each prompt with the next of these replies.
+	script := strings.Split(os.Getenv("TRY_OMARCHY_RECOVERY_REPLIES"), "\n")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		var state linuxSetupState
@@ -27,6 +30,15 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 			os.Exit(2)
 		}
 		switch mode {
+		case "linux-recovery-script":
+			if state.Request == 0 {
+				continue
+			}
+			value := "cancel"
+			if len(script) > 0 && script[0] != "" {
+				value, script = script[0], script[1:]
+			}
+			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: value})
 		case "linux-recovery-backup", "linux-recovery-restore":
 			var value string
 			switch state.Prompt {

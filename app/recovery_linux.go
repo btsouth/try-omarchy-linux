@@ -27,11 +27,14 @@ func linuxRecoveryResult(err error, success string) string {
 	return success
 }
 
-func showLinuxRecoveryInWindow(w *linuxSetupWindow, dir string) string {
+func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) string {
 	if dir == "" {
 		return "Reconnect the saved data location before using recovery."
 	}
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups include the VM and its settings, but never a shared host folder. Restore creates a separate copy so your current VM stays available."})
+	complete := completeInstallExists(dir, "disk.raw")
+	retained, booted := linuxRetainedMove(defaultDir, dir)
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups include the VM and its settings, but never a shared host folder. Restore creates a separate copy so your current VM stays available.",
+		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0})
 	if err != nil || answer == "back" || answer == "cancel" {
 		return ""
 	}
@@ -46,24 +49,16 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, dir string) string {
 		}
 		return "Diagnostics saved to " + path + ". Review the bundle before sharing it; logs can still contain local details."
 	case "backup":
-		if _, err := os.Stat(filepath.Join(dir, "vm", "disk.raw")); err != nil {
-			return "No installed VM is available to back up: " + err.Error()
-		}
-		folder, err := w.ask(context.Background(), linuxSetupState{Prompt: "backup-folder", Status: "Choose a folder outside the Try Omarchy data folder. The backup contains your guest files and settings; keep it private."})
-		if err != nil || folder == "cancel" {
-			return ""
-		}
-		if !filepath.IsAbs(folder) {
-			return "Choose an absolute backup folder."
-		}
-		destination := filepath.Join(folder, fmt.Sprintf("try-omarchy-backup-%s.zip", time.Now().Format("20060102-150405.000000000")))
-		configureSetupCancellation(false)
-		linuxRecoveryActive.Store(true)
-		w.update(linuxSetupState{Status: "Creating backup..."})
-		err = writeVMBackupProgress(dir, destination, linuxRecoveryProgress(w, "Backing up"))
-		linuxRecoveryActive.Store(false)
-		configureSetupCancellation(false)
-		return linuxRecoveryResult(err, "Backup saved in the selected folder as "+filepath.Base(destination)+". It contains guest files and settings; keep it private.")
+		result, _ := backupLinuxVM(w, dir)
+		return result
+	case "move":
+		return moveLinuxInstallation(w, defaultDir, dir)
+	case "reset":
+		return resetLinuxVM(w, dir)
+	case "clean-move":
+		return cleanupLinuxMove(w, defaultDir, dir)
+	case "clean-reset":
+		return cleanupLinuxResetDisks(w, dir)
 	case "restore":
 		archive, err := w.ask(context.Background(), linuxSetupState{Prompt: "restore-archive", Status: "Choose a Try Omarchy backup. Restoring will make a new copy and leave the current VM in place."})
 		if err != nil || archive == "cancel" {
@@ -93,4 +88,27 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, dir string) string {
 	default:
 		return ""
 	}
+}
+
+// backupLinuxVM asks for a folder and writes a backup there. It reports
+// whether a backup was saved; an empty message means the user cancelled.
+func backupLinuxVM(w *linuxSetupWindow, dir string) (string, bool) {
+	if _, err := os.Stat(filepath.Join(dir, "vm", "disk.raw")); err != nil {
+		return "No installed VM is available to back up: " + err.Error(), false
+	}
+	folder, err := w.ask(context.Background(), linuxSetupState{Prompt: "backup-folder", Status: "Choose a folder outside the Try Omarchy data folder. The backup contains your guest files and settings; keep it private."})
+	if err != nil || folder == "cancel" {
+		return "", false
+	}
+	if !filepath.IsAbs(folder) {
+		return "Choose an absolute backup folder.", false
+	}
+	destination := filepath.Join(folder, fmt.Sprintf("try-omarchy-backup-%s.zip", time.Now().Format("20060102-150405.000000000")))
+	configureSetupCancellation(false)
+	linuxRecoveryActive.Store(true)
+	w.update(linuxSetupState{Status: "Creating backup..."})
+	err = writeVMBackupProgress(dir, destination, linuxRecoveryProgress(w, "Backing up"))
+	linuxRecoveryActive.Store(false)
+	configureSetupCancellation(false)
+	return linuxRecoveryResult(err, "Backup saved in the selected folder as "+filepath.Base(destination)+". It contains guest files and settings; keep it private."), err == nil
 }

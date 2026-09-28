@@ -33,6 +33,16 @@ type linuxSetupState struct {
 	CanForget  bool               `json:"canForget,omitempty"`
 	CanDelete  bool               `json:"canDelete,omitempty"`
 	Settings   *linuxSettingsForm `json:"settings,omitempty"`
+	// A "choice" prompt: Primary replies "primary", Secondary "secondary".
+	Title       string `json:"title,omitempty"`
+	Primary     string `json:"primary,omitempty"`
+	Secondary   string `json:"secondary,omitempty"`
+	Destructive bool   `json:"destructive,omitempty"`
+	// Backup and recovery actions available for the selected VM.
+	CanMove       bool `json:"canMove,omitempty"`
+	CanReset      bool `json:"canReset,omitempty"`
+	CanCleanMove  bool `json:"canCleanMove,omitempty"`
+	CanCleanReset bool `json:"canCleanReset,omitempty"`
 }
 
 type linuxSetupReply struct {

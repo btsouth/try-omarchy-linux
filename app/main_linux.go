@@ -85,6 +85,16 @@ func main() {
 	// Claim the instance before the idle home can save settings. An ordinary
 	// desktop launch waits for an explicit Launch choice; CLI use stays direct.
 	runLifecycleListener()
+	if err := recoverLinuxMove(defaultLinuxDataDirectory()); err != nil {
+		fatal("Could not finish moving the Omarchy data folder: %v", err)
+	}
+	if explicitFlags["dir"] {
+		resolved, err := resolveLinuxMovedDirectory(defaultLinuxDataDirectory(), cfg.dir)
+		if err != nil {
+			fatal("Cannot read the data folder move record: %v", err)
+		}
+		cfg.dir = resolved
+	}
 	if !*noGUI && !*startDirect && (*showLauncher || !linuxDirectStart(explicitFlags)) {
 		if !showLinuxHome(defaultLinuxDataDirectory(), cfg.dir, explicitFlags["dir"]) {
 			return

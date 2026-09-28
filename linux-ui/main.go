@@ -34,6 +34,15 @@ type state struct {
 	CanForget  bool          `json:"canForget"`
 	CanDelete  bool          `json:"canDelete"`
 	Settings   *settingsForm `json:"settings"`
+	// A "choice" prompt names its own title and two actions.
+	Title         string `json:"title"`
+	Primary       string `json:"primary"`
+	Secondary     string `json:"secondary"`
+	Destructive   bool   `json:"destructive"`
+	CanMove       bool   `json:"canMove"`
+	CanReset      bool   `json:"canReset"`
+	CanCleanMove  bool   `json:"canCleanMove"`
+	CanCleanReset bool   `json:"canCleanReset"`
 }
 
 // Recovery keeps this window open after a cancelled copy. Ignore copy progress
@@ -340,6 +349,10 @@ func main() {
 		quinary := gtk.NewButtonWithLabel("Use existing data folder")
 		forgetButton := gtk.NewButtonWithLabel("Forget unavailable location")
 		deleteButton := gtk.NewButtonWithLabel("Delete this VM...")
+		moveButton := gtk.NewButtonWithLabel("Move this VM...")
+		resetButton := gtk.NewButtonWithLabel("Reset this VM...")
+		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
+		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
 		choices.Append(primary)
 		choices.Append(secondary)
 		choices.Append(tertiary)
@@ -347,6 +360,10 @@ func main() {
 		choices.Append(quinary)
 		choices.Append(forgetButton)
 		choices.Append(deleteButton)
+		choices.Append(moveButton)
+		choices.Append(resetButton)
+		choices.Append(cleanMoveButton)
+		choices.Append(cleanResetButton)
 		choices.SetVisible(false)
 		actions := gtk.NewBox(gtk.OrientationVertical, 8)
 		actions.SetMarginStart(24)
@@ -401,7 +418,7 @@ func main() {
 				reply("keep")
 			} else if current.Prompt == "recovery" {
 				reply("back")
-			} else if current.Prompt == "settings" || current.Prompt == "grant-files" || current.Prompt == "backup-folder" || current.Prompt == "restore-archive" || current.Prompt == "restore-parent" || current.Prompt == "attach-folder" {
+			} else if current.Prompt == "settings" || current.Prompt == "grant-files" || current.Prompt == "backup-folder" || current.Prompt == "restore-archive" || current.Prompt == "restore-parent" || current.Prompt == "attach-folder" || current.Prompt == "move-folder" || current.Prompt == "choice" {
 				reply("cancel")
 			} else if failed {
 				emit("dismissed")
@@ -439,13 +456,17 @@ func main() {
 				reply("skip")
 			case "recovery":
 				reply("backup")
-			case "backup-folder", "restore-parent", "restore-archive", "attach-folder":
+			case "choice":
+				reply("primary")
+			case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
 				id := current.Request
 				dialog := gtk.NewFileDialog()
 				if current.Prompt == "restore-archive" {
 					dialog.SetTitle("Choose a Try Omarchy backup")
 				} else if current.Prompt == "attach-folder" {
 					dialog.SetTitle("Choose existing Try Omarchy data folder")
+				} else if current.Prompt == "move-folder" {
+					dialog.SetTitle("Choose where to move Omarchy")
 				} else {
 					dialog.SetTitle("Choose a recovery folder")
 				}
@@ -541,6 +562,8 @@ func main() {
 				reply("delete")
 			case "recovery":
 				reply("restore")
+			case "choice":
+				reply("secondary")
 			case "location", "share", "settings":
 				id := current.Request
 				dialog := gtk.NewFileDialog()
@@ -609,6 +632,26 @@ func main() {
 				reply("delete-default")
 			}
 		})
+		moveButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanMove {
+				reply("move")
+			}
+		})
+		resetButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanReset {
+				reply("reset")
+			}
+		})
+		cleanMoveButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanCleanMove {
+				reply("clean-move")
+			}
+		})
+		cleanResetButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanCleanReset {
+				reply("clean-reset")
+			}
+		})
 		button.ConnectClicked(close)
 		window.ConnectCloseRequest(func() bool { close(); return true })
 		glib.TimeoutAdd(100, func() bool {
@@ -645,6 +688,10 @@ func main() {
 					quinary.SetVisible(next.Prompt == "home" && next.CanAttach)
 					forgetButton.SetVisible(next.Prompt == "home" && next.CanForget)
 					deleteButton.SetVisible(next.Prompt == "home" && next.CanDelete)
+					moveButton.SetVisible(next.Prompt == "recovery" && next.CanMove)
+					resetButton.SetVisible(next.Prompt == "recovery" && next.CanReset)
+					cleanMoveButton.SetVisible(next.Prompt == "recovery" && next.CanCleanMove)
+					cleanResetButton.SetVisible(next.Prompt == "recovery" && next.CanCleanReset)
 					tertiary.SetLabel("About and help")
 					quaternary.SetLabel("Backup and recovery")
 					button.SetLabel("Cancel")
@@ -685,16 +732,27 @@ func main() {
 						secondary.SetLabel("Delete VM and guest files")
 						secondary.AddCSSClass("destructive-action")
 						button.SetLabel("Cancel")
-					case "backup-folder", "restore-parent", "restore-archive", "attach-folder":
+					case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
 						page.SetTitle("Backup and recovery")
+						if next.Prompt == "move-folder" {
+							page.SetTitle("Move this VM")
+						}
 						primary.SetLabel("Choose location...")
+						button.SetLabel("Cancel")
+					case "choice":
+						page.SetTitle(next.Title)
+						primary.SetLabel(next.Primary)
+						secondary.SetLabel(next.Secondary)
+						if next.Destructive {
+							secondary.AddCSSClass("destructive-action")
+						}
 						button.SetLabel("Cancel")
 					case "about":
 						page.SetTitle("About Try Omarchy")
 						primary.SetLabel("Back")
 						button.SetLabel("Back")
 						secondary.SetVisible(false)
-						next.Status = "Try Omarchy for Linux, version " + next.Version + ". It runs Omarchy in a VM stored on this computer. Settings apply at the next start. On GNOME Wayland, clipboard sync asks for pointer and clipboard permission; Try Omarchy never sends pointer events. Uninstall keeps external VM folders. After reinstall, choose Use existing data folder to reopen one. Help: github.com/omacom/try-omarchy-windows"
+						next.Status = "Try Omarchy for Linux, version " + next.Version + ". It runs Omarchy in a VM stored on this computer. Settings apply at the next start. On GNOME Wayland, clipboard sync asks for pointer and clipboard permission; Try Omarchy never sends pointer events. Uninstall keeps external VM folders. After reinstall, choose Use existing data folder to reopen one. Help: github.com/btsouth/try-omarchy-linux"
 					case "settings-saved":
 						page.SetTitle("Settings saved")
 						primary.SetLabel("Done")
@@ -785,7 +843,7 @@ func main() {
 						secondary.AddCSSClass("destructive-action")
 						next.Status = "Save your work inside Omarchy before shutting down."
 					}
-					secondary.SetVisible(next.Prompt != "about" && next.Prompt != "settings-saved" && next.Prompt != "grant-files" && next.Prompt != "backup-folder" && next.Prompt != "restore-parent" && next.Prompt != "restore-archive" && next.Prompt != "attach-folder")
+					secondary.SetVisible(next.Prompt != "about" && next.Prompt != "settings-saved" && next.Prompt != "grant-files" && next.Prompt != "backup-folder" && next.Prompt != "restore-parent" && next.Prompt != "restore-archive" && next.Prompt != "attach-folder" && next.Prompt != "move-folder")
 					if next.Prompt != "" {
 						primary.GrabFocus()
 					}

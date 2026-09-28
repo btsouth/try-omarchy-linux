@@ -18,8 +18,10 @@ func TestLinuxDefaultDoesNotSelectWindowsGuest(t *testing.T) {
 	if release != "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.0" || pin != "3ba8b875bc9ffff3dd223367a7c00e1e1e9d3b77a314bb147bba9b4361aeba73" {
 		t.Fatalf("unexpected Linux guest pair: %s %s", release, pin)
 	}
-	if releaseVersion(release) != linuxAppVersion {
-		t.Fatalf("guest release %s does not match app version %s", release, linuxAppVersion)
+	// The app and the guest image are released separately: the app has preview
+	// tags of its own, while the guest keeps the version of the image it pins.
+	if releaseVersion(release) != "v0.1.0" {
+		t.Fatalf("pinned guest release %s is not the linux-v0.1.0 image this app was tested with", release)
 	}
 }
 

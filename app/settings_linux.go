@@ -460,7 +460,7 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 				status = "The VM and downloaded guest files were deleted from " + defaultDir + ". Shared host folders and backups were kept."
 			}
 		case "about":
-			_, err := w.ask(context.Background(), linuxSetupState{Prompt: "about", Version: linuxAppVersion})
+			_, err := w.ask(context.Background(), linuxAboutState())
 			if err != nil {
 				return false
 			}

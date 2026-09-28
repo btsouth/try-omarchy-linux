@@ -80,6 +80,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 				switch result {
 				case linuxDesktopReady:
 					getUI().finish()
+					go showLinuxSessionTips(cfg.instant)
 				case linuxDesktopTimedOut:
 					desktopTimedOut = true
 					getUI().showDesktopTimeout("Omarchy started, but its desktop did not appear within five minutes. Check the VM window and its login screen. You can close this message without stopping the VM; diagnostics are in the data folder.")
@@ -208,6 +209,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		if desktopTimedOut && desktopReady.Load() {
 			logf("guest desktop appeared after startup timeout")
 			getUI().finish()
+			go showLinuxSessionTips(cfg.instant)
 			desktopTimedOut = false
 		}
 		select {

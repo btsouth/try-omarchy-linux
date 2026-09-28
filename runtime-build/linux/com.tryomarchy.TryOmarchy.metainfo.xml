@@ -36,8 +36,8 @@
     <color type="primary" scheme_preference="dark">#151912</color>
   </branding>
   <content_rating type="oars-1.1"/>
-  <requires>
+  <recommends>
     <control>keyboard</control>
     <control>pointing</control>
-  </requires>
+  </recommends>
 </component>

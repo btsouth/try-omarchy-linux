@@ -2,8 +2,9 @@
 
 Acceptance started from commits `a9728ce` and `7c27ac3`, based on public
 `25f3aed`. After reviewing the results, the owner authorized committing and
-publishing as appropriate. The tested bundle is being prepared as a GitHub
-prerelease for outside testing; stable acceptance and Flathub remain pending.
+publishing as appropriate. The tested bundle is published as the
+[0.1.0 preview 1 prerelease](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.1)
+for outside testing; stable acceptance and Flathub remain pending.
 
 ## Scope
 
@@ -36,8 +37,10 @@ Linux race suite, Linux vet, Windows vet, Windows cross-build/test compilation,
 and GTK helper tests passed. QEMU was 11.1.1 and Go was 1.27.1. The Flatpak
 manifest and AppStream linters both returned zero.
 
-Native Windows CI passed on public `25f3aed`; that is baseline evidence, not a
-CI run on these unpublished changes.
+[CI on `159fbf3`](https://github.com/btsouth/try-omarchy-linux/actions/runs/36449700232)
+passed after publication of the source, including native Windows tests, Linux
+race tests, vet, cross-builds, release-pin validation and the guest contract.
+The optional guest rebuild was not requested; the published guest is unchanged.
 
 ## Installed GNOME observations
 
@@ -65,8 +68,9 @@ bundle-install rehearsal, not acceptance of a published Flathub listing.
 
 ## Final candidate
 
-Source is local HEAD `7c27ac3b6630b9adbbf4cf2ba3604849d948f91b` plus the
-uncommitted app/linux-ui corrections. The source delta SHA256 is
+The bundle was built from `7c27ac3b6630b9adbbf4cf2ba3604849d948f91b` plus
+the app/linux-ui corrections, now committed as
+`159fbf3ffe4fba089e8b18d385e12067807962d0`. The source delta SHA256 is
 `c94d0ffd9e2eba077ee46e45797890c28c0f5e9a9d1297725bdb4195dd0dfdbf`.
 The build used the pinned SDK image
 `ghcr.io/flathub-infra/flatpak-github-actions@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210`.
@@ -201,7 +205,7 @@ without claiming a new cross-version migration on this final bundle.
 Outside testers must supply physical GPU, audio/microphone, suspend/resume,
 battery and monitor results. Camera, live audio routing, gestures, LAN/bridge,
 USB, host-app launching and host authentication are accepted feature limits.
-Flathub delivery, public-app publication and release acceptance remain separate.
+Flathub delivery and stable release acceptance remain open after the GitHub preview.
 Publication status is recorded in the repository README. No Flathub submission
 was made by this run.
 

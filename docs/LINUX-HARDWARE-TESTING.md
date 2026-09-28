@@ -1,7 +1,7 @@
 # Linux hardware testing
 
-The app is not released. Use the exact candidate bundle supplied with a test
-request, and include its SHA256 with the report. Physical results are still
+Use the [0.1.0 preview 1 bundle](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.1),
+and include its SHA256 with the report. Physical results are still
 pending; desktop VM tests do not establish hardware support.
 
 Use a disposable VM inside Try Omarchy. Keep an independent backup before

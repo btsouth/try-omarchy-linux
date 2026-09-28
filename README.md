@@ -6,7 +6,7 @@
 
 <p align="center">The full Omarchy desktop, running in a window on your Linux PC.</p>
 
-<p align="center">Preview · Not released yet · Flathub listing planned</p>
+<p align="center">Preview available · Hardware testing in progress · Flathub listing planned</p>
 
 <p align="center">x86_64 · KVM required · Flatpak · Wayland or X11</p>
 
@@ -18,9 +18,18 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 
 ## Status
 
-The Linux app works end to end in testing but has no public release yet. The guest image it downloads on first run is published as the [linux-v0.1.0 pre-release](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-v0.1.0), so a build from this repository completes setup. The app itself will be published on Flathub.
+The [first Linux app preview](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.1) is available for outside testing. It includes the tested GNOME 51 Flatpak and checksums. The guest image downloads automatically on first setup.
 
-What is left before that release is tracked in the [release gates](docs/LINUX-RELEASE-GATES.md). The remaining work is recovery and interruption testing, the exact desktop matrix, and outside hardware testing.
+Download `com.tryomarchy.TryOmarchy.flatpak` and `SHA256SUMS` from the release, then run:
+
+```sh
+sha256sum -c SHA256SUMS
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./com.tryomarchy.TryOmarchy.flatpak
+flatpak run com.tryomarchy.TryOmarchy
+```
+
+This is a GitHub prerelease. Flathub delivery, physical hardware acceptance and extended everyday testing remain open in the [release gates](docs/LINUX-RELEASE-GATES.md). Testers can use the [hardware checklist](docs/LINUX-HARDWARE-TESTING.md).
 
 ## What you can do
 
@@ -46,7 +55,7 @@ hardware support. See the [acceptance checklist](docs/LINUX-ACCEPTANCE.md).
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
 - The app is a **Flatpak** built on the GNOME runtime. Most distros include Flatpak. On Ubuntu, install it first with `sudo apt install flatpak`.
-- It has been tested mostly on **GNOME Wayland**. Omarchy, KDE Plasma, and X11 sessions are part of the release matrix and have not been fully tested yet.
+- Isolated tests cover **GNOME Wayland, KDE Wayland and Xfce X11**. Physical hardware and final-candidate Omarchy/Hyprland coverage remain open; see the [test report](docs/evidence/LINUX-RELEASE-CLOSURE-2026-09-28.md) for the exact scope.
 - First setup downloads a guest image of about 2 GB and creates a 24 GB disk in the folder you choose.
 
 ## Build from source

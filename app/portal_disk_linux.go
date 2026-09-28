@@ -16,6 +16,9 @@ func linuxQemuArgs(cfg *config, args []string) []string {
 	args = linuxGraphicsArgs(args, linuxVenusEnabled, linuxHonorGuestPAT)
 	args = linuxAudioArgs(cfg, args)
 	args = linuxWithoutWindowsHello(args)
+	// Device errors caused by the guest, such as a rejected GPU buffer, are
+	// otherwise invisible. They go to the VM's qemu.log with the other logs.
+	args = append(args, "-d", "guest_errors")
 	if !linuxDocumentPortalDisk(cfg.disk, os.Getuid()) {
 		return args
 	}

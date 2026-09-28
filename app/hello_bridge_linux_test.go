@@ -20,6 +20,9 @@ func TestLinuxQemuArgsOmitWindowsHelloPort(t *testing.T) {
 	if strings.Contains(joined, "hello0") || strings.Contains(joined, "dev.tryomarchy.authentication") {
 		t.Fatalf("Windows Hello port reached the Linux VM: %v", args)
 	}
+	if !strings.Contains(joined, "-d guest_errors") {
+		t.Fatalf("guest device errors are not logged: %v", args)
+	}
 	if !strings.Contains(joined, "chardev=cam0,name=dev.tryomarchy.camera") || !strings.Contains(joined, "qemu-xhci,id=tryomarchy-usb") {
 		t.Fatalf("unrelated devices were removed: %v", args)
 	}

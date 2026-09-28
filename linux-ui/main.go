@@ -10,9 +10,9 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -44,6 +44,18 @@ type state struct {
 	CanReset      bool   `json:"canReset"`
 	CanCleanMove  bool   `json:"canCleanMove"`
 	CanCleanReset bool   `json:"canCleanReset"`
+	// Plain-language content the launcher composes and this window only lays out.
+	Headline   string    `json:"headline"`
+	Notice     string    `json:"notice"`
+	HelpURL    string    `json:"helpUrl"`
+	Sections   []section `json:"sections"`
+	Detail     string    `json:"detail"`
+	CanRetry   bool      `json:"canRetry"`
+	CheckAgain bool      `json:"checkAgain"`
+	Installed  bool      `json:"installed"`
+	Setup      string    `json:"setup"`
+	Actions    []action  `json:"actions"`
+	Menu       []action  `json:"menu"`
 }
 
 // Recovery keeps this window open after a cancelled copy. Ignore copy progress
@@ -97,23 +109,45 @@ func namedChoices(defaultLabel, unavailableLabel string, devices []audioDevice, 
 	return
 }
 
-func displayPath(path string) string {
-	const width = 42
-	runes := []rune(path)
-	var lines []string
-	for len(runes) > width {
-		split := width
-		for i := width - 1; i >= width/2; i-- {
-			if runes[i] == '/' {
-				split = i + 1
-				break
-			}
-		}
-		lines = append(lines, string(runes[:split]))
-		runes = runes[split:]
+// named gives a control the name a screen reader announces. The visible label
+// above each settings field is a separate widget, so without this a keyboard
+// or screen reader user meets nameless spin buttons and drop-downs.
+func named(w gtk.Widgetter, label string) {
+	w.(interface {
+		UpdateProperty([]gtk.AccessibleProperty, []glib.Value)
+	}).UpdateProperty([]gtk.AccessibleProperty{gtk.AccessiblePropertyLabel}, []glib.Value{*glib.NewValue(label)})
+}
+
+func clearChildren(box *gtk.Box) {
+	for child := box.FirstChild(); child != nil; child = box.FirstChild() {
+		box.Remove(child)
 	}
-	lines = append(lines, string(runes))
-	return strings.Join(lines, "\n")
+}
+
+// fillSections lays headed rows out as boxed lists. Rows show their value in
+// the prominent line, the way a properties page does, and their text can be
+// selected so a path can be copied.
+func fillSections(box *gtk.Box, sections []section) {
+	clearChildren(box)
+	for _, s := range sections {
+		group := adw.NewPreferencesGroup()
+		if s.Heading != "" {
+			group.SetTitle(s.Heading)
+		}
+		for _, r := range s.Rows {
+			item := adw.NewActionRow()
+			item.SetUseMarkup(false)
+			item.SetTitle(r.Title)
+			item.SetSubtitle(r.Detail)
+			item.SetTitleLines(0)
+			item.SetSubtitleLines(0)
+			item.SetSubtitleSelectable(true)
+			item.AddCSSClass("property")
+			group.Add(item)
+		}
+		box.Append(group)
+	}
+	box.SetVisible(len(sections) > 0)
 }
 
 func main() {
@@ -129,7 +163,40 @@ func main() {
 		layout := gtk.NewBox(gtk.OrientationVertical, 0)
 		header := adw.NewHeaderBar()
 		header.AddCSSClass("flat")
+		// Less common home actions sit behind the header's overflow button.
+		menuButton := gtk.NewMenuButton()
+		menuButton.SetIconName("view-more-symbolic")
+		menuButton.SetTooltipText("More actions")
+		named(menuButton, "More actions")
+		menuButton.SetVisible(false)
+		menuPopover := gtk.NewPopover()
+		menuBox := gtk.NewBox(gtk.OrientationVertical, 2)
+		menuBox.SetMarginTop(6)
+		menuBox.SetMarginBottom(6)
+		menuBox.SetMarginStart(6)
+		menuBox.SetMarginEnd(6)
+		menuPopover.SetChild(menuBox)
+		menuButton.SetPopover(menuPopover)
+		header.PackEnd(menuButton)
 		layout.Append(header)
+		// A problem the user can fix, with a link to how.
+		banner := adw.NewBanner("")
+		banner.SetUseMarkup(false)
+		banner.SetRevealed(false)
+		layout.Append(banner)
+		var bannerURL string
+		openHelp := func(url string) {
+			if url == "" {
+				return
+			}
+			launcher := gtk.NewURILauncher(url)
+			launcher.Launch(context.Background(), &window.Window, func(result gio.AsyncResulter) {
+				if err := launcher.LaunchFinish(result); err != nil {
+					fmt.Fprintln(os.Stderr, "Opening help:", err)
+				}
+			})
+		}
+		banner.ConnectButtonClicked(func() { openHelp(bannerURL) })
 		page := adw.NewStatusPage()
 		page.SetTitle("Try Omarchy")
 		page.SetIconName("com.tryomarchy.TryOmarchy")
@@ -144,8 +211,23 @@ func main() {
 		label.SetMaxWidthChars(48)
 		label.SetJustify(gtk.JustifyCenter)
 		content.Append(label)
+		pageSections := gtk.NewBox(gtk.OrientationVertical, 12)
+		pageSections.SetVisible(false)
+		content.Append(pageSections)
 		progress := gtk.NewProgressBar()
+		named(progress, "Progress")
 		content.Append(progress)
+		detail := gtk.NewLabel("")
+		detail.SetWrap(true)
+		detail.SetWrapMode(pango.WrapWordChar)
+		detail.SetMaxWidthChars(48)
+		detail.SetJustify(gtk.JustifyCenter)
+		detail.AddCSSClass("dim-label")
+		detail.SetVisible(false)
+		content.Append(detail)
+		helpLink := gtk.NewLinkButtonWithLabel("", "How to fix this")
+		helpLink.SetVisible(false)
+		content.Append(helpLink)
 		homeContent := gtk.NewBox(gtk.OrientationVertical, 12)
 		homeContent.SetMarginTop(16)
 		homeContent.SetMarginBottom(24)
@@ -154,22 +236,32 @@ func main() {
 		homeIcon := gtk.NewImageFromIconName("com.tryomarchy.TryOmarchy")
 		homeIcon.SetPixelSize(64)
 		homeIcon.SetHAlign(gtk.AlignCenter)
+		named(homeIcon, "Try Omarchy")
 		homeContent.Append(homeIcon)
 		homeTitle := gtk.NewLabel("Try Omarchy")
 		homeTitle.AddCSSClass("title-1")
 		homeContent.Append(homeTitle)
+		homeHeadline := gtk.NewLabel("")
+		homeHeadline.AddCSSClass("title-3")
+		homeHeadline.SetWrap(true)
+		homeHeadline.SetMaxWidthChars(48)
+		homeHeadline.SetJustify(gtk.JustifyCenter)
+		homeContent.Append(homeHeadline)
 		homeStatus := gtk.NewLabel("")
 		homeStatus.SetWrap(true)
 		homeStatus.SetMaxWidthChars(48)
 		homeStatus.SetJustify(gtk.JustifyCenter)
 		homeContent.Append(homeStatus)
-		homePath := gtk.NewLabel("")
-		homePath.SetWrap(true)
-		homePath.SetWrapMode(pango.WrapWordChar)
-		homePath.SetSelectable(true)
-		homePath.SetMaxWidthChars(48)
-		homePath.SetJustify(gtk.JustifyCenter)
-		homeContent.Append(homePath)
+		homeDetail := gtk.NewLabel("")
+		homeDetail.SetWrap(true)
+		homeDetail.SetWrapMode(pango.WrapWordChar)
+		homeDetail.SetSelectable(true)
+		homeDetail.SetMaxWidthChars(48)
+		homeDetail.SetJustify(gtk.JustifyCenter)
+		homeDetail.AddCSSClass("dim-label")
+		homeContent.Append(homeDetail)
+		homeSections := gtk.NewBox(gtk.OrientationVertical, 12)
+		homeContent.Append(homeSections)
 		homeClamp := adw.NewClamp()
 		homeClamp.SetMaximumSize(480)
 		homeClamp.SetChild(homeContent)
@@ -208,6 +300,7 @@ func main() {
 		memory := gtk.NewSpinButtonWithRange(1, 64, 0.25)
 		memory.SetDigits(2)
 		memory.SetNumeric(true)
+		named(memory, "Memory for Omarchy in GiB")
 		form.Append(autoMemory)
 		form.Append(memory)
 		autoMemory.ConnectToggled(func() { memory.SetSensitive(!autoMemory.Active()) })
@@ -215,11 +308,13 @@ func main() {
 		autoCPUs := gtk.NewCheckButtonWithLabel("Choose processors automatically")
 		cpus := gtk.NewSpinButtonWithRange(1, 64, 1)
 		cpus.SetNumeric(true)
+		named(cpus, "Processors for Omarchy")
 		form.Append(autoCPUs)
 		form.Append(cpus)
 		autoCPUs.ConnectToggled(func() { cpus.SetSensitive(!autoCPUs.Active()) })
 		formLabel("Rendering")
 		render := gtk.NewDropDownFromStrings([]string{"Automatic (recommended)", "Graphics acceleration", "Software rendering"})
+		named(render, "Rendering")
 		form.Append(render)
 		description := gtk.NewLabel("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
 		description.SetWrap(true)
@@ -236,6 +331,7 @@ func main() {
 		standardDisk := gtk.NewCheckButtonWithLabel("Use standard capacity (24 GiB)")
 		diskGiB := gtk.NewSpinButtonWithRange(24, 1024, 1)
 		diskGiB.SetNumeric(true)
+		named(diskGiB, "Disk capacity in GiB")
 		form.Append(standardDisk)
 		form.Append(diskGiB)
 		standardDisk.ConnectToggled(func() { diskGiB.SetSensitive(!standardDisk.Active()) })
@@ -249,11 +345,13 @@ func main() {
 		formLabel("Guest display scale")
 		scaleChoices := []audioDevice{{"keep", "Keep guest choice"}, {"1", "100%"}, {"1.25", "125%"}, {"1.5", "150%"}, {"2", "200%"}, {"3", "300%"}, {"4", "400%"}}
 		scale := gtk.NewDropDownFromStrings([]string{"Follow host display"})
+		named(scale, "Guest display scale")
 		form.Append(scale)
 		scaleNames := []string{"auto"}
 		formLabel("Guest keyboard layout")
 		keyboardChoices := []audioDevice{{"keep", "Keep guest choice"}, {"us", "English (US)"}, {"us:intl", "English (US, international)"}, {"de", "German"}, {"fr", "French"}, {"es", "Spanish"}}
 		keyboard := gtk.NewDropDownFromStrings([]string{"Follow host layout"})
+		named(keyboard, "Guest keyboard layout")
 		form.Append(keyboard)
 		keyboardNames := []string{""}
 		keyboardHelp := gtk.NewLabel("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
@@ -264,9 +362,11 @@ func main() {
 		form.Append(microphone)
 		formLabel("Audio output")
 		audioOutput := gtk.NewDropDownFromStrings([]string{"System default"})
+		named(audioOutput, "Audio output")
 		form.Append(audioOutput)
 		formLabel("Audio input")
 		audioInput := gtk.NewDropDownFromStrings([]string{"System default"})
+		named(audioInput, "Audio input")
 		form.Append(audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
 		audioHelp := gtk.NewLabel("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
@@ -278,6 +378,7 @@ func main() {
 		form.Append(sshEnabled)
 		sshPort := gtk.NewSpinButtonWithRange(1024, 65535, 1)
 		sshPort.SetNumeric(true)
+		named(sshPort, "SSH port on this computer")
 		form.Append(sshPort)
 		sshEnabled.ConnectToggled(func() { sshPort.SetSensitive(sshEnabled.Active()) })
 		sshHelp := gtk.NewLabel("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
@@ -286,6 +387,7 @@ func main() {
 		form.Append(sshHelp)
 		sshKey := entry("SSH public key (optional)")
 		sshKey.SetEditable(false)
+		named(sshKey, "SSH public key file")
 		chooseSSHKey := gtk.NewButtonWithLabel("Choose a public key...")
 		chooseSSHKey.ConnectClicked(func() {
 			dialog := gtk.NewFileDialog()
@@ -316,6 +418,7 @@ func main() {
 		formLabel("Other local port forwards (one per line, for example tcp:8080:80)")
 		forwards := gtk.NewTextView()
 		forwards.SetSizeRequest(-1, 88)
+		named(forwards, "Other local port forwards, one per line")
 		form.Append(forwards)
 		formLabel("Startup")
 		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
@@ -326,6 +429,7 @@ func main() {
 		form.Append(startupHelp)
 		share := entry("Shared folder")
 		share.SetEditable(false)
+		named(share, "Shared folder")
 		shareEnabled := gtk.NewCheckButtonWithLabel("Share this folder with Omarchy")
 		form.Append(shareEnabled)
 		clearShare := gtk.NewButtonWithLabel("Stop sharing this folder")
@@ -345,11 +449,7 @@ func main() {
 		primary := gtk.NewButton()
 		primary.AddCSSClass("suggested-action")
 		secondary := gtk.NewButton()
-		tertiary := gtk.NewButtonWithLabel("About and help")
-		quaternary := gtk.NewButtonWithLabel("Backup and recovery")
-		quinary := gtk.NewButtonWithLabel("Use existing data folder")
-		forgetButton := gtk.NewButtonWithLabel("Forget unavailable location")
-		deleteButton := gtk.NewButtonWithLabel("Delete this VM...")
+		tertiary := gtk.NewButtonWithLabel("Create diagnostics")
 		moveButton := gtk.NewButtonWithLabel("Move this VM...")
 		resetButton := gtk.NewButtonWithLabel("Reset this VM...")
 		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
@@ -357,19 +457,19 @@ func main() {
 		choices.Append(primary)
 		choices.Append(secondary)
 		choices.Append(tertiary)
-		choices.Append(quaternary)
-		choices.Append(quinary)
-		choices.Append(forgetButton)
-		choices.Append(deleteButton)
 		choices.Append(moveButton)
 		choices.Append(resetButton)
 		choices.Append(cleanMoveButton)
 		choices.Append(cleanResetButton)
 		choices.SetVisible(false)
+		// The home and error pages get exactly the buttons the launcher asked for.
+		dynamicActions := gtk.NewBox(gtk.OrientationVertical, 8)
+		dynamicActions.SetVisible(false)
 		actions := gtk.NewBox(gtk.OrientationVertical, 8)
 		actions.SetMarginStart(24)
 		actions.SetMarginEnd(24)
 		actions.SetMarginBottom(16)
+		actions.Append(dynamicActions)
 		actions.Append(choices)
 		actions.Append(button)
 		clamp := adw.NewClamp()
@@ -397,6 +497,8 @@ func main() {
 			}
 			answered = true
 			choices.SetSensitive(false)
+			dynamicActions.SetSensitive(false)
+			menuButton.SetSensitive(false)
 			if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"event": "reply", "request": current.Request, "value": value}); err != nil {
 				app.Quit()
 			}
@@ -410,20 +512,8 @@ func main() {
 			if current.NonCancellable {
 				return
 			}
-			if current.Prompt == "home" {
-				reply("close")
-			} else if current.Prompt == "about" || current.Prompt == "settings-saved" {
-				reply("back")
-			} else if current.Prompt == "close" {
-				reply("keep")
-			} else if current.Prompt == "forget-location" {
-				reply("keep")
-			} else if current.Prompt == "delete-default" {
-				reply("keep")
-			} else if current.Prompt == "recovery" {
-				reply("back")
-			} else if current.Prompt == "settings" || current.Prompt == "grant-files" || current.Prompt == "backup-folder" || current.Prompt == "restore-archive" || current.Prompt == "restore-parent" || current.Prompt == "attach-folder" || current.Prompt == "move-folder" || current.Prompt == "choice" {
-				reply("cancel")
+			if r := escapeReply(current); r != "" {
+				reply(r)
 			} else if failed {
 				emit("dismissed")
 				app.Quit()
@@ -438,13 +528,20 @@ func main() {
 				emit("cancel")
 			}
 		}
+		// Escape closes a prompt the way its Back or Cancel button does. Progress
+		// screens ignore it so a stray key never stops a download.
+		keys := gtk.NewEventControllerKey()
+		keys.ConnectKeyPressed(func(keyval, keycode uint, mods gdk.ModifierType) bool {
+			if keyval == gdk.KEY_Escape && escapeReply(current) != "" {
+				close()
+				return true
+			}
+			return false
+		})
+		window.AddController(keys)
 		primary.ConnectClicked(func() {
 			switch current.Prompt {
-			case "home":
-				reply("launch")
-			case "about":
-				reply("back")
-			case "settings-saved":
+			case "about", "settings-saved":
 				reply("back")
 			case "location":
 				reply("default")
@@ -462,6 +559,8 @@ func main() {
 				reply("backup")
 			case "choice":
 				reply("primary")
+			case "error":
+				reply("retry")
 			case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
 				id := current.Request
 				dialog := gtk.NewFileDialog()
@@ -554,8 +653,6 @@ func main() {
 		})
 		secondary.ConnectClicked(func() {
 			switch current.Prompt {
-			case "home":
-				reply("settings")
 			case "account":
 				reply("personal")
 			case "close":
@@ -608,32 +705,8 @@ func main() {
 			}
 		})
 		tertiary.ConnectClicked(func() {
-			if current.Prompt == "home" {
-				reply("about")
-			} else if current.Prompt == "recovery" {
+			if current.Prompt == "recovery" {
 				reply("diagnostics")
-			}
-		})
-		quaternary.ConnectClicked(func() {
-			if current.Prompt == "home" {
-				reply("recovery")
-			} else if current.Prompt == "recovery" {
-				reply("back")
-			}
-		})
-		quinary.ConnectClicked(func() {
-			if current.Prompt == "home" && current.CanAttach {
-				reply("attach")
-			}
-		})
-		forgetButton.ConnectClicked(func() {
-			if current.Prompt == "home" && current.CanForget {
-				reply("forget")
-			}
-		})
-		deleteButton.ConnectClicked(func() {
-			if current.Prompt == "home" && current.CanDelete {
-				reply("delete-default")
 			}
 		})
 		moveButton.ConnectClicked(func() {
@@ -681,24 +754,30 @@ func main() {
 					current = next
 					answered = false
 					choices.SetSensitive(true)
+					dynamicActions.SetSensitive(true)
+					menuButton.SetSensitive(true)
 					button.SetSensitive(true)
 					window.SetDeletable(!next.NonCancellable)
-					primary.SetSensitive(next.Prompt != "home" || !next.CanForget)
-					secondary.SetSensitive(next.Prompt != "home" || !next.CanForget)
-					quaternary.SetSensitive(next.Prompt != "home" || !next.CanForget)
-					choices.SetVisible(next.Prompt != "")
-					button.SetVisible(!next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
-					tertiary.SetVisible(next.Prompt == "home" || next.Prompt == "recovery")
-					quaternary.SetVisible(next.Prompt == "home")
-					quinary.SetVisible(next.Prompt == "home" && next.CanAttach)
-					forgetButton.SetVisible(next.Prompt == "home" && next.CanForget)
-					deleteButton.SetVisible(next.Prompt == "home" && next.CanDelete)
+					// The banner carries a problem the user can fix. Error pages
+					// carry their own message, so they never show it twice.
+					bannerURL = next.HelpURL
+					banner.SetTitle(next.Notice)
+					banner.SetButtonLabel("")
+					if next.HelpURL != "" {
+						banner.SetButtonLabel("How to fix this")
+					}
+					banner.SetRevealed(next.Notice != "" && !next.Error && next.Prompt != "error")
+					// The home and error pages get the buttons the launcher chose.
+					dynamic := next.Prompt == "home" || next.Prompt == "error"
+					choices.SetVisible(next.Prompt != "" && !dynamic)
+					dynamicActions.SetVisible(dynamic)
+					button.SetVisible(!dynamic && !next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
+					tertiary.SetVisible(next.Prompt == "recovery")
 					moveButton.SetVisible(next.Prompt == "recovery" && next.CanMove)
 					resetButton.SetVisible(next.Prompt == "recovery" && next.CanReset)
 					cleanMoveButton.SetVisible(next.Prompt == "recovery" && next.CanCleanMove)
 					cleanResetButton.SetVisible(next.Prompt == "recovery" && next.CanCleanReset)
-					tertiary.SetLabel("About and help")
-					quaternary.SetLabel("Backup and recovery")
+					tertiary.SetLabel("Create diagnostics")
 					button.SetLabel("Cancel")
 					if next.Booting && next.Prompt == "" {
 						button.SetLabel("Stop Omarchy")
@@ -708,23 +787,36 @@ func main() {
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
+					homeHeadline.SetText(next.Headline)
+					homeHeadline.SetVisible(next.Headline != "")
 					homeStatus.SetText(next.Status)
-					homePath.SetText("Storage: " + next.Path)
+					homeDetail.SetText(next.Detail)
+					homeDetail.SetVisible(next.Detail != "")
 					settingsStatus.SetText(next.Status)
 					secondary.RemoveCSSClass("destructive-action")
+					fillSections(homeSections, sectionsIf(next.Prompt == "home", next.Sections))
+					fillSections(pageSections, sectionsIf(next.Prompt != "home" && next.Prompt != "settings", next.Sections))
+					clearChildren(menuBox)
+					for _, item := range next.Menu {
+						item := item
+						entry := gtk.NewButtonWithLabel(item.Label)
+						entry.AddCSSClass("flat")
+						if item.Destructive {
+							entry.AddCSSClass("error")
+						}
+						entry.ConnectClicked(func() {
+							menuPopover.Popdown()
+							reply(item.Reply)
+						})
+						menuBox.Append(entry)
+					}
+					menuButton.SetVisible(next.Prompt == "home" && len(next.Menu) > 0)
 					switch next.Prompt {
-					case "home":
-						page.SetTitle("Try Omarchy")
-						primary.SetLabel("Launch Omarchy")
-						secondary.SetLabel("Settings")
-						quinary.SetLabel("Use existing data folder")
-						button.SetLabel("Close")
 					case "recovery":
 						page.SetTitle("Backup and recovery")
 						page.SetIconName("")
 						primary.SetLabel("Create backup")
 						secondary.SetLabel("Restore as a copy")
-						tertiary.SetLabel("Create diagnostics")
 						button.SetLabel("Back")
 					case "forget-location":
 						page.SetTitle("Forget saved location?")
@@ -735,11 +827,14 @@ func main() {
 					case "delete-default":
 						page.SetTitle("Delete this VM?")
 						primary.SetLabel("Keep this VM")
-						secondary.SetLabel("Delete VM and guest files")
+						secondary.SetLabel("Delete VM and system files")
 						secondary.AddCSSClass("destructive-action")
 						button.SetLabel("Cancel")
 					case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
 						page.SetTitle("Backup and recovery")
+						if next.Prompt == "attach-folder" {
+							page.SetTitle("Use an existing VM")
+						}
 						if next.Prompt == "move-folder" {
 							page.SetTitle("Move this VM")
 						}
@@ -757,8 +852,9 @@ func main() {
 						page.SetTitle("About Try Omarchy")
 						primary.SetLabel("Back")
 						button.SetLabel("Back")
-						secondary.SetVisible(false)
-						next.Status = "Try Omarchy for Linux, version " + next.Version + ". It runs Omarchy in a VM stored on this computer. Settings apply at the next start. On GNOME Wayland, clipboard sync asks for pointer and clipboard permission; Try Omarchy never sends pointer events. Uninstall keeps external VM folders. After reinstall, choose Use existing data folder to reopen one. Help: github.com/btsouth/try-omarchy-linux"
+						if next.Status == "" {
+							next.Status = "Try Omarchy for Linux, version " + next.Version + "."
+						}
 					case "settings-saved":
 						page.SetTitle("Settings saved")
 						primary.SetLabel("Done")
@@ -823,14 +919,10 @@ func main() {
 						page.SetTitle("Where should Omarchy live?")
 						primary.SetLabel("Use default location")
 						secondary.SetLabel("Choose another folder...")
-						if next.Status == "" {
-							next.Status = "Your virtual machine and settings stay in this folder. A try-omarchy folder is created if you choose another location.\n\nDefault location:\n" + displayPath(next.Path)
-						}
 					case "account":
 						page.SetTitle("Make yourself at home")
 						primary.SetLabel("Try it now")
 						secondary.SetLabel("Set up my own account")
-						next.Status = "Start right away with the trial account (username and password: omarchy), or choose your own name and password inside Omarchy."
 					case "share":
 						page.SetTitle("Share a folder with Omarchy?")
 						primary.SetLabel("Not now")
@@ -847,31 +939,65 @@ func main() {
 						primary.SetLabel("Keep running")
 						secondary.SetLabel("Shut down")
 						secondary.AddCSSClass("destructive-action")
-						next.Status = "Save your work inside Omarchy before shutting down."
+						if next.Status == "" {
+							next.Status = "Save your work inside Omarchy before shutting down."
+						}
+					case "error":
+						page.SetTitle(orDefault(next.ErrorTitle, "Omarchy could not start"))
+						page.SetIconName("dialog-error-symbolic")
 					}
-					secondary.SetVisible(next.Prompt != "about" && next.Prompt != "settings-saved" && next.Prompt != "grant-files" && next.Prompt != "backup-folder" && next.Prompt != "restore-parent" && next.Prompt != "restore-archive" && next.Prompt != "attach-folder" && next.Prompt != "move-folder")
-					if next.Prompt != "" {
+					secondary.SetVisible(!oneButtonPrompt(next.Prompt) && next.Prompt != "error")
+					// The home's buttons, or an error page's, in the order asked for.
+					dynamicList := next.Actions
+					if next.Prompt == "error" {
+						dynamicList = errorActions(next)
+					}
+					var focus *gtk.Button
+					clearChildren(dynamicActions)
+					for i, item := range dynamicList {
+						item := item
+						b := gtk.NewButtonWithLabel(item.Label)
+						if item.Suggested {
+							b.AddCSSClass("suggested-action")
+							b.AddCSSClass("pill")
+						}
+						if item.Destructive {
+							b.AddCSSClass("destructive-action")
+						}
+						if item.Reply == "close" {
+							b.AddCSSClass("flat")
+						}
+						b.ConnectClicked(func() { reply(item.Reply) })
+						dynamicActions.Append(b)
+						if i == homeSuggested(dynamicList) {
+							focus = b
+						}
+					}
+					if focus != nil {
+						focus.GrabFocus()
+					} else if next.Prompt != "" {
 						primary.GrabFocus()
 					}
 					failed = next.Error
 					label.SetText(next.Status)
-					label.SetSelectable(failed)
+					label.SetSelectable(failed || next.Prompt == "error")
 					determinate = next.Total > 0
 					progress.SetShowText(determinate)
 					progress.SetVisible(!failed && next.Prompt == "")
 					if determinate {
-						fraction := min(max(float64(next.Current)/float64(next.Total), 0), 1)
-						progress.SetFraction(fraction)
-						progress.SetText(fmt.Sprintf("%.0f%%", fraction*100))
+						progress.SetFraction(min(max(float64(next.Current)/float64(next.Total), 0), 1))
+						progress.SetText(percentText(next.Current, next.Total))
 					} else {
 						progress.SetText("")
 					}
+					detail.SetText(next.Detail)
+					detail.SetVisible(next.Detail != "" && next.Prompt != "home")
+					helpLink.SetVisible((failed || next.Prompt == "error") && next.HelpURL != "")
+					if next.HelpURL != "" {
+						helpLink.SetURI(next.HelpURL)
+					}
 					if failed {
-						title := next.ErrorTitle
-						if title == "" {
-							title = "Omarchy could not start"
-						}
-						page.SetTitle(title)
+						page.SetTitle(orDefault(next.ErrorTitle, "Omarchy could not start"))
 						page.SetIconName("dialog-error-symbolic")
 						button.SetLabel("Close")
 					}
@@ -885,4 +1011,27 @@ func main() {
 		emit("ready")
 	})
 	os.Exit(app.Run(os.Args))
+}
+
+func orDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func sectionsIf(show bool, sections []section) []section {
+	if show {
+		return sections
+	}
+	return nil
+}
+
+// oneButtonPrompt lists prompts whose only choice is Back, Close or a picker.
+func oneButtonPrompt(prompt string) bool {
+	switch prompt {
+	case "about", "settings-saved", "grant-files", "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
+		return true
+	}
+	return false
 }

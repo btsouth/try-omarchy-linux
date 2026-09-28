@@ -29,6 +29,15 @@ func linuxDefaultVMCanDelete(defaultDir string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
+// linuxDeletePrompt names the folder and what deleting it frees. It says what
+// is lost and what is kept, since Delete cannot be undone.
+func linuxDeletePrompt(defaultDir string) string {
+	freed := linuxTreeBytes(filepath.Join(defaultDir, "vm")) + linuxTreeBytes(filepath.Join(defaultDir, "guest"))
+	return "Delete this VM and its downloaded system files from " + linuxDisplayPath(defaultDir) + "? This frees about " + linuxGB(freed) +
+		". Everything inside Omarchy is lost: your files, apps and settings there. Try Omarchy's own settings, shared folders and backups stay. " +
+		"To use Omarchy again you would set it up and download it again."
+}
+
 func checkLinuxDeleteFolder(dir string, allowed map[string]bool) ([]string, error) {
 	info, err := os.Lstat(dir)
 	if err != nil {

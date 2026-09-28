@@ -132,6 +132,9 @@ func main() {
 		return
 	}
 	cfg.dir = selected
+	if !explicitFlags["dir"] && !pathsEqual(selected, defaultLinuxDataDirectory()) {
+		noteLinuxLocationHint(defaultLinuxDataDirectory(), selected)
+	}
 	if cfg.dir, err = filepath.Abs(cfg.dir); err != nil {
 		fatal("Cannot resolve the data directory: %v", err)
 	}
@@ -231,13 +234,20 @@ func main() {
 
 	var chooseAccount func() (string, error)
 	if getUI().window != nil {
-		chooseAccount = func() (string, error) { return getUI().window.ask(setupContext(), linuxSetupState{Prompt: "account"}) }
+		chooseAccount = func() (string, error) {
+			if linuxQuickSetup.Load() {
+				return provisionModeInstant, nil
+			}
+			return getUI().window.ask(setupContext(), linuxAccountState())
+		}
 	}
 	if err := chooseLinuxProvisionMode(cfg, explicitFlags["instant"], chooseAccount); err != nil {
 		fatal("Cannot select the account setup: %v", err)
 	}
+	// A shared folder is chosen in Settings. Asking at first setup put a third
+	// question in front of the desktop, so only -choose-share asks it here.
 	var chooseFolder func(string) (string, error)
-	if getUI().window != nil {
+	if getUI().window != nil && *chooseShare {
 		chooseFolder = func(status string) (string, error) {
 			return getUI().window.ask(setupContext(), linuxSetupState{Prompt: "share", Status: status})
 		}

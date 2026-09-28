@@ -17,6 +17,20 @@ const (
 
 var errInsufficientDiskSpace = errors.New("not enough free disk space")
 
+// insufficientSpaceError keeps the numbers so a launcher can say how much is
+// missing. It reads and unwraps exactly like the plain error it replaces.
+type insufficientSpaceError struct {
+	path       string
+	need, have int64
+}
+
+func (e *insufficientSpaceError) Error() string {
+	return fmt.Sprintf("%v in %s: need %s available, have %s",
+		errInsufficientDiskSpace, filepath.Clean(e.path), formatGiB(e.need), formatGiB(e.have))
+}
+
+func (e *insufficientSpaceError) Unwrap() error { return errInsufficientDiskSpace }
+
 var (
 	diskFreeBytes      = platformDiskFreeBytes
 	allocatedFileBytes = platformAllocatedFileBytes
@@ -130,8 +144,7 @@ func requireDiskSpace(path string, required int64) error {
 		return fmt.Errorf("checking free disk space: %w", err)
 	}
 	if available < required {
-		return fmt.Errorf("%w in %s: need %s available, have %s",
-			errInsufficientDiskSpace, filepath.Clean(path), formatGiB(required), formatGiB(available))
+		return &insufficientSpaceError{path: path, need: required, have: available}
 	}
 	return nil
 }

@@ -16,6 +16,28 @@ var (
 	linuxGuestSumsSHA256 = "3ba8b875bc9ffff3dd223367a7c00e1e1e9d3b77a314bb147bba9b4361aeba73"
 )
 
+// Measured on the pinned guest image (linux-v0.1.0): the archive, kernel and
+// initramfs are 2.03 GB together, and a first launch ends with 5.7 GB of system
+// files, the VM's own 5.7 GB copy of them and about 1.4 GB the first boot
+// writes. Update these with the pin; the release manifest lists the sizes.
+const (
+	linuxGuestDownloadBytes = 2_176_000_000
+	linuxGuestSpaceBytes    = int64(13) << 30
+	// A sparse VM disk can grow past what its drive has left. Below this the
+	// guest can hit write errors, so the home says so.
+	linuxLowSpaceBytes = int64(2) << 30
+)
+
+// The public help page. Errors and banners link to its sections.
+const linuxHelpPage = "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md"
+
+func linuxHelpURL(section string) string {
+	if section == "" {
+		return linuxHelpPage
+	}
+	return linuxHelpPage + "#" + section
+}
+
 func selectLinuxGuestRelease(release, sumsSHA256 string, releaseExplicit, sumsExplicit bool) (string, string, error) {
 	if releaseExplicit != sumsExplicit {
 		return "", "", fmt.Errorf("a custom Omarchy image needs both -release and -sums-sha256")

@@ -230,27 +230,116 @@ func linuxDirectStart(flags map[string]bool) bool {
 	return false
 }
 
+// linuxKVMCheck is a variable so the home's notice can be tested.
+var linuxKVMCheck = checkKVM
+
 func linuxHomeState(defaultDir string) (linuxSetupState, string) {
 	dir := defaultDir
 	if saved, found, err := loadDataLocationPointer(defaultDir); err != nil {
-		return linuxSetupState{Prompt: "home", Status: "Saved storage choice could not be read. Choose an existing data folder, or forget this choice to start fresh: " + err.Error(), Path: defaultDir, Version: linuxAppVersion, CanForget: true}, ""
+		logf("home: the saved location record cannot be read: %v", err)
+		return linuxSetupState{Prompt: "home", Path: defaultDir, Version: linuxAppVersion, CanForget: true,
+			Headline: "Try Omarchy cannot read where your VM is saved.",
+			Status:   "Choose your VM's folder again, or forget the saved location to start fresh. Nothing is deleted either way."}, ""
 	} else if found {
 		dir = saved
 		if _, err := os.Stat(dir); err != nil {
-			return linuxSetupState{Prompt: "home", Status: "Saved storage is unavailable. Reconnect its drive, choose an existing data folder, or forget this choice to start fresh: " + err.Error(), Path: dir, Version: linuxAppVersion, CanForget: true}, ""
+			logf("home: the saved VM folder is unavailable: %v", err)
+			return linuxSetupState{Prompt: "home", Path: dir, Version: linuxAppVersion, CanForget: true,
+				Headline: "Your Omarchy folder is not available.",
+				Status: "Try Omarchy remembers your VM at " + linuxLocationHostPath(defaultDir, dir) + ", but cannot open it now. " +
+					"If it is on a drive, reconnect it. If you reinstalled the app, choose the folder again. Nothing has been deleted."}, ""
 		}
 	}
-	return linuxHomeStateForDir(dir)
+	return linuxHomeStateForDir(dir, defaultDir)
 }
 
-func linuxHomeStateForDir(dir string) (linuxSetupState, string) {
-	status := "No virtual machine is installed yet. Launch to choose its storage location and set it up."
-	if info, err := os.Stat(filepath.Join(dir, "vm", "disk.raw")); err == nil {
-		status = fmt.Sprintf("Saved virtual machine disk found. Capacity: %.0f GiB. Launch to check its system files and start Omarchy.", float64(info.Size())/1073741824)
-	} else if !os.IsNotExist(err) {
-		status = "Cannot read virtual machine storage: " + err.Error()
+func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
+	state := linuxSetupState{Prompt: "home", Path: dir, Version: linuxAppVersion}
+	free := linuxFreeBytes(dir)
+	if _, err := os.Stat(filepath.Join(dir, "vm", "disk.raw")); err == nil {
+		state.Installed = true
+		state.Headline = "Omarchy is ready."
+		state.Status = "Your files are saved in this VM. Launch to open your desktop."
+		state.Sections = []linuxSection{{Heading: "Storage", Rows: linuxStorageRows(dir, defaultDir, false)}}
+	} else if os.IsNotExist(err) {
+		state.Headline = "Omarchy is not set up yet."
+		state.Status = "Try it now downloads Omarchy, sets it up and starts it. You can move or delete it later."
+		state.Sections = []linuxSection{{Heading: "What setup does", Rows: linuxSetupRows(dir, defaultDir, free)}}
+	} else {
+		state.Headline = "Omarchy's storage cannot be read."
+		state.Status = "Cannot read virtual machine storage: " + err.Error()
 	}
-	return linuxSetupState{Prompt: "home", Status: status, Path: dir, Version: linuxAppVersion}, dir
+	if err := linuxKVMCheck(); err != nil {
+		state.Notice, state.HelpURL, state.CheckAgain = "KVM is not available.", linuxHelpURL("kvm"), true
+		var kvm *kvmError
+		if errors.As(err, &kvm) {
+			state.Notice = kvm.Short
+		}
+		state.Headline, state.Status = "Omarchy cannot start yet.", capitalizeFirst(err.Error())+"."
+	} else if free >= 0 && state.Installed && free < linuxLowSpaceBytes {
+		state.Notice, state.HelpURL = "Only "+linuxGB(free)+" is free on this drive.", linuxHelpURL("space")
+		state.Status = "Omarchy can stop working if the drive fills up. Free some space, then launch."
+	} else if free >= 0 && !state.Installed && free < linuxGuestSpaceBytes {
+		state.Notice, state.HelpURL = "Only "+linuxGB(free)+" is free here.", linuxHelpURL("space")
+		state.Status = "Setup needs about " + linuxGB(linuxGuestSpaceBytes) + ". Free some space, or choose another folder."
+		state.Setup = "customize"
+	}
+	return state, dir
+}
+
+// linuxSetupRows is what a first setup will do, in the order it matters:
+// what is downloaded, what it costs in space, where it goes and who you are.
+func linuxSetupRows(dir, defaultDir string, free int64) []linuxRow {
+	space := "About " + linuxGB(linuxGuestSpaceBytes) + ". Omarchy sees a " + linuxGB(int64(24)<<30) + " disk, but only what it uses takes space."
+	if free >= 0 {
+		space += " " + linuxGB(free) + " is free here."
+	}
+	location := linuxStorageRows(dir, defaultDir, false)[0]
+	return []linuxRow{
+		{Title: "Download", Detail: "About " + linuxGB(linuxGuestDownloadBytes) + ", once. If it is interrupted, it continues where it stopped."},
+		{Title: "Space", Detail: space},
+		location,
+		{Title: "Account", Detail: "You are signed in as " + trialUsername + " (password " + trialPassword + "). Choose Customize to set up your own."},
+	}
+}
+
+// linuxHomeActions decides the home's buttons for its state. Storage that
+// cannot be opened offers the way back to it first; a computer without KVM
+// offers to check again; a first setup offers one button that just works.
+func linuxHomeActions(state linuxSetupState) (actions, menu []linuxAction) {
+	more := []linuxAction{{Label: "About and help", Reply: "about"}}
+	if state.CanAttach {
+		more = append(more, linuxAction{Label: "Use existing data folder", Reply: "attach"})
+	}
+	if state.CanDelete {
+		more = append(more, linuxAction{Label: "Delete this VM...", Reply: "delete-default", Destructive: true})
+	}
+	switch {
+	case state.CanForget:
+		actions = []linuxAction{{Label: "Use existing data folder", Reply: "attach", Suggested: true}, {Label: "Forget saved location", Reply: "forget"}, {Label: "About and help", Reply: "about"}, {Label: "Close", Reply: "close"}}
+		return actions, nil
+	case state.CheckAgain:
+		actions = append(actions, linuxAction{Label: "Check again", Reply: "check", Suggested: true})
+	case !state.Installed && state.Setup == "customize":
+		actions = append(actions, linuxAction{Label: "Choose another folder...", Reply: "customize", Suggested: true})
+	case !state.Installed:
+		actions = append(actions, linuxAction{Label: "Try it now", Reply: "try", Suggested: true}, linuxAction{Label: "Customize...", Reply: "customize"})
+	default:
+		actions = append(actions, linuxAction{Label: "Launch Omarchy", Reply: "launch", Suggested: true})
+	}
+	actions = append(actions, linuxAction{Label: "Settings", Reply: "settings"})
+	if state.Installed {
+		actions = append(actions, linuxAction{Label: "Backup and recovery", Reply: "recovery"})
+	}
+	actions = append(actions, linuxAction{Label: "Close", Reply: "close"})
+	return actions, more
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
@@ -273,7 +362,7 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 				state = linuxSetupState{Prompt: "home", Status: "Cannot read the data folder move record: " + err.Error()}
 				dir = ""
 			} else {
-				state, dir = linuxHomeStateForDir(resolved)
+				state, dir = linuxHomeStateForDir(resolved, defaultDir)
 			}
 		}
 		state.CanAttach = !explicitDir
@@ -301,7 +390,16 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 			return false
 		}
 		switch answer {
-		case "launch":
+		case "check":
+			status = ""
+		case "launch", "customize", "try":
+			// Check again after a fix that needs no restart, such as loading the
+			// KVM module. The banner keeps saying what is wrong until it is gone.
+			if err := linuxKVMCheck(); err != nil {
+				status = ""
+				continue
+			}
+			linuxQuickSetup.Store(answer == "try")
 			return true
 		case "settings":
 			if dir == "" {

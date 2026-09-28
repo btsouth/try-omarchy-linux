@@ -4,10 +4,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,7 +26,7 @@ func TestLinuxHomeIsReadOnlyAndDetectsExistingDisk(t *testing.T) {
 		t.Fatalf("idle home created storage: %v", err)
 	}
 	custom := filepath.Join(t.TempDir(), "custom")
-	if customState, customDir := linuxHomeStateForDir(custom); customDir != custom || customState.Path != custom {
+	if customState, customDir := linuxHomeStateForDir(custom, root); customDir != custom || customState.Path != custom {
 		t.Fatalf("explicit location: %+v %q", customState, customDir)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "vm"), 0o755); err != nil {
@@ -34,6 +38,198 @@ func TestLinuxHomeIsReadOnlyAndDetectsExistingDisk(t *testing.T) {
 	state, _ = linuxHomeState(root)
 	if state.Status == "" || state.Path != root {
 		t.Fatalf("existing home: %+v", state)
+	}
+}
+
+func stubHomeChecks(t *testing.T, kvm error, free int64) {
+	t.Helper()
+	oldKVM, oldFree := linuxKVMCheck, diskFreeBytes
+	t.Cleanup(func() { linuxKVMCheck, diskFreeBytes = oldKVM, oldFree })
+	linuxKVMCheck = func() error { return kvm }
+	diskFreeBytes = func(string) (int64, error) { return free, nil }
+}
+
+func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
+	stubHomeChecks(t, nil, 200<<30)
+	root := filepath.Join(t.TempDir(), "try-omarchy")
+	state, _ := linuxHomeState(root)
+	if state.Headline != "Omarchy is not set up yet." || state.Notice != "" || state.CheckAgain || state.Installed {
+		t.Fatalf("first-run home: %+v", state)
+	}
+	if len(state.Sections) != 1 || state.Sections[0].Heading != "What setup does" {
+		t.Fatalf("setup section: %+v", state.Sections)
+	}
+	rows := map[string]string{}
+	for _, row := range state.Sections[0].Rows {
+		rows[row.Title] = row.Detail
+	}
+	for title, want := range map[string]string{
+		"Download": "About 2 GB, once. If it is interrupted, it continues where it stopped.",
+		"Space":    "About 13 GB.",
+		"Location": root,
+		"Account":  "signed in as omarchy (password omarchy)",
+	} {
+		if !strings.Contains(rows[title], want) {
+			t.Fatalf("%s row lacks %q: %q", title, want, rows[title])
+		}
+	}
+	if !strings.Contains(rows["Space"], "200 GB is free here.") || !strings.Contains(rows["Space"], "Omarchy sees a 24 GB disk") {
+		t.Fatalf("space row: %q", rows["Space"])
+	}
+}
+
+func TestLinuxHomeActionsFollowTheStateOfThings(t *testing.T) {
+	labels := func(actions []linuxAction) []string {
+		var out []string
+		for _, a := range actions {
+			out = append(out, a.Label+"="+a.Reply)
+		}
+		return out
+	}
+	suggested := func(actions []linuxAction) string {
+		for _, a := range actions {
+			if a.Suggested {
+				return a.Reply
+			}
+		}
+		return ""
+	}
+	for _, tc := range []struct {
+		name      string
+		state     linuxSetupState
+		want      []string
+		menu      []string
+		suggested string
+	}{
+		{"first setup", linuxSetupState{CanAttach: true},
+			[]string{"Try it now=try", "Customize...=customize", "Settings=settings", "Close=close"},
+			[]string{"About and help=about", "Use existing data folder=attach"}, "try"},
+		{"first setup without room", linuxSetupState{Setup: "customize"},
+			[]string{"Choose another folder...=customize", "Settings=settings", "Close=close"},
+			[]string{"About and help=about"}, "customize"},
+		{"first setup without KVM", linuxSetupState{CheckAgain: true},
+			[]string{"Check again=check", "Settings=settings", "Close=close"},
+			[]string{"About and help=about"}, "check"},
+		{"installed default VM", linuxSetupState{Installed: true, CanAttach: true, CanDelete: true},
+			[]string{"Launch Omarchy=launch", "Settings=settings", "Backup and recovery=recovery", "Close=close"},
+			[]string{"About and help=about", "Use existing data folder=attach", "Delete this VM...=delete-default"}, "launch"},
+		{"installed external VM", linuxSetupState{Installed: true, CanAttach: true},
+			[]string{"Launch Omarchy=launch", "Settings=settings", "Backup and recovery=recovery", "Close=close"},
+			[]string{"About and help=about", "Use existing data folder=attach"}, "launch"},
+		{"installed, KVM missing", linuxSetupState{Installed: true, CheckAgain: true},
+			[]string{"Check again=check", "Settings=settings", "Backup and recovery=recovery", "Close=close"},
+			[]string{"About and help=about"}, "check"},
+		{"saved storage unavailable", linuxSetupState{CanForget: true, CanAttach: true},
+			[]string{"Use existing data folder=attach", "Forget saved location=forget", "About and help=about", "Close=close"},
+			nil, "attach"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actions, menu := linuxHomeActions(tc.state)
+			if !reflect.DeepEqual(labels(actions), tc.want) || !reflect.DeepEqual(labels(menu), tc.menu) || suggested(actions) != tc.suggested {
+				t.Fatalf("actions %v menu %v suggested %q", labels(actions), labels(menu), suggested(actions))
+			}
+			for _, a := range menu {
+				if a.Reply == "delete-default" && !a.Destructive {
+					t.Fatal("Delete must be marked destructive")
+				}
+			}
+		})
+	}
+}
+
+func TestLinuxHomeWarnsWhenTheDriveCannotHoldOmarchy(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "try-omarchy")
+	stubHomeChecks(t, nil, 5<<30)
+	state, _ := linuxHomeState(root)
+	if state.Notice != "Only 5 GB is free here." || !strings.Contains(state.Status, "Setup needs about 13 GB") || state.HelpURL != linuxHelpURL("space") || state.Setup != "customize" {
+		t.Fatalf("setup space notice: %+v", state)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "vm"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "vm", "disk.raw"), []byte("disk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stubHomeChecks(t, nil, 1<<30)
+	state, _ = linuxHomeState(root)
+	if state.Notice != "Only 1 GB is free on this drive." || !strings.Contains(state.Status, "stop working if the drive fills up") {
+		t.Fatalf("installed low-space notice: %+v", state)
+	}
+	stubHomeChecks(t, nil, 50<<30)
+	if state, _ = linuxHomeState(root); state.Notice != "" || state.Headline != "Omarchy is ready." {
+		t.Fatalf("plenty of space must not warn: %+v", state)
+	}
+}
+
+func TestLinuxHomeOffersToCheckAgainWhileKVMIsUnavailable(t *testing.T) {
+	stubHomeChecks(t, &kvmError{Short: "This account cannot use KVM.", msg: "this account is not allowed to use KVM. Add it to the kvm group with: sudo usermod -aG kvm $USER. Then sign out and back in"}, 200<<30)
+	state, _ := linuxHomeState(filepath.Join(t.TempDir(), "try-omarchy"))
+	if !state.CheckAgain || state.Notice != "This account cannot use KVM." || state.HelpURL != linuxHelpURL("kvm") || state.Headline != "Omarchy cannot start yet." {
+		t.Fatalf("KVM notice: %+v", state)
+	}
+	if !strings.HasPrefix(state.Status, "This account is not allowed to use KVM.") || !strings.Contains(state.Status, "sudo usermod -aG kvm $USER") || !strings.HasSuffix(state.Status, "sign out and back in.") {
+		t.Fatalf("KVM guidance must say what to do: %q", state.Status)
+	}
+	// An unexpected failure still gets a banner, not a blank state.
+	stubHomeChecks(t, errors.New("odd"), 200<<30)
+	if state, _ = linuxHomeState(filepath.Join(t.TempDir(), "try-omarchy")); state.Notice != "KVM is not available." || !state.CheckAgain {
+		t.Fatalf("unknown KVM failure: %+v", state)
+	}
+}
+
+func TestLinuxHomeSaysWhereAnUnavailableVMWasAndThatNothingWasDeleted(t *testing.T) {
+	stubHomeChecks(t, nil, 200<<30)
+	t.Setenv("HOME", "/home/ana")
+	root := t.TempDir()
+	defaultDir := filepath.Join(root, "data", "try-omarchy")
+	missing := filepath.Join(root, "gone", "try-omarchy")
+	if err := saveDataLocationPointer(defaultDir, missing); err != nil {
+		t.Fatal(err)
+	}
+	state, dir := linuxHomeState(defaultDir)
+	if dir != "" || !state.CanForget || state.Headline != "Your Omarchy folder is not available." || !strings.Contains(state.Status, "Nothing has been deleted") {
+		t.Fatalf("unavailable home: %+v %q", state, dir)
+	}
+	if strings.Contains(state.Status+state.Detail, "stat ") || state.Detail != "" {
+		t.Fatalf("the home must not show raw filesystem errors: %+v", state)
+	}
+	// After the grant is gone, the recorded real path still names the folder.
+	hint, err := json.Marshal(linuxLocationHint{Path: missing, Host: "/home/ana/Drives/Omarchy/try-omarchy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(linuxLocationHintPath(defaultDir)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(linuxLocationHintPath(defaultDir), hint, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, _ = linuxHomeState(defaultDir); !strings.Contains(state.Status, "~/Drives/Omarchy/try-omarchy") {
+		t.Fatalf("home must name the recorded folder: %q", state.Status)
+	}
+}
+
+func TestLinuxLocationHintRecordsOnlyPortalFolders(t *testing.T) {
+	root := t.TempDir()
+	defaultDir := filepath.Join(root, "data", "try-omarchy")
+	old := linuxDocumentHostPath
+	defer func() { linuxDocumentHostPath = old }()
+	linuxDocumentHostPath = func(id string) (string, error) { return "/mnt/omarchy", nil }
+	doc := filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "doc", "abc", "omarchy", "try-omarchy")
+	noteLinuxLocationHint(defaultDir, doc)
+	if got := linuxLocationHostPath(defaultDir, doc); got != "/mnt/omarchy/try-omarchy" {
+		t.Fatalf("recorded host path: %q", got)
+	}
+	// A pointer that no longer matches the record is not described by it.
+	linuxDocumentHostPath = func(id string) (string, error) { return "", errors.New("gone") }
+	other := filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "doc", "zzz", "elsewhere")
+	if got := linuxLocationHostPath(defaultDir, other); got != other {
+		t.Fatalf("hint leaked onto another folder: %q", got)
+	}
+	// A folder that is already a host path drops the stale record.
+	noteLinuxLocationHint(defaultDir, "/mnt/plain/try-omarchy")
+	if _, err := os.Stat(linuxLocationHintPath(defaultDir)); !os.IsNotExist(err) {
+		t.Fatalf("stale hint kept: %v", err)
 	}
 }
 

@@ -1,0 +1,10 @@
+outer-vm-stopped
+aeb34bf9709c64a58a1b3b96d809180955c5a8716e3dc9603598bf9ac0817fc8  /workspace/try-omarchy-linux/phase10k-retained/desktop-overlay.qcow2
+image: /workspace/try-omarchy-linux/phase10k-retained/desktop-overlay.qcow2
+file format: qcow2
+virtual size: 80 GiB (85899345920 bytes)
+disk size: 176 MiB
+cluster_size: 65536
+backing file: /workspace/try-omarchy-linux/phase10i-fresh/desktop-overlay.qcow2
+backing file format: qcow2
+Format specific information:

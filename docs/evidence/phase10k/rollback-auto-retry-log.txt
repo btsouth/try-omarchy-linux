@@ -1,0 +1,17 @@
+22:26:40 booting - GPU accelerated OpenGL (software Vulkan) (attempt 1)
+22:26:40 qemu: /app/bin/qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4763M -device virtio-vga-gl -display sdl,gl=on,show-cursor=off,window-close=off -serial file:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/serial-gpu.log -drive file=/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw,format=raw,if=virtio -kernel /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/vmlinuz-linux -initrd /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/initramfs-linux.img -append root=/dev/vda rw rootwait console=ttyS0 loglevel=4 systemd.show_status=false rd.systemd.show_status=false mitigations=off nowatchdog omarchy.qemu=1 vt.global_cursor_default=0 tryomarchy.host-scale=1 tryomarchy.tz=Etc/UTC video=1280x800 tryomarchy.render=gpu -device virtio-keyboard-pci -device virtio-tablet-pci -device virtio-net-pci,netdev=n0 -netdev user,id=n0 -device virtio-rng-pci -chardev socket,id=cam0,host=127.0.0.1,port=4453,reconnect-ms=1000 -device virtio-serial-pci,id=virtioserial0 -device virtserialport,chardev=cam0,name=dev.tryomarchy.camera -device qemu-xhci,id=tryomarchy-usb -global ICH9-LPC.disable_s3=1 -global ICH9-LPC.disable_s4=1 -audiodev pipewire,id=snd -device virtio-sound-pci,audiodev=snd -qmp unix:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/cache/TryOmarchyIPC/tools.sock,server=on,wait=off -qmp unix:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/cache/TryOmarchyIPC/forward.sock,server=on,wait=off -qmp unix:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/cache/TryOmarchyIPC/supervisor.sock,server=on,wait=off -D /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/qemu.log -name Try Omarchy -device virtio-balloon-pci,free-page-reporting=on -monitor none -parallel none
+22:26:41 Booting Omarchy...
+22:26:45 guest userspace announced ready
+22:26:45 agent: guest agent connected (4)
+22:26:45 agent: sent host time (connect)
+22:26:46 Omarchy is starting its desktop...
+22:26:48 clipboard: guest connected
+22:26:54 guest desktop announced ready
+22:26:54 supervisor: watching guest lifecycle
+22:26:54 Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.
+22:26:54 tray: registered
+MESA-EGL: warning: MESA-LOADER: failed to retrieve device information
+MESA-EGL: warning: failed to get driver name for fd -1
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+MESA-EGL: warning: egl: failed to create dri2 screen

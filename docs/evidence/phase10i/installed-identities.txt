@@ -1,0 +1,27 @@
+1ebd5fab35c0c8e9901f533062b6856faa0bf00c4b50de82ae2d893126a85649  /mnt/artifacts/try-omarchy.flatpak
+bc783fcb5b83359e6cde52f7e5bb640bacb3adf747c487bbe9bacfb0c5171826  /mnt/artifacts/SHA256SUMS
+8ebc2c71271e000540f0a7545afd8e73504fcb724671f3d38c720b241842b901  /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/vmlinuz-linux
+3247b8993430da428b2d0a219bea2786ebff461cfb83255680c654095f37766a  /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/initramfs-linux.img
+
+Try Omarchy - Try the Omarchy desktop in a window
+
+          ID: com.tryomarchy.TryOmarchy
+         Ref: app/com.tryomarchy.TryOmarchy/x86_64/master
+        Arch: x86_64
+      Branch: master
+     License: MIT
+      Origin: tryomarchy-origin
+  Collection: 
+Installation: user
+   Installed: 405.9 MB
+     Runtime: org.gnome.Platform/x86_64/50
+         Sdk: org.gnome.Sdk/x86_64/50
+
+      Commit: 0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514
+      Parent: 9efb4d4ab14423f143acbef87891f3857a74b802c8c5c9339744cb80e857c803
+     Subject: Export com.tryomarchy.TryOmarchy
+        Date: 2026-09-27 18:46:17 +0000
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        77G   43G   34G  57% /
+1123317 -rw-r--r-- 1 fresh10i fresh10i         900 Sep 27 21:02 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/install-state.json
+1123315 -rw-r--r-- 1 fresh10i fresh10i 25769803776 Sep 27 21:14 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw

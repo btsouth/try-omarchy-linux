@@ -1,0 +1,6 @@
+33ed1b1f1f8fda8bd87b36ec3e2c2f6f770669805c575ac1c1d7d0cef499333e  /home/tester/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/delete-data-fixture
+faae744f2682a674610b17146bca11f14a65b21ccf4554c75e690ad3f7bc02cc  /home/tester/matrix/exchange/text
+64769:1121432 25769803776 /home/tester/matrix/data/vm/disk.raw
+8ebc2c71271e000540f0a7545afd8e73504fcb724671f3d38c720b241842b901  /home/tester/matrix/data/guest/vmlinuz-linux
+3247b8993430da428b2d0a219bea2786ebff461cfb83255680c654095f37766a  /home/tester/matrix/data/guest/initramfs-linux.img
+0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514

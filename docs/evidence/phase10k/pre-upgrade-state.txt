@@ -1,0 +1,6 @@
+a459262932f5d2f219096371a8bfb63b45cc2a2ebf94b92a92cc840701e805e3  /home/fresh10i/RetainedFixture/keep.txt
+1123315 25769803776 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw
+8ebc2c71271e000540f0a7545afd8e73504fcb724671f3d38c720b241842b901  /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/vmlinuz-linux
+3247b8993430da428b2d0a219bea2786ebff461cfb83255680c654095f37766a  /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/initramfs-linux.img
+0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514
+artifacts on /mnt/artifacts type 9p (ro,relatime,access=client,trans=virtio)

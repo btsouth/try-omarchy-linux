@@ -1,0 +1,7 @@
+{"QMP": {"version": {"qemu": {"micro": 1, "minor": 1, "major": 11}, "package": ""}, "capabilities": ["oob"]}}
+
+{"return": {}}
+
+{"timestamp": {"seconds": 1790548079, "microseconds": 940928}, "event": "POWERDOWN"}
+{"return": {}}
+

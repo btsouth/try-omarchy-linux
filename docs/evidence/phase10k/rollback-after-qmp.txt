@@ -1,0 +1,9 @@
+22:15:20 clipboard: guest connected
+22:15:26 guest desktop announced ready
+22:15:26 supervisor: watching guest lifecycle
+22:15:26 Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.
+22:15:27 tray: registered
+22:18:31 guest stopped (poweroff)
+22:18:31 Omarchy stopped.
+22:18:31 ---- exiting ----
+1123315 25769803776 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw

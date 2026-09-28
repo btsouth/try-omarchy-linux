@@ -1,0 +1,4 @@
+Installing app/com.tryomarchy.TryOmarchy/x86_64/master
+      Commit: 0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514
+e10d593d3a97ca60238c28a7e5dafd48d1772592c580fa5a7b1ddef7892765b2  /home/fresh10i/SharedFixture/keep.txt
+no-vm

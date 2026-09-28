@@ -1,0 +1,3 @@
+Installing app/com.tryomarchy.TryOmarchy/x86_64/master
+0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514
+/home/fresh10i/.local/share/flatpak/app/com.tryomarchy.TryOmarchy/x86_64/master/0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514

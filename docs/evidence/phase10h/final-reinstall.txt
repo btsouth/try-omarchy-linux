@@ -1,0 +1,16 @@
+
+com.tryomarchy.TryOmarchy permissions:
+    ipc	network	fallback-x11	pulseaudio
+    wayland	dri	kvm	file access [1]
+    dbus access [2]
+
+    [1] xdg-run/pipewire-0
+    [2] org.kde.StatusNotifierWatcher
+
+
+ 1.	   	com.tryomarchy.TryOmarchy	master	i	tryomarchy-origin	0 bytes
+
+
+Installing…
+Installation complete.
+0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514

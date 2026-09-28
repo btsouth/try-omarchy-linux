@@ -1,0 +1,22 @@
+21:12:50 graphics: hardware OpenGL with software Vulkan; Venus requires a compatible KVM kernel (automatic minimum 6.16, host 6.8.0-142-generic)
+21:12:50 guest follows this computer's locale: tryomarchy.tz=Etc/UTC
+21:12:50 resources: profile=balanced, 2 of 4 logical processors, 4620 MiB guest RAM; host available=6668 MiB, CPU sample known=false busy=0.0%
+21:12:50 agent: listening on 4451
+21:12:50 clipboard: background sync=true; explicit file drops enabled
+21:12:50 camera: bridge listening on 4453 (no capture on Linux yet)
+21:12:50 Starting Omarchy - GPU accelerated OpenGL (software Vulkan)
+21:12:50 booting - GPU accelerated OpenGL (software Vulkan) (attempt 1)
+21:12:50 qemu: /app/bin/qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4620M -device virtio-vga-gl -display sdl,gl=on,show-cursor=off,window-close=off -serial file:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/serial-gpu.log -drive file=/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw,format=raw,if=virtio -kernel /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/vmlinuz-linux -initrd /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/guest/initramfs-linux.img -append root=/dev/vda rw rootwait console=ttyS0 loglevel=4 systemd.show_status=false rd.systemd.show_status=false mitigations=off nowatchdog omarchy.qemu=1 vt.global_cursor_default=0 tryomarchy.host-scale=1 tryomarchy.tz=Etc/UTC video=1280x800 tryomarchy.render=gpu -device virtio-keyboard-pci -device virtio-tablet-pci -device virtio-net-pci,netdev=n0 -netdev user,id=n0 -device virtio-rng-pci -chardev socket,id=cam0,host=127.0.0.1,port=4453,reconnect-ms=1000 -device virtio-serial-pci,id=virtioserial0 -device virtserialport,chardev=cam0,name=dev.tryomarchy.camera -device qemu-xhci,id=tryomarchy-usb -global ICH9-LPC.disable_s3=1 -global ICH9-LPC.disable_s4=1 -audiodev pipewire,id=snd -device virtio-sound-pci,audiodev=snd -qmp unix:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/cache/TryOmarchyIPC/tools.sock,server=on,wait=off -qmp unix:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/cache/TryOmarchyIPC/forward.sock,server=on,wait=off -qmp unix:/home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/cache/TryOmarchyIPC/supervisor.sock,server=on,wait=off -D /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/qemu.log -name Try Omarchy -device virtio-balloon-pci,free-page-reporting=on -monitor none -parallel none
+21:12:50 Booting Omarchy...
+21:12:55 guest userspace announced ready
+21:12:55 agent: guest agent connected (4)
+21:12:55 agent: sent host time (connect)
+21:12:56 Omarchy is starting its desktop...
+21:12:58 clipboard: guest connected
+21:13:04 guest desktop announced ready
+21:13:04 supervisor: watching guest lifecycle
+21:13:04 Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.
+21:13:04 tray: registered
+21:14:50 guest stopped (poweroff)
+21:14:50 Omarchy stopped.
+21:14:50 ---- exiting ----

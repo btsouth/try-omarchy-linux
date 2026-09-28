@@ -1,0 +1,13 @@
+vm-guest-mode-absent
+e10d593d3a97ca60238c28a7e5dafd48d1772592c580fa5a7b1ddef7892765b2  /home/fresh10i/SharedFixture/keep.txt
+{
+  "schemaVersion": 1,
+  "fullscreen": false,
+  "memoryMiB": 0,
+  "share": "/run/flatpak/doc/c702a217/SharedFixture",
+  "sharedFolderPrompted": true,
+  "forwards": null,
+  "sshKey": ""
+}
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        77G   30G   47G  40% /

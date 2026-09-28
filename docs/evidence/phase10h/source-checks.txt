@@ -1,0 +1,5 @@
+Linux targeted regression
+ok  	github.com/omacom/try-omarchy-windows/app	0.010s
+Linux vet
+Windows vet, build, test compile
+All selected checks passed; native Windows tests not run

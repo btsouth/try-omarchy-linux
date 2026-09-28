@@ -1,0 +1,9 @@
+Warning: Permanently added '127.0.0.1' (ED25519) to the list of known hosts.
+1310897 6577126774 /home/fresh10i/BackupFixture/try-omarchy-backup-20260928-002105.360313460.zip
+4980753 25769803776 /home/fresh10i/RestoreFixture/try-omarchy-restored-20260927-231115.805138446/vm/disk.raw
+1123315 25769803776 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw
+1379442b7e3e8257a5ca7310ff5c707a6d8aeb94dbd547a51c8f10951637991f  /home/fresh10i/BackupFixture/try-omarchy-backup-20260928-002105.360313460.zip
+entries 8
+disk_sha256 04c6b1911fd9551dfbc04324cd616f9624c7877c15684d380e1f82d0c2e412ac
+shared_folder_entries []
+boot_files [('guest/initramfs-linux.img', '3247b8993430da428b2d0a219bea2786ebff461cfb83255680c654095f37766a'), ('guest/vmlinuz-linux', '8ebc2c71271e000540f0a7545afd8e73504fcb724671f3d38c720b241842b901')]

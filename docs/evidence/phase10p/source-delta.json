@@ -1,0 +1,13 @@
+{
+  "build_source": "/home/bts/.cache/try-omarchy-phase10p-source",
+  "changed_or_added": {
+    "linux-ui/main.go": "1677874ee8987af181d066ceba2fbc5cbf0153806d90448384af1c0a40d83c44"
+  },
+  "current_files": 746,
+  "parent_bundle_sha256": "c4505f4f1dd86fb24aaada01588044c4ba8fcf0696dabc0051cb664fa82b4589",
+  "parent_files": 746,
+  "parent_source": "/home/bts/.cache/try-omarchy-phase10o-source",
+  "parent_source_delta_sha256": "52d16800388eb3d0d4bfe71bab4fe17653d8521c0946c8c2307b5487510a4665",
+  "removed": [],
+  "starting_head": "e9d8ecd9d9d6576402becb8fa97c16e46edd89ae"
+}

@@ -1,0 +1,9 @@
+2026-09-27T20:57:48+00:00 linux-desktop-matrix systemd[1108]: Started phase10i-release.service - /usr/bin/python3 -m http.server 18090 --bind 127.0.0.1 --directory /mnt/artifacts.
+2026-09-27T20:57:56+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 20:57:56] "GET /SHA256SUMS HTTP/1.1" 200 -
+2026-09-27T20:57:56+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 20:57:56] "HEAD /rootfs.ext4.zst HTTP/1.1" 200 -
+2026-09-27T21:01:10+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 21:01:10] "GET /SHA256SUMS HTTP/1.1" 200 -
+2026-09-27T21:01:10+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 21:01:10] "GET /guest-manifest.json HTTP/1.1" 200 -
+2026-09-27T21:01:10+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 21:01:10] "GET /build-spec.json HTTP/1.1" 200 -
+2026-09-27T21:01:10+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 21:01:10] "GET /vmlinuz-linux HTTP/1.1" 200 -
+2026-09-27T21:01:10+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 21:01:10] "GET /initramfs-linux.img HTTP/1.1" 200 -
+2026-09-27T21:01:16+00:00 linux-desktop-matrix python3[2729]: 127.0.0.1 - - [27/Sep/2026 21:01:16] "GET /rootfs.ext4.zst HTTP/1.1" 200 -

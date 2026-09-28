@@ -1,0 +1,7 @@
+cf8266a2f1a8e3571750067885588f2177888d6d13fb14c3173f681d6fa7367d
+{
+  "version": 1,
+  "path": "/run/user/1000/doc/92d05703/data"
+}
+64769:1121432:25769803776:1790533010
+3244 bash -c flatpak info --user --show-commit com.tryomarchy.TryOmarchy; cat /home/tester/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/data-location.json; stat -c %d:%i:%s:%Y /home/tester/matrix/data/vm/disk.raw; pgrep -af qemu-system || true

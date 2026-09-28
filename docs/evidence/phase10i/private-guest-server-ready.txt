@@ -1,0 +1,20 @@
+● phase10i-release.service - /usr/bin/python3 -m http.server 18090 --bind 127.0.0.1 --directory /mnt/artifacts
+     Loaded: loaded (/run/user/1001/systemd/transient/phase10i-release.service; transient)
+  Transient: yes
+     Active: active (running) since Sun 2026-09-27 20:57:48 UTC; 8s ago
+   Main PID: 2729 (python3)
+      Tasks: 1 (limit: 9475)
+     Memory: 9.4M (peak: 9.7M)
+        CPU: 40ms
+     CGroup: /user.slice/user-1001.slice/user@1001.service/app.slice/phase10i-release.service
+             └─2729 /usr/bin/python3 -m http.server 18090 --bind 127.0.0.1 --directory /mnt/artifacts
+
+Sep 27 20:57:48 linux-desktop-matrix systemd[1108]: Started phase10i-release.service - /usr/bin/python3 -m http.server 18090 --bind 127.0.0.1 --directory /mnt/artifacts.
+bc783fcb5b83359e6cde52f7e5bb640bacb3adf747c487bbe9bacfb0c5171826  -
+HTTP/1.0 200 OK
+Server: SimpleHTTP/0.6 Python/3.12.3
+Date: Sun, 27 Sep 2026 20:57:56 GMT
+Content-type: application/zstd
+Content-Length: 1799279350
+Last-Modified: Sun, 27 Sep 2026 03:18:17 GMT
+

@@ -1,0 +1,3 @@
+pointer-removed
+64769:1121432:25769803776:1790533010
+faae744f2682a674610b17146bca11f14a65b21ccf4554c75e690ad3f7bc02cc  /home/tester/matrix/exchange/text

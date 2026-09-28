@@ -1,0 +1,7 @@
+Warning: Permanently added '127.0.0.1' (ED25519) to the list of known hosts.
+Installing app/com.tryomarchy.TryOmarchy/x86_64/master
+b0e15b81343fcdeaf5eaeeeef2777ec65afa27595918705661df9cda038348e6
+1123315 25769803776 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw
+4980753 25769803776 /home/fresh10i/RestoreFixture/try-omarchy-restored-20260927-231115.805138446/vm/disk.raw
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1       154G   62G   93G  41% /

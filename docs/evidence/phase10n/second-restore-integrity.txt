@@ -1,0 +1,15 @@
+Warning: Permanently added '127.0.0.1' (ED25519) to the list of known hosts.
+9699343 25769803776 /home/fresh10i/SecondRestoreFixture/try-omarchy-restored-20260928-003300.203459741/vm/disk.raw
+4980753 25769803776 /home/fresh10i/RestoreFixture/try-omarchy-restored-20260927-231115.805138446/vm/disk.raw
+1123315 25769803776 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw
+04c6b1911fd9551dfbc04324cd616f9624c7877c15684d380e1f82d0c2e412ac  /home/fresh10i/SecondRestoreFixture/try-omarchy-restored-20260928-003300.203459741/vm/disk.raw
+8ebc2c71271e000540f0a7545afd8e73504fcb724671f3d38c720b241842b901  /home/fresh10i/SecondRestoreFixture/try-omarchy-restored-20260928-003300.203459741/guest/vmlinuz-linux
+3247b8993430da428b2d0a219bea2786ebff461cfb83255680c654095f37766a  /home/fresh10i/SecondRestoreFixture/try-omarchy-restored-20260928-003300.203459741/guest/initramfs-linux.img
+guest/build-spec.json 7244
+guest/guest-manifest.json 3153
+guest/initramfs-linux.img 359212463
+guest/install-state.json 900
+guest/rootfs.ext4 7516192768
+guest/vmlinuz-linux 17224192
+settings.json 149
+vm/disk.raw 25769803776

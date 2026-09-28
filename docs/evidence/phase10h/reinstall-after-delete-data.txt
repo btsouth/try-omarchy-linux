@@ -1,0 +1,3 @@
+Installing app/com.tryomarchy.TryOmarchy/x86_64/master
+cf8266a2f1a8e3571750067885588f2177888d6d13fb14c3173f681d6fa7367d
+no-saved-pointer

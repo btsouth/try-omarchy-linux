@@ -1,0 +1,3 @@
+2939 bash -c pgrep -af "qemu-system.*disk.raw" || true; stat -c "%i %s %n" ~/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw; sha256sum ~/RetainedFixture/keep.txt
+1123315 25769803776 /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw
+a459262932f5d2f219096371a8bfb63b45cc2a2ebf94b92a92cc840701e805e3  /home/fresh10i/RetainedFixture/keep.txt

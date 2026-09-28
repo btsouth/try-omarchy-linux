@@ -1,0 +1,2 @@
+no-disk-after-cancel
+3107 bash -c test ! -e ~/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw && echo no-disk-after-cancel; find ~/.var/app/com.tryomarchy.TryOmarchy/data -maxdepth 3 -type f 2>/dev/null | head -12; pgrep -af /app/bin/qemu-system-x86_64 || true

@@ -1,0 +1,7 @@
+Installing app/com.tryomarchy.TryOmarchy/x86_64/master
+0332b6a050e9547fe19c6f71b594b86eb455565ae155e1fb22e7237291ba2514
+{
+  "version": 1,
+  "path": "/run/user/1000/doc/92d05703/data"
+}
+64769:1121432:25769803776:1790533010

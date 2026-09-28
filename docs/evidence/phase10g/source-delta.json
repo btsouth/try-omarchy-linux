@@ -1,0 +1,18 @@
+{
+  "build_source": "/home/bts/.cache/try-omarchy-phase10g-source",
+  "changed_or_added": {
+    "app/first_run_linux.go": "a510f963f927fd22873bfaa7b1392499d15599f52b7a93dfce79ac0af7011e0c",
+    "app/first_run_linux_test.go": "71b87efe5574dfaa9b9069870135201d2f9ea19f82f6ea5865fed5eca2f48b4f",
+    "app/recovery_linux.go": "045b9025a041c12eef0b394248dc89d06c2dcf6fb3ec1ec577150277b813c438",
+    "app/settings_linux.go": "cddf98a671e42966e32c5712981e9d47770a8f09602a97035de0bc3a76a9724c",
+    "app/setup_window_linux.go": "a7b27c69413ada4ea49dd2fcc31186410dac88af9566a3ce88783c6d3d7c5cb1",
+    "linux-ui/main.go": "37789cb53303a330873b95d0a08398ffa759232122330a97f66b9c1ab9f24d63"
+  },
+  "current_files": 737,
+  "parent_bundle_sha256": "0c8386ca78a5b1369f9269bc992a5d09c6bda0880c594adaee6fc895d785a05a",
+  "parent_files": 737,
+  "parent_source": "/home/bts/.cache/try-omarchy-phase10e-source",
+  "parent_source_delta_sha256": "d531c8e51e2a621d2f28bceb5c865454c3047e7147145f668cd66c6ff1412d15",
+  "removed": [],
+  "starting_head": "e9d8ecd9d9d6576402becb8fa97c16e46edd89ae"
+}

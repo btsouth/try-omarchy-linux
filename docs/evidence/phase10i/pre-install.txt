@@ -1,0 +1,6 @@
+uid=1001(fresh10i) gid=1001(fresh10i) groups=1001(fresh10i),27(sudo),44(video),992(render),993(kvm)
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        77G   30G   47G  39% /
+no-prior-app-data
+1ebd5fab35c0c8e9901f533062b6856faa0bf00c4b50de82ae2d893126a85649  /mnt/artifacts/try-omarchy.flatpak
+bc783fcb5b83359e6cde52f7e5bb640bacb3adf747c487bbe9bacfb0c5171826  /mnt/artifacts/SHA256SUMS

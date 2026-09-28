@@ -1,0 +1,8 @@
+[Context]
+shared=network;ipc;
+sockets=wayland;pulseaudio;fallback-x11;
+devices=dri;kvm;
+filesystems=xdg-run/pipewire-0;
+
+[Session Bus Policy]
+org.kde.StatusNotifierWatcher=talk

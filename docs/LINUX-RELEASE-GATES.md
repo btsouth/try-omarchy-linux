@@ -244,13 +244,18 @@ disposable GNOME VM. CI passes, including native Windows tests.
 
 Before the first release:
 
-1. Build a guest from the combined series, boot it fresh and as an upgrade of
-   an existing Linux disk, publish it privately as a draft `linux-v` release,
-   and pin its URL and `SHA256SUMS` digest in `app/linux_release_linux.go`.
-2. Add a `releases` entry to the metainfo. The Flathub linter passes the
+1. Publish the built guest as the `linux-v0.1.0` release. The app already pins
+   its URL and `SHA256SUMS` digest; the [v0.1.0 rehearsal](evidence/LINUX-V010-CANDIDATE-2026-09-28.md)
+   passed a fresh install, an upgrade from revision 39, rollback of an
+   unconfirmed update and confirmation of a good one against a local mirror.
+   Then repeat the fresh install against GitHub itself.
+2. Find the cause of the black GPU desktop. It reproduced on every GPU boot of
+   an upgraded personal disk, but not on a fresh trial disk, and Software
+   rendering recovers it. Check it on real GPUs.
+3. Add a `releases` entry to the metainfo. The Flathub linter passes the
    manifest; the metainfo only lacks release information. GNOME Platform 51
    is available and needs its own rebuild and test pass.
-3. Finish the remaining Phase 10B and Phase 11 items above.
+4. Finish the remaining Phase 10B and Phase 11 items above.
 
 ## Next work
 

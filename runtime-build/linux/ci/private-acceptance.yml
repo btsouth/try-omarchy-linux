@@ -1,0 +1,43 @@
+# Template only. Keep outside .github/workflows until publishing is approved.
+# The runner must be disposable, have KVM, Docker, Flatpak and omabox, and have
+# no personal desktop session or user data.
+name: Private Linux acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      guest_release:
+        description: Verified guest artifact base URL
+        required: true
+      guest_sums_sha256:
+        description: Trusted SHA256SUMS digest
+        required: true
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: [self-hosted, linux, x64, try-omarchy-disposable]
+    timeout-minutes: 60
+    env:
+      GUEST_RELEASE: ${{ inputs.guest_release }}
+      GUEST_SUMS: ${{ inputs.guest_sums_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source checks
+        run: scripts/linux/check.sh "$RUNNER_TEMP/evidence"
+      - name: Build offline and install candidate
+        run: |
+          runtime-build/linux/build-flatpak.sh "$RUNNER_TEMP/flatpak"
+          flatpak install --user -y --noninteractive --bundle "$RUNNER_TEMP/flatpak/com.tryomarchy.TryOmarchy.flatpak"
+      - name: Packaged KVM smoke
+        run: scripts/linux/smoke-flatpak.sh "$RUNNER_TEMP/smoke" "$GUEST_RELEASE" "$GUEST_SUMS"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-acceptance
+          path: |
+            ${{ runner.temp }}/evidence/*.log
+            ${{ runner.temp }}/evidence/*.sha256
+            ${{ runner.temp }}/flatpak/bundle.sha256
+            ${{ runner.temp }}/smoke/*.log
+            ${{ runner.temp }}/smoke/*.png
+            ${{ runner.temp }}/smoke/flatpak.txt

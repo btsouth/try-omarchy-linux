@@ -8,8 +8,9 @@
   <launchable type="desktop-id">com.tryomarchy.TryOmarchy.desktop</launchable>
   <url type="homepage">https://tryomarchy.com</url>
   <description>
-    <p>Runs the Omarchy desktop in a virtual machine with GPU acceleration, so
-    you can try it without installing anything to your disk.</p>
+    <p>Runs the Omarchy desktop in a virtual machine with GPU acceleration.
+    Your host operating system stays in place while the virtual machine and
+    its settings are stored on disk.</p>
   </description>
   <requires>
     <control>keyboard</control>

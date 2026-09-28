@@ -1,0 +1,56 @@
+[
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/godbus/dbus/v5/@v/v5.2.2.info",
+    "sha256": "cf1089214706c7c724443cc011ca409692e4bd55ec96d292078c40797f9113a6",
+    "dest": "goproxy/github.com/godbus/dbus/v5/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/godbus/dbus/v5/@v/v5.2.2.mod",
+    "sha256": "d008ac84f404c6fbc7a1f378099dd21794843d10d6cdc129cfc403d39656f5a6",
+    "dest": "goproxy/github.com/godbus/dbus/v5/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/godbus/dbus/v5/@v/v5.2.2.zip",
+    "sha256": "5c6f37c725a481fb0f1e7866ae273429525d8cc6a6cace87da28e53370f5596a",
+    "dest": "goproxy/github.com/godbus/dbus/v5/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.19.2.info",
+    "sha256": "5e3b5cb3043d2d29baa88fc57b9119461897f05805cd72d506e68540d40b50a8",
+    "dest": "goproxy/github.com/klauspost/compress/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.19.2.mod",
+    "sha256": "0d66d6069d9e2fb875c5b464d15b2c80232cfc8991e6f88336ce461ca810e0cf",
+    "dest": "goproxy/github.com/klauspost/compress/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.19.2.zip",
+    "sha256": "3b3a3540125ad9b3ae1ab0f5df06ac32d11b8330c3140f977d213e0f6df482e9",
+    "dest": "goproxy/github.com/klauspost/compress/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/golang.org/x/sys/@v/v0.27.0.info",
+    "sha256": "86322625a8030e554cc0fb4a3f5c6ac033791e10c74ec42d7d63eb79d8de5eeb",
+    "dest": "goproxy/golang.org/x/sys/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/golang.org/x/sys/@v/v0.27.0.mod",
+    "sha256": "d227b325f621f4ebe28d39ba773ea99b870f393b7c09c34592c365b16dd560de",
+    "dest": "goproxy/golang.org/x/sys/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/golang.org/x/sys/@v/v0.27.0.zip",
+    "sha256": "e11dcde2289e0d45eabb06ea59aab05080870bab5753f524ed26df23ec8bddee",
+    "dest": "goproxy/golang.org/x/sys/@v"
+  }
+]

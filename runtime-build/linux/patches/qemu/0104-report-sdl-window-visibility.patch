@@ -1,0 +1,50 @@
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -817,6 +817,26 @@
+         }
+     }
+ 
++    /* Renew even without window events, including after a QMP reconnect.
++     * Occlusion and workspace visibility are not exposed portably by SDL. */
++    if (qemu_console_get_index(scon->dcl.con) == 0) {
++        static uint64_t last_report;
++        static bool last_visible;
++        static bool reported;
++        uint64_t now = SDL_GetTicks64();
++        uint32_t flags = scon->real_window ?
++            SDL_GetWindowFlags(scon->real_window) : 0;
++        bool visible = (flags & SDL_WINDOW_SHOWN) &&
++            !(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED));
++
++        if (!reported || visible != last_visible || now - last_report >= 5000) {
++            qapi_event_send_display_visibility(0, visible);
++            last_report = now;
++            last_visible = visible;
++            reported = true;
++        }
++    }
++
+     if (idle) {
+         if (scon->idle_counter < SDL2_MAX_IDLE_COUNT) {
+             scon->idle_counter++;
+--- a/qapi/ui.json
++++ b/qapi/ui.json
+@@ -1754,3 +1754,18 @@
+ ##
+ { 'event': 'DISPLAY_CLOSE_REQUEST',
+   'data': { 'display': 'int' } }
++
++##
++# @DISPLAY_VISIBILITY:
++#
++# Report whether SDL's primary window is shown and not minimized,
++# on change and every five seconds to maintain a guest idle lease.
++# This does not report occlusion or workspace changes.
++#
++# @console: console index
++# @visible: whether SDL reports the window as shown and not minimized
++#
++# Since: 11.1
++##
++{ 'event': 'DISPLAY_VISIBILITY',
++  'data': { 'console': 'int', 'visible': 'bool' } }

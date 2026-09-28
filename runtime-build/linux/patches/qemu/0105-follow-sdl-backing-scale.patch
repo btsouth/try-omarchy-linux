@@ -1,0 +1,86 @@
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -83,7 +83,7 @@
+ 
+ void sdl2_window_create(struct sdl2_console *scon)
+ {
+-    int flags = 0;
++    int flags = SDL_WINDOW_ALLOW_HIGHDPI;
+ 
+     if (!scon->surface) {
+         return;
+@@ -159,9 +159,21 @@
+         return;
+     }
+ 
+-    SDL_SetWindowSize(scon->real_window,
+-                      surface_width(scon->surface),
+-                      surface_height(scon->surface));
++    int logical_w, logical_h, pixel_w, pixel_h;
++    SDL_GetWindowSize(scon->real_window, &logical_w, &logical_h);
++    SDL_GetWindowSizeInPixels(scon->real_window, &pixel_w, &pixel_h);
++    int width = surface_width(scon->surface) * MAX(logical_w, 1) / MAX(pixel_w, 1);
++    int height = surface_height(scon->surface) * MAX(logical_h, 1) / MAX(pixel_h, 1);
++    SDL_Rect usable;
++    if (SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(scon->real_window),
++                                  &usable) == 0 &&
++        (width >= usable.w || height >= usable.h)) {
++        /* The firmware starts small, then the guest selects its initial mode.
++         * Keep that first resize within small desktop work areas. */
++        SDL_MaximizeWindow(scon->real_window);
++        return;
++    }
++    SDL_SetWindowSize(scon->real_window, width, height);
+ }
+ 
+ static void sdl2_redraw(struct sdl2_console *scon)
+@@ -632,10 +644,27 @@
+ 
+     switch (ev->window.event) {
+     case SDL_WINDOWEVENT_RESIZED:
++    case SDL_WINDOWEVENT_SIZE_CHANGED:
++    case SDL_WINDOWEVENT_DISPLAY_CHANGED:
+         {
++            int logical_w, logical_h, pixel_w, pixel_h;
++            SDL_GetWindowSize(scon->real_window, &logical_w, &logical_h);
++            SDL_GetWindowSizeInPixels(scon->real_window, &pixel_w, &pixel_h);
++            double scale_x = (double)MAX(pixel_w, 1) / MAX(logical_w, 1);
++            double scale_y = (double)MAX(pixel_h, 1) / MAX(logical_h, 1);
++            const char *override = g_getenv("QEMU_SDL_GUEST_SCALE");
++            if (override) {
++                char *end;
++                double scale = g_ascii_strtod(override, &end);
++                if (!*end && scale >= 1.0 && scale <= 4.0) {
++                    scale_x = scale_y = scale;
++                }
++            }
+             QemuUIInfo info = {
+-                .width = ev->window.data1,
+-                .height = ev->window.data2,
++                .width = MAX(pixel_w, 1),
++                .height = MAX(pixel_h, 1),
++                .width_mm = MAX(1, pixel_w * 25.4 / (96.0 * scale_x) + 0.5),
++                .height_mm = MAX(1, pixel_h * 25.4 / (96.0 * scale_y) + 0.5),
+             };
+             qemu_console_set_ui_info(scon->dcl.con, &info, true);
+         }
+--- a/ui/sdl2-gl.c
++++ b/ui/sdl2-gl.c
+@@ -54,7 +54,7 @@
+ 
+     SDL_GL_MakeCurrent(scon->real_window, scon->winctx);
+ 
+-    SDL_GetWindowSize(scon->real_window, &ww, &wh);
++    SDL_GL_GetDrawableSize(scon->real_window, &ww, &wh);
+     surface_gl_setup_viewport(scon->gls, scon->surface, ww, wh);
+ 
+     surface_gl_render_texture(scon->gls, scon->surface);
+@@ -246,7 +246,7 @@
+ 
+     SDL_GL_MakeCurrent(scon->real_window, scon->winctx);
+ 
+-    SDL_GetWindowSize(scon->real_window, &ww, &wh);
++    SDL_GL_GetDrawableSize(scon->real_window, &ww, &wh);
+     egl_fb_setup_default(&scon->win_fb, ww, wh, 0, 0);
+     egl_fb_blit(&scon->win_fb, &scon->guest_fb, !scon->y0_top);
+ 

@@ -1,0 +1,146 @@
+sdl2: release the keyboard with the grab hotkey
+
+With QEMU_SDL_FOCUS_KEYBOARD_GRAB=1 the window holds the keyboard whenever it
+has focus, and an absolute pointer starts a full grab on every motion inside
+it, so Ctrl-Alt-G could not give the desktop its shortcuts back. The hotkey
+now releases the keyboard, and any pointer grab, until the window is clicked,
+the hotkey is pressed again, or focus leaves and returns. The title says how
+to release the keyboard exactly while the window holds it.
+
+diff --git i/ui/sdl2.c w/ui/sdl2.c
+index d30b79c..b87dde3 100644
+--- i/ui/sdl2.c
++++ w/ui/sdl2.c
+@@ -187,6 +187,22 @@ static void sdl2_redraw(struct sdl2_console *scon)
+     }
+ }
+ 
++/*
++ * QEMU_SDL_FOCUS_KEYBOARD_GRAB=1 grabs the keyboard, and nothing else, while
++ * a window has focus, so system shortcuts such as the Super key reach the
++ * guest without a mouse grab.  On Wayland SDL does this with the keyboard
++ * shortcuts inhibitor, which the compositor may ask the user to allow.
++ */
++static bool focus_keyboard_grab;
++
++/*
++ * With a focus keyboard grab the grab hotkey gives the keyboard back to the
++ * desktop, since the keyboard is what keeps its shortcuts away and an
++ * absolute pointer is never trapped.  It stays with the desktop until the
++ * window is clicked, the hotkey is pressed again, or focus leaves and returns.
++ */
++static bool keyboard_released;
++
+ static void sdl_update_caption(struct sdl2_console *scon)
+ {
+     char win_title[1024];
+@@ -195,6 +211,13 @@ static void sdl_update_caption(struct sdl2_console *scon)
+ 
+     if (!runstate_is_running()) {
+         status = " [Stopped]";
++    } else if (focus_keyboard_grab) {
++        if (!keyboard_released && scon->real_window &&
++            (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS)) {
++            status = alt_grab ? " - Press Ctrl+Alt+Shift+G to release the keyboard" :
++                     ctrl_grab ? " - Press Right-Ctrl+G to release the keyboard" :
++                     " - Press Ctrl+Alt+G to release the keyboard";
++        }
+     } else if (gui_grab) {
+         if (alt_grab) {
+ #ifdef CONFIG_DARWIN
+@@ -270,19 +293,12 @@ static void sdl_show_cursor(struct sdl2_console *scon)
+     SDL_ShowCursor(SDL_ENABLE);
+ }
+ 
+-/*
+- * QEMU_SDL_FOCUS_KEYBOARD_GRAB=1 grabs the keyboard, and nothing else, while
+- * a window has focus, so system shortcuts such as the Super key reach the
+- * guest without a mouse grab.  On Wayland SDL does this with the keyboard
+- * shortcuts inhibitor, which the compositor may ask the user to allow.
+- */
+-static bool focus_keyboard_grab;
+-
+ static void sdl_focus_keyboard_grab(struct sdl2_console *scon, bool grab)
+ {
+ #if SDL_VERSION_ATLEAST(2, 0, 16)
+     if (focus_keyboard_grab && scon->real_window) {
+-        SDL_SetWindowKeyboardGrab(scon->real_window, grab ? SDL_TRUE : SDL_FALSE);
++        SDL_SetWindowKeyboardGrab(scon->real_window,
++                                  grab && !keyboard_released ? SDL_TRUE : SDL_FALSE);
+     }
+ #endif
+ }
+@@ -302,6 +318,9 @@ static void sdl_grab_start(struct sdl2_console *scon)
+     if (!(SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS)) {
+         return;
+     }
++    if (focus_keyboard_grab && keyboard_released) {
++        return;
++    }
+     if (guest_cursor) {
+         SDL_SetCursor(guest_sprite);
+         if (!qemu_input_is_absolute(scon->dcl.con) && !absolute_enabled) {
+@@ -339,6 +358,25 @@ static void absolute_mouse_grab(struct sdl2_console *scon)
+     }
+ }
+ 
++static void sdl_release_keyboard(struct sdl2_console *scon, bool release)
++{
++    keyboard_released = release;
++    if (release) {
++        if (gui_grab) {
++            SDL_SetWindowGrab(scon->real_window, SDL_FALSE);
++            gui_grab = 0;
++            sdl_show_cursor(scon);
++        }
++        sdl_focus_keyboard_grab(scon, false);
++    } else {
++        sdl_focus_keyboard_grab(scon, true);
++        if (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled) {
++            absolute_mouse_grab(scon);
++        }
++    }
++    sdl_update_caption(scon);
++}
++
+ static void sdl_mouse_mode_change(Notifier *notify, void *data)
+ {
+     if (qemu_input_is_absolute(sdl2_console[0].dcl.con)) {
+@@ -469,7 +507,9 @@ static void handle_keydown(SDL_Event *ev)
+             break;
+         case SDL_SCANCODE_G:
+             scon->gui_keysym = true;
+-            if (!gui_grab) {
++            if (focus_keyboard_grab) {
++                sdl_release_keyboard(scon, !keyboard_released);
++            } else if (!gui_grab) {
+                 sdl_grab_start(scon);
+             } else if (!gui_fullscreen) {
+                 sdl_grab_end(scon);
+@@ -586,6 +626,9 @@ static void handle_mousebutton(SDL_Event *ev)
+     }
+ 
+     bev = &ev->button;
++    if (keyboard_released && ev->type == SDL_MOUSEBUTTONDOWN) {
++        sdl_release_keyboard(scon, false);
++    }
+     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
+     x = (int64_t)bev->x * surface_width(scon->surface) / scr_w;
+     y = (int64_t)bev->y * surface_height(scon->surface) / scr_h;
+@@ -675,6 +718,7 @@ static void handle_windowevent(SDL_Event *ev)
+         break;
+     case SDL_WINDOWEVENT_FOCUS_GAINED:
+         sdl_focus_keyboard_grab(scon, true);
++        sdl_update_caption(scon);
+         /* fall through */
+     case SDL_WINDOWEVENT_ENTER:
+         if (!gui_grab && (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled)) {
+@@ -694,6 +738,8 @@ static void handle_windowevent(SDL_Event *ev)
+             sdl_grab_end(scon);
+         }
+         sdl_focus_keyboard_grab(scon, false);
++        keyboard_released = false;
++        sdl_update_caption(scon);
+         break;
+     case SDL_WINDOWEVENT_RESTORED:
+         qemu_console_listener_set_refresh(&scon->dcl, GUI_REFRESH_INTERVAL_DEFAULT);

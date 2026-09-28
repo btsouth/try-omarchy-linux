@@ -36,14 +36,15 @@ type state struct {
 	CanDelete      bool          `json:"canDelete"`
 	Settings       *settingsForm `json:"settings"`
 	// A "choice" prompt names its own title and two actions.
-	Title         string `json:"title"`
-	Primary       string `json:"primary"`
-	Secondary     string `json:"secondary"`
-	Destructive   bool   `json:"destructive"`
-	CanMove       bool   `json:"canMove"`
-	CanReset      bool   `json:"canReset"`
-	CanCleanMove  bool   `json:"canCleanMove"`
-	CanCleanReset bool   `json:"canCleanReset"`
+	Title             string `json:"title"`
+	Primary           string `json:"primary"`
+	Secondary         string `json:"secondary"`
+	Destructive       bool   `json:"destructive"`
+	CanMove           bool   `json:"canMove"`
+	CanReset          bool   `json:"canReset"`
+	CanCleanMove      bool   `json:"canCleanMove"`
+	CanCleanReset     bool   `json:"canCleanReset"`
+	CanCleanLeftovers bool   `json:"canCleanLeftovers"`
 	// Plain-language content the launcher composes and this window only lays out.
 	Headline   string    `json:"headline"`
 	Notice     string    `json:"notice"`
@@ -462,6 +463,7 @@ func main() {
 		resetButton := gtk.NewButtonWithLabel("Reset this VM...")
 		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
 		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
+		cleanLeftoversButton := gtk.NewButtonWithLabel("Remove unfinished files...")
 		choices.Append(primary)
 		choices.Append(secondary)
 		choices.Append(tertiary)
@@ -469,6 +471,7 @@ func main() {
 		choices.Append(resetButton)
 		choices.Append(cleanMoveButton)
 		choices.Append(cleanResetButton)
+		choices.Append(cleanLeftoversButton)
 		choices.SetVisible(false)
 		// The home and error pages get exactly the buttons the launcher asked for.
 		dynamicActions := gtk.NewBox(gtk.OrientationVertical, 8)
@@ -496,6 +499,23 @@ func main() {
 		actionClamp.SetChild(actions)
 		layout.Append(actionClamp)
 		window.SetContent(layout)
+		// Recovery has more actions than fit under its storage summary in a
+		// small window, so there they scroll with the page instead of staying
+		// pinned above Back.
+		choicesInPage := false
+		placeChoices := func(inPage bool) {
+			if inPage == choicesInPage {
+				return
+			}
+			if inPage {
+				actions.Remove(choices)
+				content.Append(choices)
+			} else {
+				content.Remove(choices)
+				actions.InsertChildAfter(choices, dynamicActions)
+			}
+			choicesInPage = inPage
+		}
 		failed, cancelling, determinate := false, false, false
 		var current state
 		answered := false
@@ -737,6 +757,11 @@ func main() {
 				reply("clean-reset")
 			}
 		})
+		cleanLeftoversButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanCleanLeftovers {
+				reply("clean-leftovers")
+			}
+		})
 		button.ConnectClicked(close)
 		window.ConnectCloseRequest(func() bool { close(); return true })
 		glib.TimeoutAdd(100, func() bool {
@@ -778,6 +803,7 @@ func main() {
 					// The home and error pages get the buttons the launcher chose.
 					dynamic := next.Prompt == "home" || next.Prompt == "error"
 					choices.SetVisible(next.Prompt != "" && !dynamic)
+					placeChoices(next.Prompt == "recovery")
 					dynamicActions.SetVisible(dynamic)
 					button.SetVisible(!dynamic && !next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
 					tertiary.SetVisible(next.Prompt == "recovery")
@@ -785,6 +811,7 @@ func main() {
 					resetButton.SetVisible(next.Prompt == "recovery" && next.CanReset)
 					cleanMoveButton.SetVisible(next.Prompt == "recovery" && next.CanCleanMove)
 					cleanResetButton.SetVisible(next.Prompt == "recovery" && next.CanCleanReset)
+					cleanLeftoversButton.SetVisible(next.Prompt == "recovery" && next.CanCleanLeftovers)
 					tertiary.SetLabel("Create diagnostics")
 					button.SetLabel("Cancel")
 					if next.Booting && next.Prompt == "" {

@@ -291,6 +291,11 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 		state.Status = "Setup needs about " + linuxGB(linuxGuestSpaceBytes) + ". Free some space, or choose another folder."
 		state.Setup = "customize"
 	}
+	if state.Notice == "" && state.Installed {
+		if notice := linuxLeftoverNotice(defaultDir); notice != "" {
+			state.Notice = notice
+		}
+	}
 	return state, dir
 }
 

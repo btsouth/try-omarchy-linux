@@ -62,6 +62,8 @@ type linuxSetupState struct {
 	CanReset      bool `json:"canReset,omitempty"`
 	CanCleanMove  bool `json:"canCleanMove,omitempty"`
 	CanCleanReset bool `json:"canCleanReset,omitempty"`
+	// Unfinished backup or restore files an interrupted run left behind.
+	CanCleanLeftovers bool `json:"canCleanLeftovers,omitempty"`
 }
 
 type linuxAction struct {

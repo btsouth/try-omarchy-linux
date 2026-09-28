@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -31,10 +32,21 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 	if dir == "" {
 		return "Reconnect the saved data location before using recovery."
 	}
+	// Backups and restores stage files in folders the person picked. Record
+	// each before it exists, so an interrupted run can be cleaned up later.
+	stopJournal := journalLinuxStaging(defaultDir)
+	defer stopJournal()
 	complete := completeInstallExists(dir, "disk.raw")
 	retained, booted := linuxRetainedMove(defaultDir, dir)
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups exclude shared folders. Restoring keeps your current VM and creates a separate copy.",
-		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0})
+	found := linuxFindLeftovers(defaultDir)
+	sections := []linuxSection{{Heading: "Storage", Rows: linuxStorageRows(dir, defaultDir, true)}}
+	if rows := linuxLeftoverRows(found); len(rows) > 0 {
+		sections = append(sections, linuxSection{Heading: "Left behind by an interrupted backup or restore", Rows: rows})
+	}
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Sections: sections,
+		Status:  "Backups are .zip files saved in a folder you choose, and Try Omarchy never deletes them. Restoring makes a separate copy and keeps your current VM.",
+		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0,
+		CanCleanLeftovers: len(linuxRemovableLeftovers(found)) > 0})
 	if err != nil || answer == "back" || answer == "cancel" {
 		return ""
 	}
@@ -59,6 +71,8 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 		return cleanupLinuxMove(w, defaultDir, dir)
 	case "clean-reset":
 		return cleanupLinuxResetDisks(w, dir)
+	case "clean-leftovers":
+		return cleanupLinuxLeftovers(w, defaultDir)
 	case "restore":
 		archive, err := w.ask(context.Background(), linuxSetupState{Prompt: "restore-archive", Status: "Choose a Try Omarchy backup. Restoring will make a new copy and leave the current VM in place."})
 		if err != nil || archive == "cancel" {
@@ -111,4 +125,34 @@ func backupLinuxVM(w *linuxSetupWindow, dir string) (string, bool) {
 	linuxRecoveryActive.Store(false)
 	configureSetupCancellation(false)
 	return linuxRecoveryResult(err, "Backup saved in the selected folder as "+filepath.Base(destination)+". It contains guest files and settings; keep it private."), err == nil
+}
+
+// cleanupLinuxLeftovers removes what an interrupted backup or restore left in
+// folders the person chose, after showing exactly which files those are.
+func cleanupLinuxLeftovers(w *linuxSetupWindow, defaultDir string) string {
+	items := linuxRemovableLeftovers(linuxFindLeftovers(defaultDir))
+	if len(items) == 0 {
+		return "There is nothing left to remove."
+	}
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Remove unfinished files?", Primary: "Keep them", Secondary: "Remove", Destructive: true,
+		Status: linuxLeftoverPrompt(items)})
+	if err != nil || answer != "secondary" {
+		return "The unfinished files were kept."
+	}
+	var freed int64
+	var failures []string
+	removed := 0
+	for _, item := range items {
+		if err := removeLinuxLeftover(defaultDir, item.linuxLeftover); err != nil {
+			failures = append(failures, err.Error())
+			continue
+		}
+		removed++
+		freed += item.Bytes
+	}
+	result := fmt.Sprintf("Removed %d unfinished item(s), freeing about %s.", removed, linuxGB(freed))
+	if len(failures) > 0 {
+		result += " Could not remove everything: " + strings.Join(failures, " ")
+	}
+	return result
 }

@@ -6,7 +6,7 @@
 
 <p align="center">The full Omarchy desktop, running in a window on your Linux PC.</p>
 
-<p align="center">Preview available · Hardware testing in progress · Flathub listing planned</p>
+<p align="center">Preview 2 · Hardware testing in progress · Flathub listing planned</p>
 
 <p align="center">x86_64 · KVM required · Flatpak · Wayland or X11</p>
 
@@ -16,25 +16,27 @@ Try Omarchy runs [Omarchy](https://omarchy.org) in a virtual machine. You can ex
 
 This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom/try-omarchy-windows) and [Try Omarchy for macOS](https://github.com/omacom/try-omarchy). It shares the Windows launcher's code and adds a Linux front end, a Flatpak package, and Linux guest integration.
 
-## Status
+## Install
 
-The [first Linux app preview](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.1) is available for outside testing. It includes the tested GNOME 51 Flatpak and checksums. The guest image downloads automatically on first setup.
-
-Download `com.tryomarchy.TryOmarchy.flatpak` and `SHA256SUMS` from the release, then run:
+Open **[btsouth.github.io/try-omarchy-linux](https://btsouth.github.io/try-omarchy-linux/)** and choose **Install with Software**, or run:
 
 ```sh
-sha256sum -c SHA256SUMS
-flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./com.tryomarchy.TryOmarchy.flatpak
-flatpak run com.tryomarchy.TryOmarchy
+flatpak install --user https://btsouth.github.io/try-omarchy-linux/com.tryomarchy.TryOmarchy.flatpakref
 ```
 
-This is a GitHub prerelease. Flathub delivery, physical hardware acceptance and extended everyday testing remain open in the [release gates](docs/LINUX-RELEASE-GATES.md). Testers can use the [hardware checklist](docs/LINUX-HARDWARE-TESTING.md).
+Then open **Try Omarchy** from your app launcher and choose **Try it now**. It downloads Omarchy (about 2 GB), sets it up and opens the desktop, signed in as `omarchy` with password `omarchy`. **Customize** picks another folder or your own account first.
+
+Updates arrive through Software or `flatpak update` from the app's own signed Flatpak repository. Removing the app keeps your VM unless you also delete its data. The [help page](docs/LINUX-HELP.md) covers KVM problems, storage, updates, uninstalling and recovery.
+
+Installed preview 1 from a downloaded file? Uninstall it, choose **Keep** for its data, and install from the link above. Your VM opens as before.
+
+This is a preview. Flathub delivery, physical hardware acceptance and extended everyday testing remain open in the [release gates](docs/LINUX-RELEASE-GATES.md). Testers can use the [hardware checklist](docs/LINUX-HARDWARE-TESTING.md).
 
 ## What you can do
 
 - **Use the whole desktop.** Hyprland, Omarchy's apps, themes, menus, and notifications run inside the window, with GPU acceleration through VirGL. Software rendering is available when the GPU path is not.
-- **Move between your desktop and Omarchy.** Share text, images, and files through the clipboard, drop files into Omarchy, and pick a shared folder. On GNOME, clipboard sync asks for permission once through the desktop's portal.
+- **Move between your desktop and Omarchy.** Share text, images, and files through the clipboard, drop files into Omarchy, and pick a shared folder. On GNOME, Try Omarchy explains the clipboard permission before GNOME asks, and Settings can turn sharing on or off later.
+- **Keep your shortcuts straight.** While the Omarchy window is focused, Super and the rest of your keyboard go to Omarchy. Ctrl+Alt+G gives the keyboard back to your desktop until you click the window again.
 - **Keep your work.** The guest disk persists. Back it up, restore a backup as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app.
 - **Make it yours.** Choose memory, processors, rendering, fullscreen launch, and microphone access in Settings.
 
@@ -54,9 +56,9 @@ hardware support. See the [acceptance checklist](docs/LINUX-ACCEPTANCE.md).
 ## Before you start
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
-- The app is a **Flatpak** built on the GNOME runtime. Most distros include Flatpak. On Ubuntu, install it first with `sudo apt install flatpak`.
+- The app is a **Flatpak** built on the GNOME runtime. Most distros include Flatpak. On Ubuntu, install it first with `sudo apt install flatpak gnome-software-plugin-flatpak`, then log out and back in.
 - Isolated tests cover **GNOME Wayland, KDE Wayland and Xfce X11**. Physical hardware and final-candidate Omarchy/Hyprland coverage remain open; see the [test report](docs/evidence/LINUX-RELEASE-CLOSURE-2026-09-28.md) for the exact scope.
-- First setup downloads a guest image of about 2 GB and creates a 24 GB disk in the folder you choose.
+- First setup downloads a guest image of about 2 GB and needs about 13 GB of free space. Omarchy sees a 24 GB disk, but only what it uses takes space.
 
 ## Build from source
 
@@ -68,6 +70,8 @@ cd try-omarchy-linux
 runtime-build/linux/build-flatpak.sh /tmp/try-omarchy-flatpak
 flatpak install --user --bundle /tmp/try-omarchy-flatpak/com.tryomarchy.TryOmarchy.flatpak
 ```
+
+A local build installs without an update source. [Releasing the Linux app](docs/LINUX-RELEASING.md) describes how signed releases reach the repository.
 
 To run the launcher tests and checks:
 

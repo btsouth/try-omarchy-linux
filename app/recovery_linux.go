@@ -38,7 +38,7 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, dir string) string {
 	switch answer {
 	case "diagnostics":
 		facts := hostFacts()
-		facts["launcher.version"] = currentVersion
+		facts["launcher.version"] = linuxAppVersion
 		facts["time"] = time.Now().Format(time.RFC3339)
 		path, err := writeDiagnostics(dir, facts)
 		if err != nil {

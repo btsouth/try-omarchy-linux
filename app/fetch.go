@@ -179,7 +179,8 @@ func releaseVersion(release string) string {
 	if len(parts) == 0 {
 		return currentVersion
 	}
-	version := parts[len(parts)-1]
+	// Linux releases share this repository layout under linux-vX.Y.Z tags.
+	version := strings.TrimPrefix(parts[len(parts)-1], "linux-")
 	if _, ok := parseReleaseVersion(version); ok {
 		return version
 	}

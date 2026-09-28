@@ -39,3 +39,12 @@ func TestLinuxReleaseOverrideRequiresAnAuthenticatedPair(t *testing.T) {
 		t.Fatalf("authenticated override: %s %s %v", gotURL, gotPin, err)
 	}
 }
+
+func TestLinuxReleaseTagsNameTheirVersion(t *testing.T) {
+	if got := releaseVersion("https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.0"); got != "v0.1.0" {
+		t.Fatalf("linux release version: %s", got)
+	}
+	if got := releaseVersion("http://127.0.0.1:18090"); got != currentVersion {
+		t.Fatalf("untagged release version: %s", got)
+	}
+}

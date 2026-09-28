@@ -233,11 +233,11 @@ func linuxDirectStart(flags map[string]bool) bool {
 func linuxHomeState(defaultDir string) (linuxSetupState, string) {
 	dir := defaultDir
 	if saved, found, err := loadDataLocationPointer(defaultDir); err != nil {
-		return linuxSetupState{Prompt: "home", Status: "Saved storage choice could not be read. Choose an existing data folder, or forget this choice to start fresh: " + err.Error(), Path: defaultDir, Version: currentVersion, CanForget: true}, ""
+		return linuxSetupState{Prompt: "home", Status: "Saved storage choice could not be read. Choose an existing data folder, or forget this choice to start fresh: " + err.Error(), Path: defaultDir, Version: linuxAppVersion, CanForget: true}, ""
 	} else if found {
 		dir = saved
 		if _, err := os.Stat(dir); err != nil {
-			return linuxSetupState{Prompt: "home", Status: "Saved storage is unavailable. Reconnect its drive, choose an existing data folder, or forget this choice to start fresh: " + err.Error(), Path: dir, Version: currentVersion, CanForget: true}, ""
+			return linuxSetupState{Prompt: "home", Status: "Saved storage is unavailable. Reconnect its drive, choose an existing data folder, or forget this choice to start fresh: " + err.Error(), Path: dir, Version: linuxAppVersion, CanForget: true}, ""
 		}
 	}
 	return linuxHomeStateForDir(dir)
@@ -250,7 +250,7 @@ func linuxHomeStateForDir(dir string) (linuxSetupState, string) {
 	} else if !os.IsNotExist(err) {
 		status = "Cannot read virtual machine storage: " + err.Error()
 	}
-	return linuxSetupState{Prompt: "home", Status: status, Path: dir, Version: currentVersion}, dir
+	return linuxSetupState{Prompt: "home", Status: status, Path: dir, Version: linuxAppVersion}, dir
 }
 
 func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
@@ -344,7 +344,7 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 				status = "The VM and downloaded guest files were deleted from " + defaultDir + ". Shared host folders and backups were kept."
 			}
 		case "about":
-			_, err := w.ask(context.Background(), linuxSetupState{Prompt: "about", Version: currentVersion})
+			_, err := w.ask(context.Background(), linuxSetupState{Prompt: "about", Version: linuxAppVersion})
 			if err != nil {
 				return false
 			}

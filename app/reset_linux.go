@@ -80,15 +80,26 @@ func linuxRetainedResetDisks(dir string) []string {
 // Only a regular disk.raw inside a before-reset-* folder is removed, together
 // with that folder once it is empty. Anything unexpected stops the removal.
 func removeLinuxRetainedResetDisks(dir string) error {
+	if err := validateMovePath(filepath.Join(dir, "vm")); err != nil {
+		return err
+	}
 	for _, disk := range linuxRetainedResetDisks(dir) {
+		entries, err := os.ReadDir(filepath.Dir(disk))
+		if err != nil {
+			return err
+		}
+		if len(entries) != 1 || entries[0].Name() != "disk.raw" {
+			return fmt.Errorf("the kept disk folder contains unexpected files; nothing in that folder was removed: %s", filepath.Dir(disk))
+		}
 		held, err := openBackupDisk(disk)
 		if err != nil {
 			return fmt.Errorf("the kept disk is in use: %w", err)
 		}
-		held.Close()
 		if err := os.Remove(disk); err != nil {
+			held.Close()
 			return err
 		}
+		held.Close()
 		if err := os.Remove(filepath.Dir(disk)); err != nil {
 			return fmt.Errorf("removed the kept disk but not its folder: %w", err)
 		}
@@ -102,7 +113,7 @@ func cleanupLinuxResetDisks(w *linuxSetupWindow, dir string) string {
 		return "There is no disk kept from a reset."
 	}
 	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Remove the disk kept from reset?", Primary: "Keep it", Secondary: "Remove kept disk", Destructive: true,
-		Status: "Permanently remove the Omarchy disk kept from the last reset? Files inside it will be lost. The current VM is not affected.\n\n" + strings.Join(disks, "\n")})
+		Status: "Permanently remove all disks kept from previous resets? Files inside them will be lost. The current VM is not affected.\n\n" + strings.Join(disks, "\n")})
 	if err != nil || answer != "secondary" {
 		return "The kept disk was not removed."
 	}

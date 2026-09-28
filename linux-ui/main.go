@@ -20,20 +20,21 @@ import (
 )
 
 type state struct {
-	Status     string        `json:"status"`
-	Current    int64         `json:"current"`
-	Total      int64         `json:"total"`
-	Error      bool          `json:"error"`
-	ErrorTitle string        `json:"errorTitle"`
-	Booting    bool          `json:"booting"`
-	Prompt     string        `json:"prompt"`
-	Request    uint64        `json:"request"`
-	Path       string        `json:"path"`
-	Version    string        `json:"version"`
-	CanAttach  bool          `json:"canAttach"`
-	CanForget  bool          `json:"canForget"`
-	CanDelete  bool          `json:"canDelete"`
-	Settings   *settingsForm `json:"settings"`
+	Status         string        `json:"status"`
+	Current        int64         `json:"current"`
+	Total          int64         `json:"total"`
+	Error          bool          `json:"error"`
+	ErrorTitle     string        `json:"errorTitle"`
+	Booting        bool          `json:"booting"`
+	NonCancellable bool          `json:"nonCancellable"`
+	Prompt         string        `json:"prompt"`
+	Request        uint64        `json:"request"`
+	Path           string        `json:"path"`
+	Version        string        `json:"version"`
+	CanAttach      bool          `json:"canAttach"`
+	CanForget      bool          `json:"canForget"`
+	CanDelete      bool          `json:"canDelete"`
+	Settings       *settingsForm `json:"settings"`
 	// A "choice" prompt names its own title and two actions.
 	Title         string `json:"title"`
 	Primary       string `json:"primary"`
@@ -48,7 +49,7 @@ type state struct {
 // Recovery keeps this window open after a cancelled copy. Ignore copy progress
 // until the launcher returns to its home prompt, then make the window usable.
 func acceptStateAfterCancel(cancelling bool, next state) bool {
-	return !cancelling || next.Prompt == "home"
+	return !cancelling || next.Prompt == "home" || next.NonCancellable
 }
 
 type settingsForm struct {
@@ -406,6 +407,9 @@ func main() {
 			}
 		}
 		close := func() {
+			if current.NonCancellable {
+				return
+			}
 			if current.Prompt == "home" {
 				reply("close")
 			} else if current.Prompt == "about" || current.Prompt == "settings-saved" {
@@ -678,11 +682,12 @@ func main() {
 					answered = false
 					choices.SetSensitive(true)
 					button.SetSensitive(true)
+					window.SetDeletable(!next.NonCancellable)
 					primary.SetSensitive(next.Prompt != "home" || !next.CanForget)
 					secondary.SetSensitive(next.Prompt != "home" || !next.CanForget)
 					quaternary.SetSensitive(next.Prompt != "home" || !next.CanForget)
 					choices.SetVisible(next.Prompt != "")
-					button.SetVisible(next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
+					button.SetVisible(!next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
 					tertiary.SetVisible(next.Prompt == "home" || next.Prompt == "recovery")
 					quaternary.SetVisible(next.Prompt == "home")
 					quinary.SetVisible(next.Prompt == "home" && next.CanAttach)
@@ -716,6 +721,7 @@ func main() {
 						button.SetLabel("Close")
 					case "recovery":
 						page.SetTitle("Backup and recovery")
+						page.SetIconName("")
 						primary.SetLabel("Create backup")
 						secondary.SetLabel("Restore as a copy")
 						tertiary.SetLabel("Create diagnostics")

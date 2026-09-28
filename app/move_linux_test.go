@@ -92,6 +92,67 @@ func TestLinuxMoveDeclinedLeavesNoTrace(t *testing.T) {
 	}
 }
 
+func TestLinuxLaunchAfterExplicitMoveUsesDestination(t *testing.T) {
+	source, _ := backupFixture(t)
+	defaultDir := filepath.Join(t.TempDir(), "default")
+	parent := t.TempDir()
+	destination := filepath.Join(parent, "try-omarchy")
+	result := showLinuxRecoveryInWindow(linuxScriptedWindow(t, "move", parent, "primary"), defaultDir, source)
+	if !strings.Contains(result, "now lives at "+destination) {
+		t.Fatal(result)
+	}
+	selected, proceed, err := resolveLinuxDataDirectory(defaultDir, source, true, nil)
+	if err != nil || !proceed || !pathsEqual(selected, destination) {
+		t.Fatalf("launch after move selected %q, proceed=%v, error=%v", selected, proceed, err)
+	}
+	if _, found, err := loadDataLocationPointer(defaultDir); err != nil || found {
+		t.Fatalf("explicit move changed the default selection: %v %v", found, err)
+	}
+}
+
+func TestLinuxResetCleanupPreservesUnexpectedContents(t *testing.T) {
+	dir := resetReadyFixture(t)
+	kept := filepath.Join(dir, "vm", "before-reset-fixture")
+	if err := os.Mkdir(kept, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"disk.raw", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(kept, name), []byte("keep"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := removeLinuxRetainedResetDisks(dir); err == nil || !strings.Contains(err.Error(), "unexpected") {
+		t.Fatalf("unexpected contents accepted: %v", err)
+	}
+	for _, name := range []string{"disk.raw", "notes.txt"} {
+		if data, err := os.ReadFile(filepath.Join(kept, name)); err != nil || string(data) != "keep" {
+			t.Fatalf("kept file %s changed: %q %v", name, data, err)
+		}
+	}
+}
+
+func TestLinuxResetCleanupRefusesLinkedVMDirectory(t *testing.T) {
+	dir := t.TempDir()
+	external := t.TempDir()
+	kept := filepath.Join(external, "before-reset-fixture")
+	if err := os.Mkdir(kept, 0700); err != nil {
+		t.Fatal(err)
+	}
+	disk := filepath.Join(kept, "disk.raw")
+	if err := os.WriteFile(disk, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(dir, "vm")); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeLinuxRetainedResetDisks(dir); err == nil {
+		t.Fatal("linked VM directory accepted")
+	}
+	if data, err := os.ReadFile(disk); err != nil || string(data) != "keep" {
+		t.Fatalf("external disk changed: %q %v", data, err)
+	}
+}
+
 func TestLinuxMoveRefusesNonEmptyDestination(t *testing.T) {
 	source, _ := backupFixture(t)
 	parent := t.TempDir()

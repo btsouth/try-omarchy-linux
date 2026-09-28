@@ -19,20 +19,21 @@ import (
 // Keep the protocol here and in linux-ui/main.go small: full snapshots in,
 // ready/cancel/dismissed/reply events out. GTK is a separate executable and module.
 type linuxSetupState struct {
-	Status     string             `json:"status"`
-	Current    int64              `json:"current"`
-	Total      int64              `json:"total"`
-	Error      bool               `json:"error"`
-	ErrorTitle string             `json:"errorTitle,omitempty"`
-	Booting    bool               `json:"booting,omitempty"`
-	Prompt     string             `json:"prompt,omitempty"`
-	Request    uint64             `json:"request,omitempty"`
-	Path       string             `json:"path,omitempty"`
-	Version    string             `json:"version,omitempty"`
-	CanAttach  bool               `json:"canAttach,omitempty"`
-	CanForget  bool               `json:"canForget,omitempty"`
-	CanDelete  bool               `json:"canDelete,omitempty"`
-	Settings   *linuxSettingsForm `json:"settings,omitempty"`
+	Status         string             `json:"status"`
+	Current        int64              `json:"current"`
+	Total          int64              `json:"total"`
+	Error          bool               `json:"error"`
+	ErrorTitle     string             `json:"errorTitle,omitempty"`
+	Booting        bool               `json:"booting,omitempty"`
+	NonCancellable bool               `json:"nonCancellable,omitempty"`
+	Prompt         string             `json:"prompt,omitempty"`
+	Request        uint64             `json:"request,omitempty"`
+	Path           string             `json:"path,omitempty"`
+	Version        string             `json:"version,omitempty"`
+	CanAttach      bool               `json:"canAttach,omitempty"`
+	CanForget      bool               `json:"canForget,omitempty"`
+	CanDelete      bool               `json:"canDelete,omitempty"`
+	Settings       *linuxSettingsForm `json:"settings,omitempty"`
 	// A "choice" prompt: Primary replies "primary", Secondary "secondary".
 	Title       string `json:"title,omitempty"`
 	Primary     string `json:"primary,omitempty"`

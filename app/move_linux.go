@@ -127,7 +127,7 @@ func moveLinuxInstallation(w *linuxSetupWindow, defaultDir, dir string) string {
 		}
 		return linuxRecoveryResult(err, "")
 	}
-	w.update(linuxSetupState{Status: "Switching to the moved VM..."})
+	w.update(linuxSetupState{Status: "Finishing the move. Keep this window open...", NonCancellable: true})
 	if err := s.recover(activateLinuxMove); err != nil {
 		return "The checked copy is safe. Open Try Omarchy again to finish switching locations: " + err.Error()
 	}
@@ -153,7 +153,7 @@ func cleanupLinuxMove(w *linuxSetupWindow, defaultDir, dir string) string {
 		return "Could not remove the previous copy: " + err.Error()
 	}
 	defer lock.Close()
-	w.update(linuxSetupState{Status: "Checking and removing the previous copy..."})
+	w.update(linuxSetupState{Status: "Checking and removing the previous copy. Keep this window open...", NonCancellable: true})
 	if err := s.cleanup(dir); err != nil {
 		return "Could not remove the previous copy: " + err.Error()
 	}

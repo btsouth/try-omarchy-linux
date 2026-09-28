@@ -1,0 +1,9 @@
+--- FAIL: TestLinuxLaunchAfterExplicitMoveUsesDestination (0.13s)
+    move_linux_test.go:106: launch after move selected "/tmp/TestLinuxLaunchAfterExplicitMoveUsesDestination755787299/001/original", proceed=true, error=<nil>
+--- FAIL: TestLinuxResetCleanupPreservesUnexpectedContents (0.00s)
+    move_linux_test.go:125: unexpected contents accepted: removed the kept disk but not its folder: remove /tmp/TestLinuxResetCleanupPreservesUnexpectedContents2856164774/001/original/vm/before-reset-fixture: directory not empty
+--- FAIL: TestLinuxResetCleanupRefusesLinkedVMDirectory (0.00s)
+    move_linux_test.go:149: linked VM directory accepted
+FAIL
+FAIL	github.com/omacom/try-omarchy-windows/app	0.140s
+FAIL

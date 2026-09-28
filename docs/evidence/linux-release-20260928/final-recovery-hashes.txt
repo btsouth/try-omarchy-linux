@@ -1,0 +1,2 @@
+e84b3699adfc3d22bb9501a6387f36ceeb4d6309a50af9d969b47afb44cf7c61  /home/fresh10i/AstraFinalRestore/try-omarchy-restored-20260928-155158.494351757/vm/disk.raw
+e84b3699adfc3d22bb9501a6387f36ceeb4d6309a50af9d969b47afb44cf7c61  /home/fresh10i/MovedVM/try-omarchy/vm/before-reset-287841895/disk.raw

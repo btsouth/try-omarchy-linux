@@ -1,5 +1,14 @@
 # Linux product parity, 2026-09-27
 
+Update, 2026-09-28: the Linux repository and revision-43 guest are public; the
+app remains unreleased. GNOME 51 and GUI reset/move are implemented and under
+acceptance. The owner accepted camera capture, live audio switching, gestures,
+LAN/bridge networking, USB, host-app launching and host authentication as
+first-release limitations. Core VM, files, recovery and desktop support remain
+required. Hardware acceptance needs outside testers. The tables below are the
+dated September 27 inventory; use [release gates](LINUX-RELEASE-GATES.md) for
+current decisions.
+
 Status: private engineering candidate, not ready for publication. Phase 8A
 added the pre-boot home and preference controls. Phase 8B pairs it with a
 private Linux guest and waits for the usable desktop. The Phase 8B correction

@@ -21,3 +21,9 @@ func TestCancelledRecoveryWaitsForHomeBeforeResuming(t *testing.T) {
 		})
 	}
 }
+
+func TestCancellationRacingWithVerifiedMoveShowsFinalization(t *testing.T) {
+	if !acceptStateAfterCancel(true, state{NonCancellable: true}) {
+		t.Fatal("a late cancellation hid the move finalization state")
+	}
+}

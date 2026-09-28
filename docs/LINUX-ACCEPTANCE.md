@@ -1,6 +1,14 @@
-# Private Linux acceptance
+# Linux acceptance
 
-All work remains local. No workflow, branch, bundle, or guest image is published.
+The Linux repository and `linux-v0.1.0` guest are public. The app has not been
+released. Current candidate changes and bundles remain unpublished.
+
+First-release scope, confirmed 2026-09-28: core VM use, files, recovery and
+desktop support. Camera capture, live audio switching, gestures, LAN/bridge,
+USB, host-app launching and host authentication are documented limitations.
+Physical acceptance is pending outside testers; Brandon has no separate Linux
+test machine. The historical checkpoints below describe their own artifacts,
+not the current candidate.
 
 Use [Linux release gates](LINUX-RELEASE-GATES.md) for the complete end-user
 lifecycle checklist and next work, alongside the checks in this document.
@@ -180,3 +188,11 @@ and microphone disable are exposed in Linux Settings. Physical playback remains
 unverified. LAN forwarding, camera capture, packaged battery behavior and the
 remaining Linux recovery lifecycle remain Phase 9 and 10 work. Their physical
 acceptance is separate from isolated functional checks.
+
+## Interrupted restore housekeeping
+
+Cancelling normally removes this operation's staging files. A power loss or
+forced process termination can leave an unpublished `.try-omarchy-restore-*`
+folder in the selected destination. The current VM is retained. Verify that the
+current VM and backup work before removing an identified incomplete staging
+folder; do not remove a completed restored VM or unrelated files.

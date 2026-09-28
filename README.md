@@ -20,16 +20,27 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 
 The Linux app works end to end in testing but has no public release yet. The guest image it downloads on first run is published as the [linux-v0.1.0 pre-release](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-v0.1.0), so a build from this repository completes setup. The app itself will be published on Flathub.
 
-What is left before that release is tracked in the [release gates](docs/LINUX-RELEASE-GATES.md). The main items are guest updates and rollback, reset and move in the app, the public guest download, and testing across more desktops and hardware.
+What is left before that release is tracked in the [release gates](docs/LINUX-RELEASE-GATES.md). The remaining work is recovery and interruption testing, the exact desktop matrix, and outside hardware testing.
 
 ## What you can do
 
 - **Use the whole desktop.** Hyprland, Omarchy's apps, themes, menus, and notifications run inside the window, with GPU acceleration through VirGL. Software rendering is available when the GPU path is not.
 - **Move between your desktop and Omarchy.** Share text, images, and files through the clipboard, drop files into Omarchy, and pick a shared folder. On GNOME, clipboard sync asks for permission once through the desktop's portal.
-- **Keep your work.** The guest disk persists. Back it up, restore a backup as a separate copy, attach an existing VM folder, or delete the app's own VM from the app.
+- **Keep your work.** The guest disk persists. Back it up, restore a backup as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app.
 - **Make it yours.** Choose memory, processors, rendering, fullscreen launch, and microphone access in Settings.
 
 The Flatpak does not get access to your home folder. Folders and files reach the app through the desktop's file chooser and document portal.
+
+## Preview limits
+
+Camera capture, live audio route switching, touchpad gestures, bridged/LAN networking,
+USB passthrough, opening host apps from the guest, and host biometric authentication
+are outside the first Linux release. Audio route changes require stopping and
+starting the VM. Networking uses NAT with local SSH and port forwarding.
+
+Real GPU, audio, microphone, battery, suspend/resume and monitor behavior still
+need reports from hardware testers. Isolated desktop VM tests do not establish
+hardware support. See the [acceptance checklist](docs/LINUX-ACCEPTANCE.md).
 
 ## Before you start
 
@@ -62,7 +73,7 @@ Try Omarchy uses QEMU with KVM, VirGL for OpenGL acceleration, and an x86_64 Arc
 Linux planning and acceptance notes:
 
 - [Plan](docs/LINUX-PLAN.md) and [parity with Windows and Mac](docs/LINUX-PARITY.md)
-- [Release gates](docs/LINUX-RELEASE-GATES.md) and [private acceptance](docs/LINUX-ACCEPTANCE.md)
+- [Release gates](docs/LINUX-RELEASE-GATES.md) and [acceptance](docs/LINUX-ACCEPTANCE.md)
 - [Test evidence](docs/evidence), dated by phase
 
 Shared launcher fixes come from the Windows repository. This repository keeps its history so those changes merge normally.

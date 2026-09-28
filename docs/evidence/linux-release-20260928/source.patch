@@ -1,0 +1,321 @@
+diff --git i/app/first_run_linux.go w/app/first_run_linux.go
+index 6557d1a..094c968 100644
+--- i/app/first_run_linux.go
++++ w/app/first_run_linux.go
+@@ -11,6 +11,14 @@ import (
+ // Explicit flags bypass saved choices. Remembered removable locations must
+ // still exist; never silently create a replacement VM after a drive disappears.
+ func resolveLinuxDataDirectory(defaultDir, requested string, explicit bool, choose dataLocationChooser) (string, bool, error) {
++	if explicit {
++		// Recovery in the idle home may have moved this folder since startup.
++		resolved, err := resolveLinuxMovedDirectory(defaultDir, requested)
++		if err != nil {
++			return "", false, err
++		}
++		requested = resolved
++	}
+ 	if !explicit {
+ 		saved, found, err := loadDataLocationPointer(defaultDir)
+ 		if err != nil {
+diff --git i/app/move_linux.go w/app/move_linux.go
+index 5b49563..e3e3e05 100644
+--- i/app/move_linux.go
++++ w/app/move_linux.go
+@@ -127,7 +127,7 @@ func moveLinuxInstallation(w *linuxSetupWindow, defaultDir, dir string) string {
+ 		}
+ 		return linuxRecoveryResult(err, "")
+ 	}
+-	w.update(linuxSetupState{Status: "Switching to the moved VM..."})
++	w.update(linuxSetupState{Status: "Finishing the move. Keep this window open...", NonCancellable: true})
+ 	if err := s.recover(activateLinuxMove); err != nil {
+ 		return "The checked copy is safe. Open Try Omarchy again to finish switching locations: " + err.Error()
+ 	}
+@@ -153,7 +153,7 @@ func cleanupLinuxMove(w *linuxSetupWindow, defaultDir, dir string) string {
+ 		return "Could not remove the previous copy: " + err.Error()
+ 	}
+ 	defer lock.Close()
+-	w.update(linuxSetupState{Status: "Checking and removing the previous copy..."})
++	w.update(linuxSetupState{Status: "Checking and removing the previous copy. Keep this window open...", NonCancellable: true})
+ 	if err := s.cleanup(dir); err != nil {
+ 		return "Could not remove the previous copy: " + err.Error()
+ 	}
+diff --git i/app/move_linux_test.go w/app/move_linux_test.go
+index aea8a51..7c49dae 100644
+--- i/app/move_linux_test.go
++++ w/app/move_linux_test.go
+@@ -92,6 +92,67 @@ func TestLinuxMoveDeclinedLeavesNoTrace(t *testing.T) {
+ 	}
+ }
+ 
++func TestLinuxLaunchAfterExplicitMoveUsesDestination(t *testing.T) {
++	source, _ := backupFixture(t)
++	defaultDir := filepath.Join(t.TempDir(), "default")
++	parent := t.TempDir()
++	destination := filepath.Join(parent, "try-omarchy")
++	result := showLinuxRecoveryInWindow(linuxScriptedWindow(t, "move", parent, "primary"), defaultDir, source)
++	if !strings.Contains(result, "now lives at "+destination) {
++		t.Fatal(result)
++	}
++	selected, proceed, err := resolveLinuxDataDirectory(defaultDir, source, true, nil)
++	if err != nil || !proceed || !pathsEqual(selected, destination) {
++		t.Fatalf("launch after move selected %q, proceed=%v, error=%v", selected, proceed, err)
++	}
++	if _, found, err := loadDataLocationPointer(defaultDir); err != nil || found {
++		t.Fatalf("explicit move changed the default selection: %v %v", found, err)
++	}
++}
++
++func TestLinuxResetCleanupPreservesUnexpectedContents(t *testing.T) {
++	dir := resetReadyFixture(t)
++	kept := filepath.Join(dir, "vm", "before-reset-fixture")
++	if err := os.Mkdir(kept, 0700); err != nil {
++		t.Fatal(err)
++	}
++	for _, name := range []string{"disk.raw", "notes.txt"} {
++		if err := os.WriteFile(filepath.Join(kept, name), []byte("keep"), 0600); err != nil {
++			t.Fatal(err)
++		}
++	}
++	if err := removeLinuxRetainedResetDisks(dir); err == nil || !strings.Contains(err.Error(), "unexpected") {
++		t.Fatalf("unexpected contents accepted: %v", err)
++	}
++	for _, name := range []string{"disk.raw", "notes.txt"} {
++		if data, err := os.ReadFile(filepath.Join(kept, name)); err != nil || string(data) != "keep" {
++			t.Fatalf("kept file %s changed: %q %v", name, data, err)
++		}
++	}
++}
++
++func TestLinuxResetCleanupRefusesLinkedVMDirectory(t *testing.T) {
++	dir := t.TempDir()
++	external := t.TempDir()
++	kept := filepath.Join(external, "before-reset-fixture")
++	if err := os.Mkdir(kept, 0700); err != nil {
++		t.Fatal(err)
++	}
++	disk := filepath.Join(kept, "disk.raw")
++	if err := os.WriteFile(disk, []byte("keep"), 0600); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Symlink(external, filepath.Join(dir, "vm")); err != nil {
++		t.Fatal(err)
++	}
++	if err := removeLinuxRetainedResetDisks(dir); err == nil {
++		t.Fatal("linked VM directory accepted")
++	}
++	if data, err := os.ReadFile(disk); err != nil || string(data) != "keep" {
++		t.Fatalf("external disk changed: %q %v", data, err)
++	}
++}
++
+ func TestLinuxMoveRefusesNonEmptyDestination(t *testing.T) {
+ 	source, _ := backupFixture(t)
+ 	parent := t.TempDir()
+diff --git i/app/recovery_linux.go w/app/recovery_linux.go
+index 7ea4c69..4c3d06c 100644
+--- i/app/recovery_linux.go
++++ w/app/recovery_linux.go
+@@ -33,7 +33,7 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
+ 	}
+ 	complete := completeInstallExists(dir, "disk.raw")
+ 	retained, booted := linuxRetainedMove(defaultDir, dir)
+-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups include the VM and its settings, but never a shared host folder. Restore creates a separate copy so your current VM stays available.",
++	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups exclude shared folders. Restoring keeps your current VM and creates a separate copy.",
+ 		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0})
+ 	if err != nil || answer == "back" || answer == "cancel" {
+ 		return ""
+diff --git i/app/reset_linux.go w/app/reset_linux.go
+index db8cecc..05bc874 100644
+--- i/app/reset_linux.go
++++ w/app/reset_linux.go
+@@ -80,15 +80,26 @@ func linuxRetainedResetDisks(dir string) []string {
+ // Only a regular disk.raw inside a before-reset-* folder is removed, together
+ // with that folder once it is empty. Anything unexpected stops the removal.
+ func removeLinuxRetainedResetDisks(dir string) error {
++	if err := validateMovePath(filepath.Join(dir, "vm")); err != nil {
++		return err
++	}
+ 	for _, disk := range linuxRetainedResetDisks(dir) {
++		entries, err := os.ReadDir(filepath.Dir(disk))
++		if err != nil {
++			return err
++		}
++		if len(entries) != 1 || entries[0].Name() != "disk.raw" {
++			return fmt.Errorf("the kept disk folder contains unexpected files; nothing in that folder was removed: %s", filepath.Dir(disk))
++		}
+ 		held, err := openBackupDisk(disk)
+ 		if err != nil {
+ 			return fmt.Errorf("the kept disk is in use: %w", err)
+ 		}
+-		held.Close()
+ 		if err := os.Remove(disk); err != nil {
++			held.Close()
+ 			return err
+ 		}
++		held.Close()
+ 		if err := os.Remove(filepath.Dir(disk)); err != nil {
+ 			return fmt.Errorf("removed the kept disk but not its folder: %w", err)
+ 		}
+@@ -102,7 +113,7 @@ func cleanupLinuxResetDisks(w *linuxSetupWindow, dir string) string {
+ 		return "There is no disk kept from a reset."
+ 	}
+ 	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Remove the disk kept from reset?", Primary: "Keep it", Secondary: "Remove kept disk", Destructive: true,
+-		Status: "Permanently remove the Omarchy disk kept from the last reset? Files inside it will be lost. The current VM is not affected.\n\n" + strings.Join(disks, "\n")})
++		Status: "Permanently remove all disks kept from previous resets? Files inside them will be lost. The current VM is not affected.\n\n" + strings.Join(disks, "\n")})
+ 	if err != nil || answer != "secondary" {
+ 		return "The kept disk was not removed."
+ 	}
+diff --git i/app/settings_linux.go w/app/settings_linux.go
+index ff1b099..d15a0e4 100644
+--- i/app/settings_linux.go
++++ w/app/settings_linux.go
+@@ -268,7 +268,13 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
+ 	for {
+ 		state, dir := linuxHomeState(defaultDir)
+ 		if explicitDir {
+-			state, dir = linuxHomeStateForDir(requestedDir)
++			resolved, err := resolveLinuxMovedDirectory(defaultDir, requestedDir)
++			if err != nil {
++				state = linuxSetupState{Prompt: "home", Status: "Cannot read the data folder move record: " + err.Error()}
++				dir = ""
++			} else {
++				state, dir = linuxHomeStateForDir(resolved)
++			}
+ 		}
+ 		state.CanAttach = !explicitDir
+ 		state.CanDelete = !explicitDir && !state.CanForget && dir != "" && pathsEqual(dir, defaultDir) && linuxDefaultVMCanDelete(defaultDir)
+diff --git i/app/setup_window_linux.go w/app/setup_window_linux.go
+index 97a5aba..405cb00 100644
+--- i/app/setup_window_linux.go
++++ w/app/setup_window_linux.go
+@@ -19,20 +19,21 @@ import (
+ // Keep the protocol here and in linux-ui/main.go small: full snapshots in,
+ // ready/cancel/dismissed/reply events out. GTK is a separate executable and module.
+ type linuxSetupState struct {
+-	Status     string             `json:"status"`
+-	Current    int64              `json:"current"`
+-	Total      int64              `json:"total"`
+-	Error      bool               `json:"error"`
+-	ErrorTitle string             `json:"errorTitle,omitempty"`
+-	Booting    bool               `json:"booting,omitempty"`
+-	Prompt     string             `json:"prompt,omitempty"`
+-	Request    uint64             `json:"request,omitempty"`
+-	Path       string             `json:"path,omitempty"`
+-	Version    string             `json:"version,omitempty"`
+-	CanAttach  bool               `json:"canAttach,omitempty"`
+-	CanForget  bool               `json:"canForget,omitempty"`
+-	CanDelete  bool               `json:"canDelete,omitempty"`
+-	Settings   *linuxSettingsForm `json:"settings,omitempty"`
++	Status         string             `json:"status"`
++	Current        int64              `json:"current"`
++	Total          int64              `json:"total"`
++	Error          bool               `json:"error"`
++	ErrorTitle     string             `json:"errorTitle,omitempty"`
++	Booting        bool               `json:"booting,omitempty"`
++	NonCancellable bool               `json:"nonCancellable,omitempty"`
++	Prompt         string             `json:"prompt,omitempty"`
++	Request        uint64             `json:"request,omitempty"`
++	Path           string             `json:"path,omitempty"`
++	Version        string             `json:"version,omitempty"`
++	CanAttach      bool               `json:"canAttach,omitempty"`
++	CanForget      bool               `json:"canForget,omitempty"`
++	CanDelete      bool               `json:"canDelete,omitempty"`
++	Settings       *linuxSettingsForm `json:"settings,omitempty"`
+ 	// A "choice" prompt: Primary replies "primary", Secondary "secondary".
+ 	Title       string `json:"title,omitempty"`
+ 	Primary     string `json:"primary,omitempty"`
+diff --git i/linux-ui/main.go w/linux-ui/main.go
+index 4f9d231..fdfef13 100644
+--- i/linux-ui/main.go
++++ w/linux-ui/main.go
+@@ -20,20 +20,21 @@ import (
+ )
+ 
+ type state struct {
+-	Status     string        `json:"status"`
+-	Current    int64         `json:"current"`
+-	Total      int64         `json:"total"`
+-	Error      bool          `json:"error"`
+-	ErrorTitle string        `json:"errorTitle"`
+-	Booting    bool          `json:"booting"`
+-	Prompt     string        `json:"prompt"`
+-	Request    uint64        `json:"request"`
+-	Path       string        `json:"path"`
+-	Version    string        `json:"version"`
+-	CanAttach  bool          `json:"canAttach"`
+-	CanForget  bool          `json:"canForget"`
+-	CanDelete  bool          `json:"canDelete"`
+-	Settings   *settingsForm `json:"settings"`
++	Status         string        `json:"status"`
++	Current        int64         `json:"current"`
++	Total          int64         `json:"total"`
++	Error          bool          `json:"error"`
++	ErrorTitle     string        `json:"errorTitle"`
++	Booting        bool          `json:"booting"`
++	NonCancellable bool          `json:"nonCancellable"`
++	Prompt         string        `json:"prompt"`
++	Request        uint64        `json:"request"`
++	Path           string        `json:"path"`
++	Version        string        `json:"version"`
++	CanAttach      bool          `json:"canAttach"`
++	CanForget      bool          `json:"canForget"`
++	CanDelete      bool          `json:"canDelete"`
++	Settings       *settingsForm `json:"settings"`
+ 	// A "choice" prompt names its own title and two actions.
+ 	Title         string `json:"title"`
+ 	Primary       string `json:"primary"`
+@@ -48,7 +49,7 @@ type state struct {
+ // Recovery keeps this window open after a cancelled copy. Ignore copy progress
+ // until the launcher returns to its home prompt, then make the window usable.
+ func acceptStateAfterCancel(cancelling bool, next state) bool {
+-	return !cancelling || next.Prompt == "home"
++	return !cancelling || next.Prompt == "home" || next.NonCancellable
+ }
+ 
+ type settingsForm struct {
+@@ -406,6 +407,9 @@ func main() {
+ 			}
+ 		}
+ 		close := func() {
++			if current.NonCancellable {
++				return
++			}
+ 			if current.Prompt == "home" {
+ 				reply("close")
+ 			} else if current.Prompt == "about" || current.Prompt == "settings-saved" {
+@@ -678,11 +682,12 @@ func main() {
+ 					answered = false
+ 					choices.SetSensitive(true)
+ 					button.SetSensitive(true)
++					window.SetDeletable(!next.NonCancellable)
+ 					primary.SetSensitive(next.Prompt != "home" || !next.CanForget)
+ 					secondary.SetSensitive(next.Prompt != "home" || !next.CanForget)
+ 					quaternary.SetSensitive(next.Prompt != "home" || !next.CanForget)
+ 					choices.SetVisible(next.Prompt != "")
+-					button.SetVisible(next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
++					button.SetVisible(!next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
+ 					tertiary.SetVisible(next.Prompt == "home" || next.Prompt == "recovery")
+ 					quaternary.SetVisible(next.Prompt == "home")
+ 					quinary.SetVisible(next.Prompt == "home" && next.CanAttach)
+@@ -716,6 +721,7 @@ func main() {
+ 						button.SetLabel("Close")
+ 					case "recovery":
+ 						page.SetTitle("Backup and recovery")
++						page.SetIconName("")
+ 						primary.SetLabel("Create backup")
+ 						secondary.SetLabel("Restore as a copy")
+ 						tertiary.SetLabel("Create diagnostics")
+diff --git i/linux-ui/main_test.go w/linux-ui/main_test.go
+index cbd998a..77c7113 100644
+--- i/linux-ui/main_test.go
++++ w/linux-ui/main_test.go
+@@ -21,3 +21,9 @@ func TestCancelledRecoveryWaitsForHomeBeforeResuming(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestCancellationRacingWithVerifiedMoveShowsFinalization(t *testing.T) {
++	if !acceptStateAfterCancel(true, state{NonCancellable: true}) {
++		t.Fatal("a late cancellation hid the move finalization state")
++	}
++}

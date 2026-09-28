@@ -1,0 +1,10 @@
+# github.com/diamondburned/gotk4/pkg/glib/v2
+cgo-generated-wrappers:7:13: warning: conflicting types for built-in function ‘free’; expected ‘void(void *)’ [-Wbuiltin-declaration-mismatch]
+cgo-generated-wrappers:1:1: note: ‘free’ is declared in header ‘<stdlib.h>’
+# github.com/diamondburned/gotk4/pkg/gio/v2
+cgo-generated-wrappers:262:13: warning: conflicting types for built-in function ‘free’; expected ‘void(void *)’ [-Wbuiltin-declaration-mismatch]
+cgo-generated-wrappers:1:1: note: ‘free’ is declared in header ‘<stdlib.h>’
+# github.com/diamondburned/gotk4/pkg/gtk/v4
+cgo-generated-wrappers:578:13: warning: conflicting types for built-in function ‘free’; expected ‘void(void *)’ [-Wbuiltin-declaration-mismatch]
+cgo-generated-wrappers:1:1: note: ‘free’ is declared in header ‘<stdlib.h>’
+ok  	github.com/omacom/try-omarchy-windows/linux-ui	0.016s

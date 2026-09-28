@@ -2,6 +2,15 @@
 
 Updated 2026-09-28 after the Linux code moved to its own public repository.
 
+Scope confirmed 2026-09-28: the first Linux release requires core VM use, files,
+recovery and desktop support. Camera capture, live audio switching, gestures,
+LAN/bridge networking, USB, host-app launching and host authentication are
+documented first-release limits, not implementation gates. Brandon only has an
+Omarchy system available; physical acceptance remains for outside testers. Do
+not count nested desktop results as hardware acceptance or request the deferred
+owner hardware pass again. Release and Flathub publication remain separate
+decisions.
+
 Brandon wants a public release only after everyday features, branding, install,
 uninstall, updates and recovery are solid, with near parity to Windows and Mac.
 This document makes that the acceptance target for phases 9 through 11. It does
@@ -11,6 +20,13 @@ The existing [plan](LINUX-PLAN.md), [parity inventory](LINUX-PARITY.md) and
 [acceptance instructions](LINUX-ACCEPTANCE.md) remain applicable. A feature is
 complete when its end-user workflow passes, including failure and restart
 behavior. A backend, CLI flag or screenshot alone does not establish that.
+
+## Current acceptance evidence
+
+The [2026-09-28 continuation report](evidence/LINUX-RELEASE-CLOSURE-2026-09-28.md)
+records the GNOME 51 candidate, review corrections, final automated checks and
+installed desktop results. The phase notes below are historical evidence; their
+open-item lists are not a claim that later fixes are missing.
 
 ## Immediate review closure
 
@@ -214,10 +230,11 @@ run only in the repository's Windows CI job. If shared/Windows code changes,
 record that CI requirement as pending until an authorized CI run covers the
 candidate; local-only work does not authorize a push to obtain it.
 
-Once software gates are green, prepare a short owner-run physical checklist and
-ask Brandon for the late hardware pass. It includes AMD laptop graphics, real
-audio/microphone/camera, battery, suspend/resume, touchpad gestures and real
-monitor/scale changes. Do not run those on his real desktop without permission.
+Physical acceptance is assigned to outside testers, using the
+[hardware checklist](LINUX-HARDWARE-TESTING.md). Real GPU, audio/microphone,
+battery, suspend/resume and monitor changes remain unverified. Camera and
+gestures are accepted first-release limits. Do not ask Brandon to provide
+hardware he does not have or run these checks on his real desktop.
 
 Release requires no known serious defect, reliable core everyday workflows,
 passed lifecycle/branding gates, and Brandon's explicit acceptance of any
@@ -251,9 +268,10 @@ Before the first release:
    wallpaper texture's backing on fragmented guest memory. The Linux QEMU now
    accepts larger backing lists; an affected disk went from 5 of 7 black boots
    to 8 of 8 good ones. Confirm on real GPUs during the hardware pass.
-3. Add a `releases` entry to the metainfo. The Flathub linter passes the
-   manifest; the metainfo only lacks release information. GNOME Platform 51
-   is available and needs its own rebuild and test pass.
+3. Done locally 2026-09-28: metainfo includes release information; GNOME 51
+   builds and passes the full Linux race suite, GTK tests, Windows cross-checks
+   and manifest/AppStream validation. See the continuation report for the
+   exact source and bundle identities.
 4. Finish the remaining Phase 10B and Phase 11 items above.
 
 ## Next work
@@ -263,3 +281,11 @@ exact artifacts, automated checks, observed GUI and guest behavior, and
 untested cases for each batch. Use devbox for heavy work and omabox or the
 disposable desktop VM for GUI checks. Physical testing, releases and the
 Flathub submission need Brandon's approval.
+
+## Preview publication authorization
+
+On 2026-09-28 the owner authorized committing and publishing as appropriate.
+The tested app bundle may be published as a GitHub prerelease for outside
+testing. Use a separate `linux-app-vX.Y.Z-preview.N` tag to distinguish the app
+from the existing guest release. Hardware acceptance and Flathub submission
+remain open; this preview does not mark the stable release gates complete.

@@ -268,7 +268,13 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 	for {
 		state, dir := linuxHomeState(defaultDir)
 		if explicitDir {
-			state, dir = linuxHomeStateForDir(requestedDir)
+			resolved, err := resolveLinuxMovedDirectory(defaultDir, requestedDir)
+			if err != nil {
+				state = linuxSetupState{Prompt: "home", Status: "Cannot read the data folder move record: " + err.Error()}
+				dir = ""
+			} else {
+				state, dir = linuxHomeStateForDir(resolved)
+			}
 		}
 		state.CanAttach = !explicitDir
 		state.CanDelete = !explicitDir && !state.CanForget && dir != "" && pathsEqual(dir, defaultDir) && linuxDefaultVMCanDelete(defaultDir)

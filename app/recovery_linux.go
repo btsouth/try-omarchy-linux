@@ -33,7 +33,7 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 	}
 	complete := completeInstallExists(dir, "disk.raw")
 	retained, booted := linuxRetainedMove(defaultDir, dir)
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups include the VM and its settings, but never a shared host folder. Restore creates a separate copy so your current VM stays available.",
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Status: "Backups exclude shared folders. Restoring keeps your current VM and creates a separate copy.",
 		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0})
 	if err != nil || answer == "back" || answer == "cancel" {
 		return ""

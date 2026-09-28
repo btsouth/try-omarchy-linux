@@ -11,6 +11,14 @@ import (
 // Explicit flags bypass saved choices. Remembered removable locations must
 // still exist; never silently create a replacement VM after a drive disappears.
 func resolveLinuxDataDirectory(defaultDir, requested string, explicit bool, choose dataLocationChooser) (string, bool, error) {
+	if explicit {
+		// Recovery in the idle home may have moved this folder since startup.
+		resolved, err := resolveLinuxMovedDirectory(defaultDir, requested)
+		if err != nil {
+			return "", false, err
+		}
+		requested = resolved
+	}
 	if !explicit {
 		saved, found, err := loadDataLocationPointer(defaultDir)
 		if err != nil {

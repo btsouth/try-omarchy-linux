@@ -90,7 +90,8 @@ func parseMeminfo(r io.Reader) (totalMiB, availableMiB int) {
 
 // hostLocale reports the host's time zone and language for the guest, with
 // the same overrides as Windows: blank follows the host, "keep" leaves the
-// guest alone. The keyboard layout is not read from the host yet.
+// guest alone. Compositors can expose their XKB layout through the standard
+// XKB_DEFAULT_LAYOUT and XKB_DEFAULT_VARIANT environment variables.
 func hostLocale(zoneOverride, keyboardOverride, localeOverride string) (zone, layout, variant, locale string) {
 	switch zoneOverride = strings.TrimSpace(zoneOverride); zoneOverride {
 	case "":
@@ -100,7 +101,9 @@ func hostLocale(zoneOverride, keyboardOverride, localeOverride string) (zone, la
 		zone = zoneOverride
 	}
 	switch keyboardOverride = strings.TrimSpace(keyboardOverride); keyboardOverride {
-	case "", "keep":
+	case "":
+		layout, variant = linuxKeyboardEnvironment(os.Getenv("XKB_DEFAULT_LAYOUT"), os.Getenv("XKB_DEFAULT_VARIANT"))
+	case "keep":
 	default:
 		layout, variant = splitKeyboardSpec(keyboardOverride)
 	}
@@ -191,4 +194,22 @@ func onlyNVIDIARenderNodes(vendors []string) bool {
 		}
 	}
 	return true
+}
+
+// Do not guess a keyboard layout from the language or the system console.
+// Multiple active layouts need an explicit override until a desktop exposes
+// the current group to sandboxed applications.
+func linuxKeyboardEnvironment(layout, variant string) (string, string) {
+	valid := func(s string) bool {
+		for _, c := range s {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+				return false
+			}
+		}
+		return true
+	}
+	if layout == "" || !valid(layout) || !valid(variant) {
+		return "", ""
+	}
+	return layout, variant
 }

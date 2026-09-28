@@ -215,7 +215,7 @@ func (a *guestAgent) sendBattery() bool {
 	}
 	line, err := a.batteryLine()
 	if err != nil {
-		logf("agent: could not read Windows battery: %v", err)
+		logf("agent: could not read host battery: %v", err)
 		return false
 	}
 	return line != "" && a.sendLine(line)

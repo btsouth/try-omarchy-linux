@@ -3,6 +3,9 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +19,16 @@ import (
 func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 	const maxLaunchAttempts = 8
 	for attempt := 1; attempt <= maxLaunchAttempts; attempt++ {
+		if err := checkSetupCancelled(); err != nil {
+			fatal("%v", err)
+		}
+		getUI().setBooting(true)
 		mode := "CPU rendering (llvmpipe)"
 		if cfg.useGpu {
 			mode = "GPU accelerated (virgl + Venus Vulkan)"
+			if !linuxVenusEnabled {
+				mode = "GPU accelerated OpenGL (software Vulkan)"
+			}
 		}
 		getUI().setStatus("Starting Omarchy - %s", mode)
 		logf("booting - %s (attempt %d)", mode, attempt)
@@ -27,7 +37,9 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 			fatal("Cannot prepare private VM controls: %v", err)
 		}
 		cfg.qmpDir = controlDir
-		args := buildQemuArgs(cfg, cmdline)
+		guestReady.Store(false)
+		desktopReady.Store(false)
+		args := linuxQemuArgs(cfg, buildQemuArgs(cfg, cmdline))
 		logf("qemu: %s %s", cfg.qemu, strings.Join(args, " "))
 		proc := exec.Command(cfg.qemu, args...)
 		proc.Env = linuxQemuEnvironment(os.Environ())
@@ -50,7 +62,46 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 
 		qmp, died := connectLinuxQMP(exited)
 		if qmp != nil {
-			watchLinux(qmp, proc, exited, stop)
+			lines := qmp.readLines()
+			visibility := &linuxVisibility{}
+			initialInterrupts := 0
+			desktopTimedOut := false
+			confirmation := newLinuxShutdownConfirmation(confirmLinuxShutdown)
+			defer confirmation.close()
+			if setupCancelled() {
+				requestLinuxShutdown(qmp, proc, &initialInterrupts)
+				getUI().finish()
+			}
+			if linuxGUIEnabled && initialInterrupts == 0 {
+				getUI().setStatus("Booting Omarchy...")
+				result := waitLinuxDesktopReady(setupContext(), exited, stop, lines, visibility,
+					desktopReady.Load, guestReady.Load, linuxDesktopReadyTimeout, 250*time.Millisecond,
+					func(status string) { getUI().setStatus("%s", status) }, confirmation)
+				switch result {
+				case linuxDesktopReady:
+					getUI().finish()
+				case linuxDesktopTimedOut:
+					desktopTimedOut = true
+					getUI().showDesktopTimeout("Omarchy started, but its desktop did not appear within five minutes. Check the VM window and its login screen. You can close this message without stopping the VM; diagnostics are in the data folder.")
+				case linuxDesktopCancelled:
+					confirmation.close()
+					requestLinuxShutdown(qmp, proc, &initialInterrupts)
+					getUI().finish()
+				case linuxDesktopInterrupted:
+					requestLinuxShutdown(qmp, proc, &initialInterrupts)
+					getUI().finish()
+				case linuxDesktopExited:
+					confirmation.close()
+					qmp.close()
+					if stderr != nil {
+						stderr.Close()
+					}
+					fatal("Omarchy stopped before its desktop became ready. Check %s for the VM error and try again.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+				}
+			} else if initialInterrupts == 0 {
+				getUI().finish()
+			}
+			watchLinux(cfg, qmp, proc, exited, stop, lines, visibility, initialInterrupts, confirmation, desktopTimedOut)
 			qmp.close()
 			if stderr != nil {
 				stderr.Close()
@@ -130,15 +181,32 @@ func linuxAudioUnavailable(cfg *config) bool {
 
 // watchLinux follows the guest until QEMU exits. A first interrupt presses
 // the ACPI power button so the guest shuts down cleanly; another one quits.
-func watchLinux(qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan os.Signal) {
+func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan os.Signal,
+	lines <-chan string, visibility *linuxVisibility, interrupts int, confirmation *linuxShutdownConfirmation, desktopTimedOut bool) {
 	logf("supervisor: watching guest lifecycle")
-	getUI().setStatus("Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.")
-	lines := qmp.readLines()
+	if getUI().window == nil && interrupts == 0 {
+		getUI().setStatus("Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.")
+	}
 	reason := ""
-	interrupts := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopTray := startLinuxTray()
+	defer stopTray()
+	leaseTicker := time.NewTicker(5 * time.Second)
+	defer leaseTicker.Stop()
+	shutdownRetry := time.NewTicker(linuxShutdownRetryInterval)
+	defer shutdownRetry.Stop()
+	graphicsWarningShown := false
+	defer func() { visibility.visible = false; sendLinuxVisibility(visibility) }()
 	for {
+		if desktopTimedOut && desktopReady.Load() {
+			logf("guest desktop appeared after startup timeout")
+			getUI().finish()
+			desktopTimedOut = false
+		}
 		select {
 		case <-exited:
+			confirmation.close()
 			if reason == "" {
 				reason = "QEMU exited"
 			}
@@ -150,15 +218,63 @@ func watchLinux(qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan o
 				lines = nil
 				continue
 			}
+			if visibility.receive(line, time.Now()) {
+				sendLinuxVisibility(visibility)
+			}
 			if r := shutdownReason(line); r != "" {
 				reason = r
 			}
 			if closeRequested(line) {
-				logf("window close requested")
-				requestLinuxShutdown(qmp, proc, &interrupts)
+				if interrupts == 0 && confirmation.pending == nil {
+					logf("window close requested")
+					if !linuxGUIEnabled {
+						requestLinuxShutdown(qmp, proc, &interrupts)
+					} else {
+						confirmation.request()
+					}
+				}
 			}
-			if _, _, ok := droppedFilesEvent(line); ok {
-				logf("file drop ignored: dropping files needs the clipboard bridge, which Linux does not have yet")
+			if paths, point, ok := droppedFilesEvent(line); ok {
+				var position []int
+				if point != nil {
+					position = point[:]
+				}
+				go func() {
+					granted, err := linuxGrantDroppedFiles(paths)
+					if errors.Is(err, errSetupCancelled) {
+						logf("file drop: cancelled")
+						return
+					}
+					if err == nil {
+						err = sendDroppedFilesAt(granted, position, [2]int32{})
+					}
+					reportLinuxFileDropError(err)
+				}()
+			}
+		case <-leaseTicker.C:
+			sendLinuxVisibility(visibility)
+			if cfg.useGpu && !graphicsWarningShown && linuxVirglDesktopError(cfg.vmDir) {
+				graphicsWarningShown = true
+				logf("graphics: virgl reported a guest display error; offering software rendering recovery")
+				showLinuxRuntimeError("Graphics error", "The VM reported a graphics error. If Omarchy is black or frozen, save your work if possible, then close its window and confirm shutdown. Open Try Omarchy again, choose Settings, select Software rendering, and launch your saved VM. Your files stay in place.")
+			}
+		case <-shutdownRetry.C:
+			if interrupts == 1 && guestReady.Load() {
+				logf("guest userspace is ready; repeating ACPI shutdown request")
+				if err := qmp.writeLine(`{"execute":"system_powerdown"}`); err != nil {
+					logf("ACPI shutdown retry: %v", err)
+				}
+			}
+		case <-linuxSettingsRequests:
+			go showLinuxSettings(ctx, cfg.dir)
+		case <-linuxShutdownRequests:
+			if interrupts == 0 && confirmation.pending == nil {
+				confirmation.request()
+			}
+		case confirmed := <-confirmation.pending:
+			confirmation.pending = nil
+			if confirmed && interrupts == 0 {
+				requestLinuxShutdown(qmp, proc, &interrupts)
 			}
 		case <-stop:
 			logf("interrupt")
@@ -166,6 +282,8 @@ func watchLinux(qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan o
 		}
 	}
 }
+
+var linuxShutdownRetryInterval = 5 * time.Second
 
 // requestLinuxShutdown presses the ACPI power button so the guest shuts
 // down cleanly; a second request stops QEMU.
@@ -186,7 +304,10 @@ func requestLinuxShutdown(qmp *qmpConn, proc *exec.Cmd, requests *int) {
 // closeRequested matches the runtime's DISPLAY_CLOSE_REQUEST event, sent
 // when the window's close button is used (window-close=off).
 func closeRequested(line string) bool {
-	return strings.Contains(line, `"event"`) && strings.Contains(line, `"DISPLAY_CLOSE_REQUEST"`)
+	var event struct {
+		Event string `json:"event"`
+	}
+	return json.Unmarshal([]byte(line), &event) == nil && event.Event == "DISPLAY_CLOSE_REQUEST"
 }
 
 // linuxQemuEnvironment names QEMU's window after the app, so desktops group
@@ -194,7 +315,20 @@ func closeRequested(line string) bool {
 // behavior: the window title is the app name and the keyboard (the Super key
 // included) goes to the guest while the window has focus.
 func linuxQemuEnvironment(env []string) []string {
+	clean := make([]string, 0, len(env)+8)
+	for _, value := range env {
+		if !strings.HasPrefix(value, "QEMU_SDL_GUEST_SCALE=") {
+			clean = append(clean, value)
+		}
+	}
+	env = clean
+	if linuxGuestScale != "auto" && linuxGuestScale != "keep" && linuxGuestScale != "" {
+		env = append(env, "QEMU_SDL_GUEST_SCALE="+linuxGuestScale)
+	}
 	env = append(env,
+		// The runtime uses SDL2-compat. Its default hides fractional scaling
+		// from older applications; our backing-pixel bridge handles it.
+		"SDL_VIDEO_WAYLAND_SCALE_TO_DISPLAY=0",
 		"SDL_VIDEO_WAYLAND_WMCLASS="+linuxAppID,
 		"SDL_VIDEO_X11_WMCLASS="+linuxAppID,
 		"QEMU_SDL_TITLE_FROM_NAME=1",
@@ -218,3 +352,23 @@ func inFlatpak() bool {
 }
 
 const linuxAppID = "com.tryomarchy.TryOmarchy"
+
+var linuxGUIEnabled bool
+
+func confirmLinuxShutdown(parent context.Context) <-chan bool {
+	result := make(chan bool, 1)
+	go func() {
+		ctx, cancel := context.WithCancel(parent)
+		defer cancel()
+		w := startLinuxWindow(cancel)
+		if w == nil {
+			logf("Could not open shutdown confirmation; Omarchy is still running. Shut down from its own menu or press Ctrl+C in the terminal.")
+			result <- false
+			return
+		}
+		defer w.stop()
+		answer, err := w.ask(ctx, linuxSetupState{Prompt: "close"})
+		result <- err == nil && answer == "shutdown"
+	}()
+	return result
+}

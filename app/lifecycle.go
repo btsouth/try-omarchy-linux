@@ -13,6 +13,7 @@ import (
 var (
 	pendingReboot atomic.Bool
 	guestReady    atomic.Bool
+	desktopReady  atomic.Bool
 )
 
 // runLifecycleListener receives the guest's shutdown intent: the image's
@@ -44,6 +45,9 @@ func runLifecycleListener() {
 				case "ready":
 					logf("guest userspace announced ready")
 					guestReady.Store(true)
+				case "desktop-ready":
+					logf("guest desktop announced ready")
+					desktopReady.Store(true)
 				case "reclaim":
 					c.SetWriteDeadline(time.Now().Add(3 * time.Second))
 					if err := requestReclaimError(); err != nil {

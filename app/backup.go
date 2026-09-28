@@ -234,7 +234,7 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 	}
 	// A hard link publishes without replacing a backup created concurrently.
 	if err = os.Link(f.Name(), destination); err != nil {
-		return fmt.Errorf("publishing backup (use an NTFS or ReFS destination): %w", err)
+		return fmt.Errorf("publishing backup (choose a local folder that supports hard links): %w", err)
 	}
 	return nil
 }

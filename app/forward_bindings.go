@@ -29,7 +29,7 @@ func checkForwardBindings(forwards []portForward) error {
 			socket, err = net.Listen("tcp4", address)
 		}
 		if err != nil {
-			return fmt.Errorf("Windows cannot open %s %s. Close the application using this port, or update the forward in Settings. %w", strings.ToUpper(forward.proto), address, err)
+			return fmt.Errorf("Try Omarchy cannot open %s %s. Close the application using this port, or update the forward in Settings. %w", strings.ToUpper(forward.proto), address, err)
 		}
 		opened = append(opened, socket)
 	}

@@ -44,7 +44,7 @@ func parseForward(value string) (portForward, error) {
 		f.proto = strings.ToLower(parts[0])
 		address, err := netip.ParseAddr(parts[1])
 		if err != nil || !address.Is4() || !(address.IsGlobalUnicast() || address.IsLoopback() || address.IsUnspecified() || address.IsLinkLocalUnicast()) {
-			return f, fmt.Errorf("choose a Windows IPv4 address or 0.0.0.0 for LAN forwarding")
+			return f, fmt.Errorf("choose a host IPv4 address or 0.0.0.0 for LAN forwarding")
 		}
 		f.bind = address.String()
 		parts = parts[2:]
@@ -60,7 +60,7 @@ func parseForward(value string) (portForward, error) {
 	}
 	var err error
 	if f.hostPort, err = parsePort(parts[0]); err != nil {
-		return f, fmt.Errorf("port forward %q: Windows port %v", value, err)
+		return f, fmt.Errorf("port forward %q: host port %v", value, err)
 	}
 	if f.guestPort, err = parsePort(parts[1]); err != nil {
 		return f, fmt.Errorf("port forward %q: Omarchy port %v", value, err)
@@ -99,11 +99,11 @@ func (l *forwardList) Set(value string) error {
 
 func (l *forwardList) add(f portForward) error {
 	if f.proto == "tcp" && f.hostPort >= qmpToolsPort && f.hostPort <= helloBridgePort {
-		return fmt.Errorf("windows TCP port %d is reserved by Try Omarchy; choose a port outside %d-%d", f.hostPort, qmpToolsPort, helloBridgePort)
+		return fmt.Errorf("host TCP port %d is reserved by Try Omarchy; choose a port outside %d-%d", f.hostPort, qmpToolsPort, helloBridgePort)
 	}
 	for _, existing := range *l {
 		if existing.proto == f.proto && existing.hostPort == f.hostPort && (existing.address() == f.address() || existing.address() == "0.0.0.0" || f.address() == "0.0.0.0") {
-			return fmt.Errorf("windows port %d is already forwarded for %s", f.hostPort, f.proto)
+			return fmt.Errorf("host port %d is already forwarded for %s", f.hostPort, f.proto)
 		}
 	}
 	*l = append(*l, f)
@@ -183,7 +183,7 @@ func defaultPublicKey(home string) string {
 func resolveSSHPreset(forwards *forwardList, sshPort int, keyPath, home string, rejectUnusedKey bool) (publicKey string, err error) {
 	if sshPort != 0 {
 		if sshPort < 1 || sshPort > 65535 {
-			return "", fmt.Errorf("-ssh needs a Windows port between 1 and 65535")
+			return "", fmt.Errorf("-ssh needs a host port between 1 and 65535")
 		}
 		if err := forwards.add(portForward{proto: "tcp", hostPort: sshPort, guestPort: 22}); err != nil {
 			return "", err

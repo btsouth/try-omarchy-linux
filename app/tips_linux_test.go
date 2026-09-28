@@ -32,10 +32,13 @@ func TestSessionTipsAppearOnceAndSayWhatOnlyTheHostCanTell(t *testing.T) {
 	if len(*shown) != 1 {
 		t.Fatalf("shown %d times, want once", len(*shown))
 	}
-	for _, want := range []string{"Ctrl+Alt+G", "gives it back to your desktop", "click the window", "Ctrl+Alt+F", "fullscreen", "dropped on the window"} {
+	for _, want := range []string{"Ctrl+Alt+G gives your keyboard back", "clicking the window returns it", "Ctrl+Alt+F", "fullscreen", "dropped on the window"} {
 		if !strings.Contains((*shown)[0], want) {
 			t.Errorf("tip lacks %q: %s", want, (*shown)[0])
 		}
+	}
+	if !strings.HasPrefix((*shown)[0], "Ctrl+Alt+G") {
+		t.Errorf("a collapsed notification shows only its start, which must be the way back: %s", (*shown)[0])
 	}
 	if strings.Contains((*shown)[0], "Super+Space") {
 		t.Errorf("the guest already welcomes a trial account with its menu key, so the host must not repeat it: %s", (*shown)[0])

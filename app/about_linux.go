@@ -20,7 +20,7 @@ func linuxAboutState() linuxSetupState {
 		Sections: []linuxSection{
 			{Heading: "Keyboard, mouse and window", Rows: []linuxRow{
 				{Title: "Get your keyboard back", Detail: "While the Omarchy window is focused it takes your keyboard, including the Super key. Press Ctrl+Alt+G, or click another window, to use your desktop's shortcuts again. Click the Omarchy window to give it the keyboard back."},
-				{Title: "If Super opens your desktop's overview", Detail: "Your desktop asks once whether Try Omarchy may use its shortcuts. If that was refused, allow it again in your desktop's settings; on GNOME that is Inhibit system keyboard shortcuts under Apps, Try Omarchy."},
+				{Title: "If Super opens your desktop's overview", Detail: "Your desktop asks once whether Try Omarchy may use its shortcuts. If that was refused, allow it again in your desktop's settings; on GNOME, turn on Inhibit Shortcuts in Settings, Apps, Try Omarchy."},
 				{Title: "Fullscreen", Detail: "Press Ctrl+Alt+F to make the Omarchy window fullscreen, and again to leave. Settings can open it fullscreen every time."},
 				{Title: "Omarchy's own menu", Detail: "Inside Omarchy, Super+Space opens its menu and Super+K shows every key binding."},
 			}},

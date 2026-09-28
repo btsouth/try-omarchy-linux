@@ -47,7 +47,7 @@ func markLinuxTipsShown() {
 }
 
 func linuxSessionTips(trialAccount bool) (title, body string) {
-	body = "Omarchy has your keyboard while its window is focused. Ctrl+Alt+G gives it back to your desktop until you click the window again. Ctrl+Alt+F switches fullscreen, and files dropped on the window go to Omarchy."
+	body = "Ctrl+Alt+G gives your keyboard back to your desktop, and clicking the window returns it to Omarchy. Ctrl+Alt+F switches fullscreen, and files dropped on the window go to Omarchy."
 	if !trialAccount {
 		body += " Super+Space opens Omarchy's menu."
 	}

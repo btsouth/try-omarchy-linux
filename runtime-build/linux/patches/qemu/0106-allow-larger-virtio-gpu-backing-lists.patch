@@ -1,0 +1,32 @@
+--- a/hw/display/virtio-gpu.c
++++ b/hw/display/virtio-gpu.c
+@@ -874,6 +874,8 @@
+                               &fb, res, &ss.r, &cmd->error);
+ }
+ 
++#define VIRTIO_GPU_MAX_MAPPING_ENTRIES (1 << 18)
++
+ int virtio_gpu_create_mapping_iov(VirtIOGPU *g,
+                                   uint32_t nr_entries, uint32_t offset,
+                                   struct virtio_gpu_ctrl_command *cmd,
+@@ -884,10 +886,17 @@
+     size_t esize, s;
+     int e, v;
+ 
+-    if (nr_entries > 16384) {
++    /*
++     * A guest backs a large texture, such as a 6K wallpaper, with one entry
++     * per discontiguous page run. After memory fragments that exceeds 16384
++     * entries, and the rejected backing leaves the guest drawing into an
++     * unbacked resource. Allow 1 GiB of 4 KiB pages; the entry and iovec
++     * arrays stay near 8 MiB.
++     */
++    if (nr_entries > VIRTIO_GPU_MAX_MAPPING_ENTRIES) {
+         qemu_log_mask(LOG_GUEST_ERROR,
+-                      "%s: nr_entries is too big (%d > 16384)\n",
+-                      __func__, nr_entries);
++                      "%s: nr_entries is too big (%d > %d)\n",
++                      __func__, nr_entries, VIRTIO_GPU_MAX_MAPPING_ENTRIES);
+         return -1;
+     }
+ 

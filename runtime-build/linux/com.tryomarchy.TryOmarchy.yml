@@ -130,6 +130,8 @@ modules:
         path: patches/qemu/0104-report-sdl-window-visibility.patch
       - type: patch
         path: patches/qemu/0105-follow-sdl-backing-scale.patch
+      - type: patch
+        path: patches/qemu/0106-allow-larger-virtio-gpu-backing-lists.patch
 
   # Build GTK separately so launcher edits reuse the expensive bindings build.
   - name: try-omarchy-setup

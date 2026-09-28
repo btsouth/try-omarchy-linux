@@ -11,19 +11,23 @@
   <launchable type="desktop-id">com.tryomarchy.TryOmarchy.desktop</launchable>
   <url type="homepage">https://tryomarchy.com</url>
   <url type="bugtracker">https://github.com/btsouth/try-omarchy-linux/issues</url>
+  <url type="help">https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md</url>
   <url type="vcs-browser">https://github.com/btsouth/try-omarchy-linux</url>
   <description>
     <p>Try Omarchy runs the Omarchy desktop in a virtual machine, so you can
     explore its apps, themes and keyboard-first workflow without replacing your
     current distro or repartitioning a drive.</p>
     <ul>
-      <li>GPU accelerated graphics through VirGL, with software rendering as a fallback</li>
+      <li>One step from launch to a working Omarchy desktop, with a ready trial account or your own</li>
+      <li>GPU accelerated graphics, with software rendering as a fallback</li>
       <li>Clipboard and file sharing with your desktop, plus an optional shared folder</li>
-      <li>A persistent disk with backup and restore</li>
-      <li>Settings for memory, processors, rendering and microphone access</li>
+      <li>A persistent disk with backup, restore and move</li>
+      <li>Settings for memory, processors, display scale and microphone access</li>
     </ul>
-    <p>First setup downloads a guest image of about 2 GB. The app needs a
-    64-bit x86 PC with hardware virtualization and access to KVM.</p>
+    <p>The first launch downloads Omarchy, about 2 GB, and needs about 13 GB
+    of free space. The app needs a 64-bit x86 PC with hardware virtualization
+    and access to KVM. Removing the app keeps your VM unless you also delete
+    its data.</p>
   </description>
   <screenshots>
     <screenshot type="default">
@@ -37,14 +41,34 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="0.1.0" date="2026-09-28">
+    <release version="0.1.0~preview.2" date="2026-09-28" type="development">
       <description>
-        <p>First release of Try Omarchy for Linux.</p>
+        <p>Second preview.</p>
+        <ul>
+          <li>Updates now come through Software from the Try Omarchy repository</li>
+          <li>The home screen shows what setup needs, where your VM lives and how much space it uses</li>
+          <li>Setup says whether it is downloading, preparing or starting Omarchy, resumes interrupted downloads and can try again in place</li>
+          <li>A short explanation comes before GNOME's clipboard permission, and Settings can turn sharing on or off</li>
+          <li>Ctrl+Alt+G gives the keyboard back to your desktop, and a one-time tip says so</li>
+          <li>Backup and recovery can remove what an interrupted backup or restore left behind</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.0~preview.1" date="2026-09-28" type="development">
+      <description>
+        <p>First preview of Try Omarchy for Linux.</p>
       </description>
     </release>
   </releases>
   <recommends>
     <control>keyboard</control>
     <control>pointing</control>
+    <memory>8192</memory>
   </recommends>
+  <keywords>
+    <keyword>Omarchy</keyword>
+    <keyword>Hyprland</keyword>
+    <keyword>Arch Linux</keyword>
+    <keyword>virtual machine</keyword>
+  </keywords>
 </component>

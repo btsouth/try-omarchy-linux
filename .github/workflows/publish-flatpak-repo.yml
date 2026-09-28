@@ -1,0 +1,53 @@
+name: Publish Flatpak repository
+
+# Deploys the signed repository site attached to a Linux app release to GitHub
+# Pages. runtime-build/linux/publish-repo.sh builds and signs that site on the
+# maintainer's machine, and it is tested before the release, so this workflow
+# never builds or signs anything and holds no signing key.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: App release tag, for example linux-app-v0.1.0-preview.2
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download and check the release site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ $TAG =~ ^linux-app-v[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$ ]] || { echo "Not an app release tag: $TAG" >&2; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern flatpak-site.tar.gz --pattern SHA256SUMS
+          grep ' flatpak-site.tar.gz$' SHA256SUMS | sha256sum -c -
+          mkdir site
+          tar -C site -xzf flatpak-site.tar.gz
+          for f in repo/config repo/summary repo/summary.sig com.tryomarchy.TryOmarchy.flatpakref try-omarchy.flatpakrepo index.html; do
+            test -f "site/$f" || { echo "The release site lacks $f" >&2; exit 1; }
+          done
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

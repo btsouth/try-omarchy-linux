@@ -65,6 +65,8 @@ the service on existing private disks. Setup remains open through earlier QMP
 and userspace-ready signals. The host reports a timeout or early VM exit instead
 of silently closing setup. Local first-run and returning-boot checks reached the desktop in
 omabox; see the exact artifact identities and limits in the [Phase 8B evidence](evidence/LINUX-SOL-PHASE8B-2026-09-26.md).
+The readiness patch is now 0107 at compatibility revision 43, after the
+rebase onto the shared guest series.
 
 Before publication, replace the loopback fixture with an approved public Linux
 artifact plan and independent checksum pin, then repeat fresh and returning

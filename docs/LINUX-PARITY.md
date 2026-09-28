@@ -44,6 +44,11 @@ arguments. The new desktop-ready guest patch is 0101. The exact paired runtime
 result is in the Phase 8B evidence. A public Linux artifact plan remains a
 release gate.
 
+After the rebase onto the shared v0.6.0 guest series, the Linux guest patches
+are 0103 through 0107 with compatibility revisions 40 through 43. The private
+guest used through Phase 10Q predates that rebase; a guest built from the
+combined series still needs its own boot and upgrade acceptance.
+
 Near parity means comparable everyday outcomes and a usable GUI, not identical
 platform APIs. Mac Touch ID and Windows Hello cannot be copied verbatim to Linux;
 any equivalent or deferral needs an explicit scope decision. Likewise, platform

@@ -1,11 +1,11 @@
 # Linux release gates and next work
 
-Updated 2026-09-27 after the private Phase 10Q backup safety correction.
+Updated 2026-09-28 after the Linux code moved to its own public repository.
 
 Brandon wants a public release only after everyday features, branding, install,
 uninstall, updates and recovery are solid, with near parity to Windows and Mac.
 This document makes that the acceptance target for phases 9 through 11. It does
-not authorize publication or physical testing. Keep all work local and private.
+not authorize a release, Flathub submission or physical testing.
 
 The existing [plan](LINUX-PLAN.md), [parity inventory](LINUX-PARITY.md) and
 [acceptance instructions](LINUX-ACCEPTANCE.md) remain applicable. A feature is
@@ -225,11 +225,37 @@ remaining limitations. Record the exact candidate and unresolved items. Passing
 acceptance still does not authorize pushing, opening a public PR/issue, changing
 the public site, publishing a repository or uploading a release.
 
-## Next handoff to Sol
+## Repository and distribution
 
-Start with immediate review closure, then Phase 9B audio/device controls. Continue
-in bounded batches through the order above. Return a local review checkpoint
-after each coherent batch, with what changed, exact artifacts, automated checks,
-observed GUI/guest behavior and untested cases. Keep source deltas reconstructable.
-Use devbox for heavy work and omabox/private desktop harnesses for GUI checks.
-Do not commit, push, publish or request physical testing early.
+Decided 2026-09-28. The Linux app lives in the public repository
+[btsouth/try-omarchy-linux](https://github.com/btsouth/try-omarchy-linux),
+which keeps the Windows repository's history so shared launcher fixes merge
+from `omacom/try-omarchy-windows`. It may move to `omacom` later. Public
+releases go to Flathub as `com.tryomarchy.TryOmarchy`, verified through
+tryomarchy.com, with the Linux guest image on this repository's releases.
+Tag Linux releases `linux-vX.Y.Z`.
+
+The branch is rebased onto Windows v0.6.0. The Linux guest patches are now
+0103 through 0107 at compatibility revision 43, on top of the shared series.
+QEMU aborts when a reconnecting socket chardev cannot connect at startup, so
+the Linux launcher leaves out the Windows Hello authentication port. The
+rebased Flatpak booted the retained personal VM to a visible desktop in the
+disposable GNOME VM. CI passes, including native Windows tests.
+
+Before the first release:
+
+1. Build a guest from the combined series, boot it fresh and as an upgrade of
+   an existing Linux disk, publish it privately as a draft `linux-v` release,
+   and pin its URL and `SHA256SUMS` digest in `app/linux_release_linux.go`.
+2. Add a `releases` entry to the metainfo. The Flathub linter passes the
+   manifest; the metainfo only lacks release information. GNOME Platform 51
+   is available and needs its own rebuild and test pass.
+3. Finish the remaining Phase 10B and Phase 11 items above.
+
+## Next work
+
+Continue in bounded batches through the order above. Record what changed,
+exact artifacts, automated checks, observed GUI and guest behavior, and
+untested cases for each batch. Use devbox for heavy work and omabox or the
+disposable desktop VM for GUI checks. Physical testing, releases and the
+Flathub submission need Brandon's approval.

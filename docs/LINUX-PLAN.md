@@ -1,6 +1,6 @@
 # Linux implementation plan
 
-Private work on `linux-core`. No pushes, PRs, public issues, or releases.
+Public repository, no releases yet. Releases need Brandon's approval.
 The Windows launcher must continue to cross-build and pass vet. Native Windows
 tests run only in CI. GUI tests use a local omabox or the isolated devbox
 desktop. Physical laptop and real desktop-session checks remain deferred.

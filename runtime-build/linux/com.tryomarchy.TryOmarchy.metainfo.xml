@@ -3,15 +3,39 @@
   <id>com.tryomarchy.TryOmarchy</id>
   <name>Try Omarchy</name>
   <summary>Try the Omarchy desktop in a window</summary>
+  <developer id="com.tryomarchy">
+    <name>Brandon South</name>
+  </developer>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <launchable type="desktop-id">com.tryomarchy.TryOmarchy.desktop</launchable>
   <url type="homepage">https://tryomarchy.com</url>
+  <url type="bugtracker">https://github.com/btsouth/try-omarchy-linux/issues</url>
+  <url type="vcs-browser">https://github.com/btsouth/try-omarchy-linux</url>
   <description>
-    <p>Runs the Omarchy desktop in a virtual machine with GPU acceleration.
-    Your host operating system stays in place while the virtual machine and
-    its settings are stored on disk.</p>
+    <p>Try Omarchy runs the Omarchy desktop in a virtual machine, so you can
+    explore its apps, themes and keyboard-first workflow without replacing your
+    current distro or repartitioning a drive.</p>
+    <ul>
+      <li>GPU accelerated graphics through VirGL, with software rendering as a fallback</li>
+      <li>Clipboard and file sharing with your desktop, plus an optional shared folder</li>
+      <li>A persistent disk with backup and restore</li>
+      <li>Settings for memory, processors, rendering and microphone access</li>
+    </ul>
+    <p>First setup downloads a guest image of about 2 GB. The app needs a
+    64-bit x86 PC with hardware virtualization and access to KVM.</p>
   </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The Omarchy desktop running in a window on GNOME</caption>
+      <image>https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux.jpg</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#9ece6a</color>
+    <color type="primary" scheme_preference="dark">#151912</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
   <requires>
     <control>keyboard</control>
     <control>pointing</control>

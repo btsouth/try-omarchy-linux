@@ -1,6 +1,6 @@
 # Third-party notices
 
-Try Omarchy for Windows builds and redistributes third-party components under
+Try Omarchy for Windows and Linux build and redistribute third-party components under
 their own licenses. The repository's MIT license applies only to this project's
 original code.
 
@@ -41,6 +41,27 @@ original code.
   <https://vivaldi.com/partners/linux/>.
 - **dockur/windows** — MIT; used only as a development and test environment, not
   redistributed.
+
+## Linux Flatpak
+
+The Linux Flatpak builds its own runtime from pinned upstream source archives
+listed in `runtime-build/linux/com.tryomarchy.TryOmarchy.yml`, and runs on the
+GNOME Platform runtime, which carries its own licenses.
+
+- **QEMU** 11.1.1: GPL-2.0 and other component licenses. Built from the
+  upstream release with the patches in `runtime-build/linux/patches/qemu` and
+  `runtime-build/patches/qemu/0007-report-native-file-drops.patch`. The
+  manifest and patches are the corresponding build recipe.
+- **virglrenderer** 1.3.0: MIT.
+- **libslirp** 4.9.1: BSD-3-Clause.
+- **wl-clipboard** 2.3.0: GPL-3.0.
+- **xclip** 0.13: GPL-2.0.
+- **libXmu** 1.2.1: X11 license.
+- **PyYAML** 6.0.3: MIT; used to build virglrenderer.
+- **gotk4** and **gotk4-adwaita**: MPL-2.0; the GTK and libadwaita bindings
+  for the Linux home and setup window.
+- **godbus/dbus**: BSD-2-Clause; used for desktop portals and the tray.
+- **Go** 1.27.1 toolchain and runtime: BSD-3-Clause.
 
 See `guest-build/source.lock.json`, `guest-build/runtime.lock.json`,
 `runtime-build/sources.lock.json`, and `scripts/release/` for exact source

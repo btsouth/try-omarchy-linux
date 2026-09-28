@@ -8,13 +8,12 @@ import (
 	"strings"
 )
 
-// This local engineering build uses the Phase 8B Linux guest, rebuilt from
-// the Phase 6 base with patch 0101, through a private loopback fixture.
-// A public build needs an approved Linux release and trust root.
+// The Linux guest is built from the shared guest series plus the Linux patches
+// (compatibility revision 43) and published on this repository's releases.
 // Windows release defaults in manifest.go are deliberately untouched.
 var (
-	linuxGuestReleaseURL = "http://127.0.0.1:18090"
-	linuxGuestSumsSHA256 = "bc783fcb5b83359e6cde52f7e5bb640bacb3adf747c487bbe9bacfb0c5171826"
+	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.0"
+	linuxGuestSumsSHA256 = "3ba8b875bc9ffff3dd223367a7c00e1e1e9d3b77a314bb147bba9b4361aeba73"
 )
 
 func selectLinuxGuestRelease(release, sumsSHA256 string, releaseExplicit, sumsExplicit bool) (string, string, error) {

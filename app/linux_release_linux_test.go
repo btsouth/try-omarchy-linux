@@ -15,8 +15,11 @@ func TestLinuxDefaultDoesNotSelectWindowsGuest(t *testing.T) {
 	if release == defaultReleaseURL || pin == defaultSumsSHA256 {
 		t.Fatal("Linux ordinary launch selected Windows guest defaults")
 	}
-	if release != "http://127.0.0.1:18090" || pin != "bc783fcb5b83359e6cde52f7e5bb640bacb3adf747c487bbe9bacfb0c5171826" {
-		t.Fatalf("unexpected private Linux guest pair: %s %s", release, pin)
+	if release != "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.0" || pin != "3ba8b875bc9ffff3dd223367a7c00e1e1e9d3b77a314bb147bba9b4361aeba73" {
+		t.Fatalf("unexpected Linux guest pair: %s %s", release, pin)
+	}
+	if releaseVersion(release) != linuxAppVersion {
+		t.Fatalf("guest release %s does not match app version %s", release, linuxAppVersion)
 	}
 }
 

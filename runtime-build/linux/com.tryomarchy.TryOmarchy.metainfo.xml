@@ -36,6 +36,13 @@
     <color type="primary" scheme_preference="dark">#151912</color>
   </branding>
   <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-09-28">
+      <description>
+        <p>First release of Try Omarchy for Linux.</p>
+      </description>
+    </release>
+  </releases>
   <recommends>
     <control>keyboard</control>
     <control>pointing</control>

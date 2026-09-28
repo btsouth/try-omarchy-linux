@@ -8,7 +8,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 mkdir -p "${1:?usage: build-flatpak.sh OUTPUT_DIR}"
 out=$(cd "$1" && pwd)
-image=ghcr.io/flathub-infra/flatpak-github-actions@sha256:1de59efef01a946d9f28f1ec3458bf6f61dcee3507d7fecdd473f8134da4ec77
+image=ghcr.io/flathub-infra/flatpak-github-actions@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
 docker run --rm --network=host --privileged -v "$repo":/src:ro -v "$out":/out "$image" bash -c "
   set -e
   flatpak-builder --disable-rofiles-fuse --force-clean --state-dir /out/state --repo /out/repo \

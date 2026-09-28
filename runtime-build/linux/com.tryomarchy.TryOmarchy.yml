@@ -2,12 +2,12 @@
 # Flatpak. QEMU and virglrenderer are upstream releases; the patches are the
 # Windows runtime's file-drop event plus the Linux window behavior the
 # launcher needs (close requests, keyboard grab on focus, window title).
-# GNOME 50 provides GTK4/libadwaita and the Freedesktop 25.08 GL extensions.
+# GNOME 51 provides GTK4/libadwaita and the Freedesktop 26.08 GL extensions.
 #
 # Build with build-flatpak.sh beside this file.
 app-id: com.tryomarchy.TryOmarchy
 runtime: org.gnome.Platform
-runtime-version: '50'
+runtime-version: '51'
 sdk: org.gnome.Sdk
 command: try-omarchy
 finish-args:

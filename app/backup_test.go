@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func backupFixture(t *testing.T) (string, string) {
@@ -324,5 +325,43 @@ func TestVMRestoreBudgetsCompressedSizeAndRestampsReceipts(t *testing.T) {
 	}
 	if restored.ModTime().UnixNano() != stamp {
 		t.Fatalf("receipt time not restored: got %d, want %d", restored.ModTime().UnixNano(), stamp)
+	}
+}
+
+func TestVMBackupRejectsDiskChangedWhileReading(t *testing.T) {
+	dir, archive := backupFixture(t)
+	disk := filepath.Join(dir, "vm", "disk.raw")
+	changed := false
+	err := writeVMBackupProgress(dir, archive, func(current, total int64, name string) {
+		if changed || name != "vm/disk.raw" || current == 0 {
+			return
+		}
+		changed = true
+		f, err := os.OpenFile(disk, os.O_WRONLY, 0)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer f.Close()
+		if _, err := f.WriteAt([]byte("guest write"), 4096); err != nil {
+			t.Error(err)
+		}
+		later := time.Now().Add(2 * time.Second)
+		if err := os.Chtimes(disk, later, later); err != nil {
+			t.Error(err)
+		}
+	})
+	if !changed {
+		t.Fatal("fixture never reached the disk")
+	}
+	if err == nil || !strings.Contains(err.Error(), "changed while backing up") {
+		t.Fatalf("changed disk was published: %v", err)
+	}
+	if _, err := os.Lstat(archive); !os.IsNotExist(err) {
+		t.Fatalf("backup output left behind: %v", err)
+	}
+	leftovers, _ := filepath.Glob(filepath.Join(filepath.Dir(archive), ".try-omarchy-backup-*"))
+	if len(leftovers) != 0 {
+		t.Fatalf("temporary backup left behind: %v", leftovers)
 	}
 }

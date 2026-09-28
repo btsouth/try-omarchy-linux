@@ -18,5 +18,9 @@ func openBackupDisk(path string) (*os.File, error) {
 			return nil, portalErr
 		}
 	}
+	if err = rejectQEMUImageLock(path, f); err != nil {
+		f.Close()
+		return nil, err
+	}
 	return f, nil
 }

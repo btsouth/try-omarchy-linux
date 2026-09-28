@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 // The document portal does not implement flock. QEMU also runs without OFD
@@ -68,6 +69,45 @@ func rejectQEMUWithOpenDisk(disk *os.File) error {
 				return fmt.Errorf("a virtual machine still has the guest disk open")
 			}
 		}
+	}
+	return nil
+}
+
+// flock never conflicts with the OFD byte locks QEMU uses to mark an image in
+// use. Hold a shared lock on the whole disk so a QEMU starting during the
+// backup cannot claim it, then test for a lock from any other open file.
+// The document portal keeps byte locks local and fails the test with EIO, so
+// its disks rely on the fallback checks and the unchanged-disk check instead.
+func rejectQEMUImageLock(path string, disk *os.File) error {
+	if linuxDocumentPortalDisk(path, os.Getuid()) {
+		return nil
+	}
+	lock := syscall.Flock_t{Type: syscall.F_RDLCK, Whence: 0}
+	if err := ofdLock(disk, linuxFOFDSetLock, &lock); err != nil {
+		if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EACCES) {
+			return fmt.Errorf("a virtual machine still has the guest disk open")
+		}
+		return fmt.Errorf("cannot lock the guest disk: %w", err)
+	}
+	lock = syscall.Flock_t{Type: syscall.F_WRLCK, Whence: 0}
+	if err := ofdLock(disk, linuxFOFDGetLock, &lock); err != nil {
+		return fmt.Errorf("cannot check whether the guest disk is in use: %w", err)
+	}
+	if lock.Type != syscall.F_UNLCK {
+		return fmt.Errorf("a virtual machine still has the guest disk open")
+	}
+	return nil
+}
+
+const (
+	linuxFOFDGetLock = 36
+	linuxFOFDSetLock = 37
+)
+
+func ofdLock(f *os.File, command int, lock *syscall.Flock_t) error {
+	_, _, errno := syscall.Syscall(syscall.SYS_FCNTL, f.Fd(), uintptr(command), uintptr(unsafe.Pointer(lock)))
+	if errno != 0 {
+		return errno
 	}
 	return nil
 }

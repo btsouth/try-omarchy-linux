@@ -59,7 +59,8 @@ func requiredBackupFiles(files map[string]bool) error {
 }
 
 // Backup and restore are called while the launcher holds its lifecycle lock.
-// Holding the disk itself exclusively also catches an orphaned QEMU process.
+// The disk lock also rejects a QEMU still using the image, and a writer that
+// no lock can see is caught by the disk changing while it is read.
 func writeVMBackup(dir, destination string) error {
 	return writeVMBackupProgress(dir, destination, nil)
 }
@@ -116,6 +117,10 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 		return fmt.Errorf("close Try Omarchy before backing up: %w", err)
 	}
 	defer disk.Close()
+	diskBefore, err := disk.Stat()
+	if err != nil {
+		return err
+	}
 	var entries []backupEntry
 	seen := map[string]bool{}
 	var total int64
@@ -213,6 +218,10 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 			return fmt.Errorf("%s changed while backing up", entry.Name)
 		}
 		entry.SHA256 = hex.EncodeToString(h.Sum(nil))
+	}
+	if diskAfter, err := disk.Stat(); err != nil || diskAfter.Size() != diskBefore.Size() || !diskAfter.ModTime().Equal(diskBefore.ModTime()) {
+		zw.Close()
+		return fmt.Errorf("the guest disk changed while backing up; close any program using it and try again")
 	}
 	writer, err := zw.Create(backupManifestName)
 	if err != nil {

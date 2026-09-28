@@ -1,0 +1,188 @@
+From 5bd7c7324d7d5b67d77839d944d455761d2e1e29 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sat, 26 Sep 2026 23:15:03 -0400
+Subject: [PATCH 107/107] Report desktop readiness after Omarchy shell starts
+
+---
+ .../try-omarchy-desktop-ready.service         |  1 +
+ .../user/try-omarchy-desktop-ready.service    | 11 ++++
+ .../usr/local/lib/try-omarchy/desktop-ready   | 34 ++++++++++++
+ guest/scripts/finalize-rootfs.sh              |  6 +-
+ guest/tests/test_desktop_ready.py             | 55 +++++++++++++++++++
+ guest/tests/verify.py                         |  6 +-
+ 6 files changed, 111 insertions(+), 2 deletions(-)
+ create mode 120000 guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service
+ create mode 100644 guest/factory-overlay/etc/systemd/user/try-omarchy-desktop-ready.service
+ create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready
+ create mode 100644 guest/tests/test_desktop_ready.py
+
+diff --git a/guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service b/guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service
+new file mode 120000
+index 0000000..e85110a
+--- /dev/null
++++ b/guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service
+@@ -0,0 +1 @@
++../try-omarchy-desktop-ready.service
+\ No newline at end of file
+diff --git a/guest/factory-overlay/etc/systemd/user/try-omarchy-desktop-ready.service b/guest/factory-overlay/etc/systemd/user/try-omarchy-desktop-ready.service
+new file mode 100644
+index 0000000..dc36692
+--- /dev/null
++++ b/guest/factory-overlay/etc/systemd/user/try-omarchy-desktop-ready.service
+@@ -0,0 +1,11 @@
++[Unit]
++Description=Tell Try Omarchy when its desktop is usable
++After=graphical-session.target
++PartOf=graphical-session.target
++
++[Service]
++Type=oneshot
++ExecStart=/usr/local/lib/try-omarchy/desktop-ready
++
++[Install]
++WantedBy=graphical-session.target
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready b/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready
+new file mode 100755
+index 0000000..d99c8da
+--- /dev/null
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready
+@@ -0,0 +1,34 @@
++#!/bin/bash
++# Report only after the graphical session, a monitor, and the Omarchy shell's
++# background and bar surfaces have remained visible. A quickshell process can
++# exist while the screen is still black. The earlier system-level "ready" is needed
++# for image rollback but does not mean the desktop can be used yet.
++set -euo pipefail
++
++attempts=${TRY_OMARCHY_DESKTOP_READY_ATTEMPTS:-180}
++interval=${TRY_OMARCHY_DESKTOP_READY_INTERVAL:-1}
++stable=0
++for ((attempt=1; attempt<=attempts; attempt++)); do
++  monitors=$(hyprctl -j monitors 2>/dev/null || true)
++  layers=$(hyprctl -j layers 2>/dev/null || true)
++  if [[ $monitors == \[* && $monitors != '[]' ]] && pgrep -u "$(id -u)" -x quickshell >/dev/null &&
++     jq -e '[.[] | .levels[][]? | select(.w > 0 and .h > 0 and .alpha > 0) | .namespace] |
++       (index("omarchy-background") != null and index("omarchy-bar") != null)' <<<"$layers" >/dev/null 2>&1; then
++    ((stable+=1))
++    if ((stable >= 5)); then
++      for retry in {1..10}; do
++        if printf 'desktop-ready\n' | socat -u - TCP:10.0.2.2:4450,connect-timeout=2 2>/dev/null; then
++          exit 0
++        fi
++        sleep "$interval"
++      done
++      exit 1
++    fi
++  else
++    stable=0
++  fi
++  sleep "$interval"
++done
++
++logger -t try-omarchy-desktop-ready 'Omarchy shell layers or display did not become ready'
++exit 1
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 776d072..34f4ed5 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -76,6 +76,9 @@ UPDATE_MANIFEST
+ install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/share/try-omarchy/host-window-idle.qml
+ 
+ compat_paths=(
++  usr/local/lib/try-omarchy/desktop-ready
++  etc/systemd/user/try-omarchy-desktop-ready.service
++  etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service
+   usr/local/bin/omarchy-native-display-sync
+   usr/share/try-omarchy/host-window-idle.qml
+   usr/local/lib/try-omarchy/repair-host-window
+@@ -207,7 +210,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 40 lets a Linux launcher ask for CPU presentation of Vulkan windows.
+ # Revision 41 adds a temporary host-window idle lease.
+ # Revision 42 follows the Linux host display scale when the launcher asks.
+-compat_revision=42
++# Revision 43 reports desktop readiness after the Omarchy shell starts.
++compat_revision=43
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/test_desktop_ready.py b/guest/tests/test_desktop_ready.py
+new file mode 100644
+index 0000000..972193d
+--- /dev/null
++++ b/guest/tests/test_desktop_ready.py
+@@ -0,0 +1,55 @@
++import os
++import pathlib
++import subprocess
++import tempfile
++import unittest
++
++
++SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "factory-overlay/usr/local/lib/try-omarchy/desktop-ready"
++VISIBLE_LAYERS = '{"Virtual-1":{"levels":{"0":[{"namespace":"omarchy-background","w":936,"h":696,"alpha":1}],"2":[{"namespace":"omarchy-bar","w":936,"h":26,"alpha":1}]}}}'
++
++
++class DesktopReadyTests(unittest.TestCase):
++    def run_probe(self, monitor_output: str, shell_running: bool,
++                  layers_output: str = VISIBLE_LAYERS) -> tuple[subprocess.CompletedProcess, str]:
++        with tempfile.TemporaryDirectory() as temp:
++            root = pathlib.Path(temp)
++            bin_dir = root / "bin"
++            bin_dir.mkdir()
++            (bin_dir / "hyprctl").write_text(
++                "#!/bin/sh\nif [ \"$2\" = monitors ]; then printf '%s\\n' \"$TEST_MONITORS\"; "
++                "else printf '%s\\n' \"$TEST_LAYERS\"; fi\n")
++            (bin_dir / "pgrep").write_text("#!/bin/sh\nexit " + ("0" if shell_running else "1") + "\n")
++            (bin_dir / "socat").write_text("#!/bin/sh\ncat > \"$TEST_SIGNAL_FILE\"\n")
++            (bin_dir / "logger").write_text("#!/bin/sh\nexit 0\n")
++            for name in ("hyprctl", "pgrep", "socat", "logger"):
++                (bin_dir / name).chmod(0o755)
++            signal = root / "signal"
++            env = dict(os.environ, PATH=str(bin_dir) + ":" + os.environ["PATH"],
++                       TEST_SIGNAL_FILE=str(signal), TEST_MONITORS=monitor_output,
++                       TEST_LAYERS=layers_output, TRY_OMARCHY_DESKTOP_READY_ATTEMPTS="5",
++                       TRY_OMARCHY_DESKTOP_READY_INTERVAL="0")
++            result = subprocess.run([str(SCRIPT)], env=env, capture_output=True, text=True)
++            return result, signal.read_text() if signal.exists() else ""
++
++    def test_only_signals_after_shell_and_monitor_are_present(self):
++        result, signal = self.run_probe('[{"id":0}]', True)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertEqual(signal, "desktop-ready\n")
++
++    def test_no_shell_keeps_setup_waiting(self):
++        result, signal = self.run_probe('[{"id":0}]', False)
++        self.assertNotEqual(result.returncode, 0)
++        self.assertEqual(signal, "")
++
++    def test_no_monitor_keeps_setup_waiting(self):
++        result, signal = self.run_probe('[]', True)
++        self.assertNotEqual(result.returncode, 0)
++        self.assertEqual(signal, "")
++
++    def test_missing_shell_layers_keep_setup_waiting(self):
++        for layers in ('{}', '{"Virtual-1":{"levels":{"0":[{"namespace":"omarchy-background","w":936,"h":696,"alpha":1}]}}}'):
++            with self.subTest(layers=layers):
++                result, signal = self.run_probe('[{"id":0}]', True, layers)
++                self.assertNotEqual(result.returncode, 0)
++                self.assertEqual(signal, "")
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 2bd4ac2..7cefe8f 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -280,7 +280,11 @@ def main() -> None:
+     finalize_rootfs = read(GUEST / "scripts/finalize-rootfs.sh")
+     compat_paths = finalize_rootfs.split("compat_paths=(", 1)[1].split(")", 1)[0]
+     check(
+-        "compat_revision=42" in finalize_rootfs
++        "compat_revision=43" in finalize_rootfs
++        and "usr/local/lib/try-omarchy/desktop-ready" in compat_paths
++        and "etc/systemd/user/try-omarchy-desktop-ready.service" in compat_paths
++        and "etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service" in compat_paths
++        and (GUEST / "factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service").is_symlink()
+         and "usr/local/lib/try-omarchy/catch-up" in compat_paths
+         and "usr/local/bin/omarchy-native-display-sync" in compat_paths
+         and "usr/local/bin/omarchy-windows-audio-bridge" in compat_paths
+-- 
+2.55.0
+

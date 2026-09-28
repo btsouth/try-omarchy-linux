@@ -1,0 +1,79 @@
+From 73a54c4fe93c8d032b1829eb4234d5c1f11058fd Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sat, 26 Sep 2026 19:04:55 -0400
+Subject: [PATCH 105/107] Verify chained guest patches against their final
+ image
+
+---
+ guest/scripts/write-provenance.py    | 14 ++++++++++----
+ guest/tests/test_write_provenance.py | 20 ++++++++++++++++++++
+ 2 files changed, 30 insertions(+), 4 deletions(-)
+
+diff --git a/guest/scripts/write-provenance.py b/guest/scripts/write-provenance.py
+index 3a791b8..ba5ff7a 100755
+--- a/guest/scripts/write-provenance.py
++++ b/guest/scripts/write-provenance.py
+@@ -86,19 +86,25 @@ def main() -> None:
+     trees["themes"] = digest_path(omarchy / "themes")
+ 
+     backports = authenticity.get("backports", [])
++    final_targets = {}
+     for backport in backports:
+         patch = args.spec.parent / backport["patch"]
+         patch_digest = digest_file(patch)
+         if patch_digest != backport["patchSha256"]:
+             raise SystemExit(f"backport patch digest mismatch: {backport['id']}")
+         for target in backport["targets"]:
+-            installed = installed_target_file(root, omarchy, target["path"])
+-            if digest_file(installed) != target["afterSha256"]:
+-                raise SystemExit(f"backport target digest mismatch: {backport['id']} {target['path']}")
++            previous = final_targets.get(target["path"])
++            if previous is not None and previous["afterSha256"] != target["beforeSha256"]:
++                raise SystemExit(f"backport target chain mismatch: {backport['id']} {target['path']}")
++            final_targets[target["path"]] = target
++    for path, target in final_targets.items():
++        installed = installed_target_file(root, omarchy, path)
++        if digest_file(installed) != target["afterSha256"]:
++            raise SystemExit(f"backport target digest mismatch: {path}")
+ 
+     payload = {
+         "schemaVersion": 1,
+-        "claim": "Desktop runtime derived from pinned Basecamp Omarchy source plus the enumerated reviewed backports.",
++        "claim": "Desktop runtime derived from pinned Basecamp Omarchy source plus the enumerated reviewed backports and guest integration patches.",
+         "upstream": spec["upstream"],
+         "includedThemes": spec["themes"],
+         "verbatimRuntimeTrees": verbatim_trees,
+diff --git a/guest/tests/test_write_provenance.py b/guest/tests/test_write_provenance.py
+index 17ab34c..d57a98c 100644
+--- a/guest/tests/test_write_provenance.py
++++ b/guest/tests/test_write_provenance.py
+@@ -124,6 +124,26 @@ class WriteProvenanceTests(unittest.TestCase):
+             self.assertEqual(result.returncode, 0, result.stderr)
+             self.assertTrue(package_path.is_symlink())
+ 
++    def test_checks_the_final_image_of_a_verified_patch_chain(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            root, spec, target, output = self.fixture(temporary)
++            payload = json.loads(spec.read_text())
++            backports = payload["authenticity"]["backports"]
++            second = json.loads(json.dumps(backports[0]))
++            second["id"] = "second"
++            second["targets"][0]["beforeSha256"] = digest(target.read_bytes())
++            target.write_bytes(b"patched twice\n")
++            second["targets"][0]["afterSha256"] = digest(target.read_bytes())
++            backports.append(second)
++            spec.write_text(json.dumps(payload))
++            result = self.run_writer(root, spec, output)
++            self.assertEqual(result.returncode, 0, result.stderr)
++            second["targets"][0]["beforeSha256"] = digest(b"unrelated\n")
++            spec.write_text(json.dumps(payload))
++            result = self.run_writer(root, spec, output)
++            self.assertNotEqual(result.returncode, 0)
++            self.assertIn("backport target chain mismatch", result.stderr)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+-- 
+2.55.0
+

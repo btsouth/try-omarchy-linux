@@ -63,6 +63,37 @@ Patch 0102 applies fixes from an independent review of the Windows Hello
 broker, the 1Password agent, drop delivery and display sync (compatibility
 revision 39).
 
+Patches 0103 through 0107 are for the Linux launcher. Windows launchers never
+pass their kernel flags, so Windows guests behave as before.
+
+Patch 0103 lets a Linux launcher ask for software presentation of guest
+Vulkan windows with `tryomarchy.vulkan-present=cpu`. NVIDIA's GL on a Linux
+host reads imported LINEAR dma-bufs at `align(width * 4, 32)` whatever pitch
+they carry, which shears Venus frames; with the flag `vulkan-env` adds `sw` to
+`MESA_VK_WSI_DEBUG` so Mesa copies each frame instead. Compatibility revision
+40 delivers the file to existing disks.
+
+Patch 0104 keeps the guest awake while the Linux VM window is visible using
+an expiring lease, independent of the user's stay-awake preference. Revision
+41 carries the helper onto existing disks and updates only recognized idle
+service versions. Customized or newer idle services are left alone. Lost
+host connections restore normal idle behavior after the lease expires.
+
+Patch 0105 verifies repeated patch targets as a chain, then compares their
+final postimage with the built guest. Every patch digest is still checked.
+
+Patch 0106 adds an opt-in 96-DPI scale policy for the Linux host display
+bridge. Compatibility revision 42 carries display sync onto existing disks.
+Without the Linux kernel flag, the existing Windows scale thresholds remain
+unchanged.
+
+Patch 0107 adds a graphical-session readiness report for Linux. Its user
+service waits for a visible Hyprland monitor, Quickshell and stable Omarchy
+background and bar layer surfaces before sending `desktop-ready` on the
+existing lifecycle channel. The earlier system `ready` report still serves
+image rollback and does not close Linux setup. Compatibility revision 43
+updates the service on existing disks.
+
 The second command needs Docker and currently takes about ten minutes. Release
 CI also boots the resulting factory image with `scripts/release/smoke-guest.py`
 before it uploads anything.

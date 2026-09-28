@@ -1,0 +1,102 @@
+From b1f38370e8275b0f87d9ed38f2184e7ada6d9865 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sat, 26 Sep 2026 19:25:31 -0400
+Subject: [PATCH 106/107] Follow Linux host display scale when requested
+
+---
+ .../usr/local/bin/omarchy-native-display-sync |  6 ++++++
+ guest/scripts/finalize-rootfs.sh              |  4 +++-
+ guest/tests/verify.py                         | 20 ++++++++++++++++++-
+ 3 files changed, 28 insertions(+), 2 deletions(-)
+
+diff --git a/guest/native-overlay/usr/local/bin/omarchy-native-display-sync b/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
+index e4bedfc..cc9d4bb 100755
+--- a/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
++++ b/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
+@@ -6,10 +6,14 @@ drm_root=${OMARCHY_DISPLAY_SYNC_DRM_ROOT:-/sys/class/drm}
+ # The QEMU profile in monitors.lua reads the last applied mode from here, so a
+ # config reload keeps that mode instead of falling back to "preferred".
+ state_file=${OMARCHY_DISPLAY_SYNC_STATE:-${XDG_RUNTIME_DIR:-/run/user/$UID}/try-omarchy/display-mode}
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host-scale=1 "*) export OMARCHY_DISPLAY_SYNC_HOST_SCALE=1 ;;
++esac
+ 
+ preferred_mode_from_edid() {
+   python3 - "$1" <<'PY'
+ import pathlib
++import os
+ import sys
+ from math import hypot
+ 
+@@ -82,6 +86,8 @@ def scale_for_mode(
+ 
+     ppi = hypot(width, height) / diagonal_inches
+     requested = 2.0 if ppi > 200 else 1.5 if ppi > 140 else 1.0
++    if os.environ.get("OMARCHY_DISPLAY_SYNC_HOST_SCALE") == "1":
++        requested = min(4.0, max(1.0, round(ppi / 96.0 * 4) / 4))
+ 
+     # Hyprland requires the scaled logical dimensions to land on whole pixels.
+     # It searches scale values in 1/120 increments around the requested value;
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 861fc26..776d072 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -76,6 +76,7 @@ UPDATE_MANIFEST
+ install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/share/try-omarchy/host-window-idle.qml
+ 
+ compat_paths=(
++  usr/local/bin/omarchy-native-display-sync
+   usr/share/try-omarchy/host-window-idle.qml
+   usr/local/lib/try-omarchy/repair-host-window
+   usr/local/lib/try-omarchy/host-window
+@@ -205,7 +206,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # drop overlay is mapped before dragging, and records reload modes per display.
+ # Revision 40 lets a Linux launcher ask for CPU presentation of Vulkan windows.
+ # Revision 41 adds a temporary host-window idle lease.
+-compat_revision=41
++# Revision 42 follows the Linux host display scale when the launcher asks.
++compat_revision=42
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 11c28e4..2bd4ac2 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -280,7 +280,7 @@ def main() -> None:
+     finalize_rootfs = read(GUEST / "scripts/finalize-rootfs.sh")
+     compat_paths = finalize_rootfs.split("compat_paths=(", 1)[1].split(")", 1)[0]
+     check(
+-        "compat_revision=41" in finalize_rootfs
++        "compat_revision=42" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/catch-up" in compat_paths
+         and "usr/local/bin/omarchy-native-display-sync" in compat_paths
+         and "usr/local/bin/omarchy-windows-audio-bridge" in compat_paths
+@@ -578,6 +578,24 @@ HOTPLUG=1
+             "native display sync applies the EDID modes again after a config reload",
+         )
+ 
++        # Linux supplies physical dimensions at 96 logical DPI. Preserve the
++        # established Windows thresholds unless the Linux boot flag is set.
++        cmdline = temporary_path / "cmdline"
++        cmdline.write_text("tryomarchy.host-scale=1\n")
++        environment["TRY_OMARCHY_CMDLINE"] = str(cmdline)
++        displayid[12:14] = (3840 - 1).to_bytes(2, "little")
++        displayid[20:22] = (2160 - 1).to_bytes(2, "little")
++        displayid[28] = (-sum(displayid[1:28])) & 0xFF
++        displayid[127] = (-sum(displayid[:127])) & 0xFF
++        qemu_edid[256:384] = displayid
++        for width_cm, height_cm, expected in [(102, 57, "1"), (68, 38, "1.5"), (51, 29, "2")]:
++            qemu_edid[21:23] = bytes([width_cm, height_cm])
++            qemu_edid[127] = (-sum(qemu_edid[:127])) & 0xFF
++            (connector / "edid").write_bytes(qemu_edid)
++            reload_log.write_text("")
++            subprocess.run([str(display_sync), "--from-stdin"], input="ACTION=change\nHOTPLUG=1\n", text=True, env=environment, check=True)
++            check(f'scale = "{expected}"' in reload_log.read_text().splitlines()[0], f"Linux host display scale {expected} follows 96 DPI physical dimensions")
++
+     shell_files = [
+         GUEST / "test",
+         display_sync,
+-- 
+2.55.0
+

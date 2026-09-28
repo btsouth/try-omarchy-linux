@@ -1,0 +1,302 @@
+From 5bea8fdd1d0465905783df22071857fd693accf4 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sat, 26 Sep 2026 18:52:30 -0400
+Subject: [PATCH 104/107] Keep the guest awake while the host window is visible
+
+---
+ .../usr/local/lib/try-omarchy/agent           |  8 +++
+ .../usr/local/lib/try-omarchy/host-window     | 27 ++++++++++
+ .../local/lib/try-omarchy/repair-host-window  | 14 +++++
+ guest/patches/omarchy/host-window-idle.patch  | 53 +++++++++++++++++++
+ guest/scripts/finalize-rootfs.sh              |  9 +++-
+ guest/spec.json                               | 14 +++++
+ guest/tests/test_host_window.py               | 30 +++++++++++
+ guest/tests/verify.py                         | 12 +++--
+ 8 files changed, 161 insertions(+), 6 deletions(-)
+ create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/host-window
+ create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/repair-host-window
+ create mode 100644 guest/patches/omarchy/host-window-idle.patch
+ create mode 100644 guest/tests/test_host_window.py
+
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/agent b/guest/factory-overlay/usr/local/lib/try-omarchy/agent
+index 00b6a0a..ae319a4 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/agent
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/agent
+@@ -13,6 +13,7 @@ set_time=${TRY_OMARCHY_SET_TIME:-date -s}
+ fill_dir=${TRY_OMARCHY_FILL_DIR:-/var/tmp}
+ version=4
+ app_sync=${TRY_OMARCHY_APP_SYNC:-/usr/local/lib/try-omarchy/approved-apps-sync}
++window_lease=${TRY_OMARCHY_WINDOW_HELPER:-/usr/local/lib/try-omarchy/host-window}
+ max_drift=2
+ # Space left free while zero-filling, so running programs keep working.
+ fill_reserve_mib=512
+@@ -60,6 +61,8 @@ zero_fill() {
+ handle() {
+   local line=$1 target now drift
+   case $line in
++    "host-window visible") "$window_lease" visible ;;
++    "host-window hidden") "$window_lease" hidden ;;
+     apps\ *)
+       if [[ -n ${TRY_OMARCHY_APP_SYNC:-} ]]; then
+         printf '%s\n' "${line#apps }" | "$app_sync" || echo 'could not sync approved Windows apps' >&2
+@@ -96,12 +99,17 @@ if [[ ${1:-} == --handle ]]; then
+   exit 0
+ fi
+ 
++/usr/local/lib/try-omarchy/repair-host-window || true
++"$window_lease" hidden || true
++trap '"$window_lease" hidden || true' EXIT
++
+ while :; do
+   exec 3<>"/dev/tcp/$host/$port" 2>/dev/null || { sleep 10; continue; }
+   printf 'hello %s\n' "$version" >&3
+   while IFS= read -r line <&3; do
+     handle "${line%$'\r'}"
+   done
++  "$window_lease" hidden || true
+   /usr/local/lib/try-omarchy/battery-apply --offline || true
+   exec 3>&-
+   sleep 5
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/host-window b/guest/factory-overlay/usr/local/lib/try-omarchy/host-window
+new file mode 100755
+index 0000000..5530649
+--- /dev/null
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/host-window
+@@ -0,0 +1,27 @@
++#!/bin/bash
++# A renewable idle inhibitor, independent of the user's stay-awake preference.
++# /proc/uptime is monotonic across wall-clock synchronization and suspend.
++set -euo pipefail
++lease=${TRY_OMARCHY_WINDOW_LEASE:-/run/try-omarchy-host-window}
++uptime_file=${TRY_OMARCHY_UPTIME_FILE:-/proc/uptime}
++read -r uptime _ < "$uptime_file"
++now=${uptime%%.*}
++[[ $now =~ ^[0-9]{1,10}$ ]] || exit 1
++case ${1:-} in
++  visible)
++    umask 022
++    printf '%s\n' "$((10#$now + 20))" > "$lease.part"
++    mv -f -- "$lease.part" "$lease"
++    ;;
++  hidden) rm -f -- "$lease" "$lease.part" ;;
++  active)
++    expires=0
++    if [[ -f $lease ]]; then read -r expires < "$lease" || expires=0; fi
++    if [[ $expires =~ ^[0-9]{1,10}$ ]] && ((10#$expires > 10#$now && 10#$expires <= 10#$now + 20)); then
++      echo true
++    else
++      echo false
++    fi
++    ;;
++  *) exit 2 ;;
++esac
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/repair-host-window b/guest/factory-overlay/usr/local/lib/try-omarchy/repair-host-window
+new file mode 100755
+index 0000000..5f17558
+--- /dev/null
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/repair-host-window
+@@ -0,0 +1,14 @@
++#!/bin/bash
++# Repair only the pinned idle service shipped by earlier Try Omarchy images.
++# An Omarchy upgrade or a user's edit must never be replaced with an older file.
++set -euo pipefail
++path=/usr/share/omarchy/shell/plugins/services/idle/Service.qml
++replacement=/usr/share/try-omarchy/host-window-idle.qml
++[[ -f $path && -f $replacement && ! -L $path ]] || exit 0
++read -r digest _ < <(sha256sum "$path")
++case $digest in
++  50f5c81e2e94fab32395a5bc3cce982e30a10ab1b3f56cc58f29055951518a51|02512cc96ecb82005b82e947ed891549d1721cbefad14fdb2eca9ab50e88c9eb)
++    install -m 0644 "$replacement" "$path.try-omarchy"
++    mv -f -- "$path.try-omarchy" "$path"
++    ;;
++esac
+diff --git a/guest/patches/omarchy/host-window-idle.patch b/guest/patches/omarchy/host-window-idle.patch
+new file mode 100644
+index 0000000..378eed8
+--- /dev/null
++++ b/guest/patches/omarchy/host-window-idle.patch
+@@ -0,0 +1,53 @@
++--- a/shell/plugins/services/idle/Service.qml
+++++ b/shell/plugins/services/idle/Service.qml
++@@ -23,8 +23,41 @@
++   readonly property int firstIdleTimeoutSeconds: Math.min(screensaverTimeoutSeconds, lockTimeoutSeconds)
++   readonly property int screensaverDelaySeconds: Math.max(0, screensaverTimeoutSeconds - firstIdleTimeoutSeconds)
++   readonly property int lockDelaySeconds: Math.max(0, lockTimeoutSeconds - firstIdleTimeoutSeconds)
++-  readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake
+++  readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake && !hostWindowVisible
++   readonly property string screensaverClass: "org.omarchy.screensaver"
+++
+++  // A host lease never writes the user's persistent stay-awake indicator.
+++  property bool hostWindowVisible: false
+++  onHostWindowVisibleChanged: {
+++    if (hostWindowVisible) cancelIdleCycle("host-window-visible")
+++    else Qt.callLater(handleIdleChanged)
+++  }
+++  Timer {
+++    interval: 5000
+++    running: true
+++    repeat: true
+++    triggeredOnStart: true
+++    onTriggered: {
+++      if (!hostWindowProbe.running) hostWindowProbe.running = true
+++    }
+++  }
+++  Timer {
+++    id: hostWindowProbeExpiry
+++    interval: 10000
+++    onTriggered: root.hostWindowVisible = false
+++  }
+++  Process {
+++    id: hostWindowProbe
+++    command: ["/usr/local/lib/try-omarchy/host-window", "active"]
+++    stdout: SplitParser {
+++      onRead: function(line) {
+++        root.hostWindowVisible = String(line).trim() === "true"
+++        if (root.hostWindowVisible) hostWindowProbeExpiry.restart()
+++        else hostWindowProbeExpiry.stop()
+++      }
+++    }
+++    onExited: function(exitCode) { if (exitCode !== 0) root.hostWindowVisible = false }
+++  }
++ 
++   property bool stayAwake: false
++   property bool stayAwakeStateLoaded: false
++@@ -227,6 +260,7 @@
++     return JSON.stringify({
++       enabled: root.idleEnabled,
++       stayAwake: root.stayAwake,
+++      hostWindowVisible: root.hostWindowVisible,
++       stayAwakeStateLoaded: root.stayAwakeStateLoaded,
++       stayAwakeStatePath: root.stayAwakeStatePath,
++       idle: idleMonitor.isIdle,
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index fb91358..861fc26 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -72,7 +72,13 @@ version = subprocess.check_output(["pacman", "-Q", "try-omarchy-runtime"], text=
+ (root / "manifest.json").write_text(json.dumps({"schema": 1, "runtimeVersion": version, "files": files}, sort_keys=True) + "\n")
+ UPDATE_MANIFEST
+ 
++# Carry the exact patched idle service for a digest-gated repair on old disks.
++install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/share/try-omarchy/host-window-idle.qml
++
+ compat_paths=(
++  usr/share/try-omarchy/host-window-idle.qml
++  usr/local/lib/try-omarchy/repair-host-window
++  usr/local/lib/try-omarchy/host-window
+   usr/local/lib/try-omarchy/vulkan-env
+   usr/share/uwsm/env.d/20-try-omarchy-vulkan
+   etc/profile.d/try-omarchy-vulkan.sh
+@@ -198,7 +204,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 39 hardens the Windows Hello broker and 1Password agent, checks the
+ # drop overlay is mapped before dragging, and records reload modes per display.
+ # Revision 40 lets a Linux launcher ask for CPU presentation of Vulkan windows.
+-compat_revision=40
++# Revision 41 adds a temporary host-window idle lease.
++compat_revision=41
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/spec.json b/guest/spec.json
+index 7544f61..a028dcb 100644
+--- a/guest/spec.json
++++ b/guest/spec.json
+@@ -138,6 +138,20 @@
+             "afterSha256": "02512cc96ecb82005b82e947ed891549d1721cbefad14fdb2eca9ab50e88c9eb"
+           }
+         ]
++      },
++      {
++        "id": "host-window-idle",
++        "description": "Guest integration: temporarily inhibit automatic idle while the host window lease is active.",
++        "reference": "guest/factory-overlay/usr/local/lib/try-omarchy/host-window",
++        "patch": "patches/omarchy/host-window-idle.patch",
++        "patchSha256": "faa26f4c7acd4043faf08a808e554d3745510287afa32f4467c077bdc4e70efa",
++        "targets": [
++          {
++            "path": "shell/plugins/services/idle/Service.qml",
++            "beforeSha256": "02512cc96ecb82005b82e947ed891549d1721cbefad14fdb2eca9ab50e88c9eb",
++            "afterSha256": "815579bfb4ed4d0d87587927d8d10cb018cc055e2cafe4919d97427750e4f242"
++          }
++        ]
+       }
+     ],
+     "requiredPaths": [
+diff --git a/guest/tests/test_host_window.py b/guest/tests/test_host_window.py
+new file mode 100644
+index 0000000..744dfed
+--- /dev/null
++++ b/guest/tests/test_host_window.py
+@@ -0,0 +1,30 @@
++import os
++from pathlib import Path
++import subprocess
++import tempfile
++import unittest
++
++HELPER = Path(__file__).resolve().parents[1] / 'factory-overlay/usr/local/lib/try-omarchy/host-window'
++AGENT = HELPER.with_name('agent')
++
++class HostWindowTest(unittest.TestCase):
++    def test_lease_expiry_release_and_invalid_input(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            lease, uptime = root / 'lease', root / 'uptime'
++            env = dict(os.environ, TRY_OMARCHY_WINDOW_LEASE=str(lease), TRY_OMARCHY_UPTIME_FILE=str(uptime), TRY_OMARCHY_WINDOW_HELPER=str(HELPER))
++            def active(at):
++                uptime.write_text(f'{at}.00 0.00\n')
++                return subprocess.check_output([str(HELPER), 'active'], env=env, text=True).strip()
++            self.assertEqual(active(100), 'false')
++            subprocess.run([str(AGENT), '--handle'], input='host-window visible\n', text=True, env=env, check=True)
++            self.assertEqual(active(119), 'true')
++            self.assertEqual(active(120), 'false')
++            self.assertEqual(active(90), 'false')
++            for invalid in ['garbage', '-1', '99999999999999', '1+1000', '9999999999']:
++                lease.write_text(invalid + '\n')
++                self.assertEqual(active(100), 'false')
++            subprocess.run([str(AGENT), '--handle'], input='host-window visible\nhost-window hidden\n', text=True, env=env, check=True)
++            self.assertFalse(lease.exists())
++            subprocess.run([str(AGENT), '--handle'], input='host-window visible; touch BAD\n', text=True, env=env, check=True)
++            self.assertFalse(lease.exists())
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index a8e7ed7..11c28e4 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -66,8 +66,8 @@ def main() -> None:
+     backports = authenticity["backports"]
+     check(
+         [backport.get("id") for backport in backports]
+-        == ["notification-hover-close", "notification-screen-privacy"],
+-        "Omarchy notification backports are explicitly ordered and identified",
++        == ["notification-hover-close", "notification-screen-privacy", "host-window-idle"],
++        "Omarchy patches are explicitly ordered and identified",
+     )
+     for backport in backports:
+         patch_path = GUEST / backport["patch"]
+@@ -78,10 +78,12 @@ def main() -> None:
+             f"backport patch digest matches: {backport['id']}",
+         )
+         check(
+-            backport.get("reference", "").startswith(
++            (backport["id"] == "host-window-idle"
++             and backport.get("reference") == "guest/factory-overlay/usr/local/lib/try-omarchy/host-window")
++            or backport.get("reference", "").startswith(
+                 "https://github.com/basecamp/omarchy/"
+             ),
+-            f"backport has an upstream review reference: {backport['id']}",
++            f"patch has an upstream or guest integration reference: {backport['id']}",
+         )
+         for target in backport["targets"]:
+             digests = (target.get("beforeSha256", ""), target.get("afterSha256", ""))
+@@ -278,7 +280,7 @@ def main() -> None:
+     finalize_rootfs = read(GUEST / "scripts/finalize-rootfs.sh")
+     compat_paths = finalize_rootfs.split("compat_paths=(", 1)[1].split(")", 1)[0]
+     check(
+-        "compat_revision=40" in finalize_rootfs
++        "compat_revision=41" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/catch-up" in compat_paths
+         and "usr/local/bin/omarchy-native-display-sync" in compat_paths
+         and "usr/local/bin/omarchy-windows-audio-bridge" in compat_paths
+-- 
+2.55.0
+

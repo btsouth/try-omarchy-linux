@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -19,6 +20,41 @@ import (
 // Try Omarchy for Linux. It prepares the guest the same way the Windows
 // launcher does and runs it with KVM in QEMU's SDL window. A separate GTK
 // process shows setup progress; the launcher itself remains cgo-free.
+
+// failLinuxSetup reports a setup failure in plain words with a Try again that
+// restarts setup from what is on disk: downloads continue where they stopped.
+func failLinuxSetup(err error, dir string) {
+	if setupCancelled() || errors.Is(err, errSetupCancelled) {
+		fatal("%v", err)
+	}
+	logf("FATAL setup failed: %v", err)
+	fmt.Fprintf(os.Stderr, "%s: setup failed: %v\n", appTitle, err)
+	if getUI().showFailure(classifyLinuxSetupFailure(err, dir)) {
+		getUI().finish()
+		relaunchLinuxSelf()
+	}
+	getUI().finish()
+	os.Exit(1)
+}
+
+const linuxRetryEnv = "TRY_OMARCHY_RETRY"
+
+// relaunchLinuxSelf starts setup again in this process. Everything that
+// mattered was saved on disk (the location, the account choice, partial
+// downloads), so the new run skips the questions and picks up where this one
+// stopped. It returns only if the program cannot be started.
+func relaunchLinuxSelf() {
+	exe, err := os.Executable()
+	if err != nil {
+		logf("retry: %v", err)
+		return
+	}
+	os.Setenv(linuxRetryEnv, "1")
+	logf("retrying setup")
+	if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
+		logf("retry: %v", err)
+	}
+}
 
 func fatal(format string, a ...any) {
 	if setupCancelled() {
@@ -79,6 +115,12 @@ func main() {
 	startDirect := flag.Bool("start", false, "start Omarchy without the launcher home")
 	showLauncher := flag.Bool("launcher", false, "show the launcher home even with other options")
 	flag.Parse()
+	if os.Getenv(linuxRetryEnv) != "" {
+		// A retry continues the setup the person already chose.
+		os.Unsetenv(linuxRetryEnv)
+		*startDirect = true
+		linuxQuickSetup.Store(true)
+	}
 	explicitFlags := map[string]bool{}
 	flag.Visit(func(f *flag.Flag) { explicitFlags[f.Name] = true })
 	configureSetupCancellation(false)
@@ -276,8 +318,8 @@ func main() {
 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
 		fatal("Could not restore the previous Omarchy image after an interrupted update: %v", err)
 	}
-	if err := ensureGuest(cfg, selectedRelease, selectedSumsSHA256); err != nil {
-		fatal("Setting up the Omarchy image failed: %v\n\n%s", err, linuxSetupFailureHelp(err))
+	if err := ensureLinuxGuest(cfg, selectedRelease, selectedSumsSHA256); err != nil {
+		failLinuxSetup(err, cfg.dir)
 	}
 	specData, err := os.ReadFile(filepath.Join(cfg.guestDir, "build-spec.json"))
 	if err != nil {
@@ -314,7 +356,7 @@ func main() {
 	}
 
 	if err := prepareDisk(cfg, spec.Runtime.Storage.ExpandedSizeMiB); err != nil {
-		fatal("Preparing the writable disk failed: %v\n\n%s", err, linuxSetupFailureHelp(err))
+		failLinuxSetup(err, cfg.dir)
 	}
 
 	profile := effectiveResourceProfile(resourcePrefs.Profile, cfg.cpuOverride, cfg.memOverrideMiB)

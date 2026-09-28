@@ -4,34 +4,72 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 )
 
-func linuxSetupFailureHelp(err error) string {
-	if errors.Is(err, errInsufficientDiskSpace) || isDiskFull(err) {
-		return "Free space in the selected storage folder, then launch again. Your existing virtual machine was kept."
+// linuxFailure is a setup failure in words: what happened, what to do, and
+// whether trying again can help. The raw error stays in the log.
+type linuxFailure struct {
+	Title, Message, Help string
+	Retry                bool
+}
+
+const linuxKeptNote = "What you have downloaded so far is kept."
+
+// linuxDataFolder names the folder a failure is about. Errors mention the
+// guest or VM subfolder they were working in.
+func linuxDataFolder(path string) string {
+	path = filepath.Clean(path)
+	if base := filepath.Base(path); base == "guest" || base == "vm" || base == "guest.next" {
+		path = filepath.Dir(path)
 	}
-	if errors.Is(err, os.ErrPermission) {
-		return "Check that Try Omarchy can access the selected storage or shared folder, then try again."
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return "Reconnect the drive or choose an available folder, then try again."
+	return linuxDisplayPath(path)
+}
+
+func classifyLinuxSetupFailure(err error, dir string) linuxFailure {
+	where := linuxDisplayPath(dir)
+	var space *insufficientSpaceError
+	switch {
+	case errors.As(err, &space):
+		return linuxFailure{Title: "Not enough space", Retry: true, Help: "space",
+			Message: fmt.Sprintf("This step needs %s of free space in %s, and only %s is available. Free some space, then try again. %s", linuxGB(space.need), linuxDataFolder(space.path), linuxGB(space.have), linuxKeptNote)}
+	case errors.Is(err, errInsufficientDiskSpace) || isDiskFull(err):
+		return linuxFailure{Title: "The drive is full", Retry: true, Help: "space",
+			Message: "The drive filled up while setting up Omarchy in " + where + ". Free some space, then try again. " + linuxKeptNote}
+	case errors.Is(err, os.ErrPermission):
+		return linuxFailure{Title: "Try Omarchy cannot use that folder", Retry: true, Help: "storage",
+			Message: "Try Omarchy is not allowed to write to " + where + ". Fix the folder's permissions, then try again."}
+	case errors.Is(err, os.ErrNotExist):
+		return linuxFailure{Title: "Storage is not available", Retry: true, Help: "storage",
+			Message: where + " cannot be reached. If it is on a drive, reconnect it, then try again."}
 	}
 	var urlErr *url.Error
 	var netErr *net.OpError
 	var dnsErr *net.DNSError
-	if errors.As(err, &urlErr) || errors.As(err, &netErr) || errors.As(err, &dnsErr) {
-		return "The Omarchy image source could not be reached. Check the connection and try again."
-	}
 	message := strings.ToLower(err.Error())
-	if strings.Contains(message, "checksum mismatch") || strings.Contains(message, "authentication failed") {
-		return "The image failed verification. Leave it unused and retry the download from a trusted source."
+	switch {
+	case strings.Contains(message, "checksum mismatch") || strings.Contains(message, "authentication failed") || strings.Contains(message, "does not match"):
+		return linuxFailure{Title: "The download did not verify", Retry: true, Help: "downloads",
+			Message: "Try Omarchy checks every file it downloads. This one did not match what was published, so it was not used. Try again to download it fresh. If it keeps failing, see the help page."}
+	case strings.Contains(message, "http 404"):
+		return linuxFailure{Title: "Omarchy could not be found", Retry: true, Help: "downloads",
+			Message: "The Omarchy files for this version are not on the server. Try again later, and check for an app update."}
+	case errors.As(err, &urlErr) || errors.As(err, &netErr) || errors.As(err, &dnsErr) || errors.Is(err, syscall.ECONNRESET) || strings.Contains(message, "download stalled") || strings.Contains(message, "download failed after"):
+		return linuxFailure{Title: "Could not download Omarchy", Retry: true, Help: "downloads",
+			Message: "Check your internet connection, then try again. What has been downloaded is kept, so it continues where it stopped."}
 	}
-	if strings.Contains(message, "http 404") {
-		return "The configured Omarchy image is unavailable. Check the image source before trying again."
-	}
-	return "Try again. If the problem continues, keep the data folder and review its diagnostics."
+	return linuxFailure{Title: "Setting up Omarchy failed", Retry: true,
+		Message: "Something went wrong. Nothing you had was changed. Try again. If it keeps happening, see the help page.\n\n" + err.Error()}
+}
+
+// The launcher's own last words on the terminal and in the log, for people who
+// run it there or send diagnostics.
+func linuxSetupFailureHelp(err error) string {
+	return classifyLinuxSetupFailure(err, ".").Message
 }

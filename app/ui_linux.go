@@ -19,6 +19,8 @@ type progressUI struct {
 	state       linuxSetupState
 	lastUpdate  time.Time
 	booting     bool
+	stage       linuxStage
+	updating    bool
 }
 
 var linuxUI = newLinuxProgressUI()
@@ -40,11 +42,20 @@ func (u *progressUI) setStatus(format string, a ...any) {
 		u.midLine = false
 	}
 	u.lastPercent = -1
-	u.state = linuxSetupState{Status: msg, Booting: u.booting}
+	text, stage := linuxFriendlyStatus(msg, u.updating)
+	u.stage = stage
+	u.state = linuxSetupState{Status: text, Booting: u.booting}
 	if u.window != nil {
 		u.window.update(u.state)
 	}
 	fmt.Fprintln(os.Stderr, msg)
+}
+
+// setUpdating names the guest download an update, so its steps say so.
+func (u *progressUI) setUpdating(updating bool) {
+	u.mu.Lock()
+	u.updating = updating
+	u.mu.Unlock()
 }
 
 func (u *progressUI) setBooting(booting bool) {
@@ -64,7 +75,12 @@ func (u *progressUI) setProgress(current, total int64) {
 	percent := min(current*100/total, 100)
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.state.Current, u.state.Total = current, total
+	// Small preparation steps finish in moments; a bar filling for each one
+	// says nothing about how far along setup is.
+	if u.stage != stagePrepare {
+		u.state.Current, u.state.Total = current, total
+		u.state.Detail = linuxProgressDetail(u.stage, current, total)
+	}
 	if u.window != nil && (time.Since(u.lastUpdate) >= 100*time.Millisecond || current >= total) {
 		u.window.update(u.state)
 		u.lastUpdate = time.Now()
@@ -116,6 +132,24 @@ func (u *progressUI) showError(message string) {
 		}
 	}
 	u.finish()
+}
+
+// showFailure puts a setup failure on the window and waits for the answer.
+// It reports whether the person asked to try again. Without a window it only
+// reports the failure on the terminal.
+func (u *progressUI) showFailure(f linuxFailure) (retry bool) {
+	u.mu.Lock()
+	w := u.window
+	u.mu.Unlock()
+	if w == nil {
+		return false
+	}
+	state := linuxSetupState{Prompt: "error", ErrorTitle: f.Title, Status: f.Message, CanRetry: f.Retry}
+	if f.Help != "" || f.Title != "" {
+		state.HelpURL = linuxHelpURL(f.Help)
+	}
+	answer, err := w.ask(setupContext(), state)
+	return err == nil && answer == "retry"
 }
 
 // A slow desktop is a visible problem, but QEMU may still be usable. Keep the

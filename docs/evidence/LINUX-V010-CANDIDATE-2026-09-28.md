@@ -78,15 +78,37 @@ it waited in the queue and appeared when the notice closed. Following its
 advice, Settings then Software rendering booted the same disk to a normal
 [desktop](linux-v010/software-recovery.jpg).
 
-The first boot of that disk on the new image rendered normally, and the same
-disk rendered on GPU four times earlier on the old image. Fresh trial disks
-rendered on all four GPU boots, two from the mirror and two from GitHub. The Hyprland configuration files match between the
-two disks, and the shell logged no distinguishing warnings. The cause is not
-found. This test VM has no host GPU, so QEMU's virgl renders with software GL.
+The first boot of that disk on the new image rendered normally, and fresh
+trial disks rendered on all four GPU boots, so the failure was intermittent
+rather than tied to one image or disk.
+
+### Cause and fix
+
+Restarting only the Omarchy shell in a black guest drew the wallpaper
+normally, so no file on the disk was broken. The guest kernel logged
+`response 0x1200 (command 0x106)`, a rejected `RESOURCE_ATTACH_BACKING`. With
+QEMU guest-error logging enabled, a failing boot recorded
+`virtio_gpu_create_mapping_iov: nr_entries is too big (19715 > 16384)`. The
+6016x3384 wallpaper texture is about 81 MB. When guest memory is fragmented,
+its backing needs more page runs than QEMU's fixed limit of 16384, QEMU
+rejects the backing, and the shell draws into an unbacked resource. Phase
+10K's black surface logged the same guest error.
+
+Two changes address it. Linux QEMU now accepts up to 262144 entries, 1 GiB of
+4 KiB pages, through `runtime-build/linux/patches/qemu/0106-allow-larger-virtio-gpu-backing-lists.patch`.
+The Linux launcher also passes `-d guest_errors`, so such rejections reach the
+VM's `qemu.log`. Before the patch, the affected disk was black on 5 of 7 GPU
+boots. With the patched Flatpak (OSTree `266385f34805cb255f5ceda1b0e80fdbd79ca0764270c3ada6f9e57b57ffa4af`)
+it rendered on 8 of 8 GPU boots with no virgl errors and an empty
+`qemu.log` ([screenshot](linux-v010/black-surface-fixed.jpg)). The personal
+file kept its hash. This VM has no host GPU; QEMU rendered with software GL.
+
+The Windows runtime's QEMU fork has the same limit and may need the same
+change.
 
 ## Not tested
 
-- The black surface on a real GPU, and its cause.
+- The fixed QEMU on a real GPU.
 - Guest image rollback after a genuinely broken image; the rollback here
   followed an update that had booted but was never confirmed.
 - A personal-account fresh install, and other desktops.

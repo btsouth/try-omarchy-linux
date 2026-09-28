@@ -247,9 +247,10 @@ Before the first release:
 1. Done 2026-09-28: the guest is published as the `linux-v0.1.0` pre-release,
    and a fresh install with no flags downloaded it from GitHub and reached the
    desktop. See the [v0.1.0 report](evidence/LINUX-V010-CANDIDATE-2026-09-28.md).
-2. Find the cause of the black GPU desktop. It reproduced on every GPU boot of
-   an upgraded personal disk, but not on a fresh trial disk, and Software
-   rendering recovers it. Check it on real GPUs.
+2. Done 2026-09-28: the black GPU desktop came from QEMU rejecting the
+   wallpaper texture's backing on fragmented guest memory. The Linux QEMU now
+   accepts larger backing lists; an affected disk went from 5 of 7 black boots
+   to 8 of 8 good ones. Confirm on real GPUs during the hardware pass.
 3. Add a `releases` entry to the metainfo. The Flathub linter passes the
    manifest; the metainfo only lacks release information. GNOME Platform 51
    is available and needs its own rebuild and test pass.

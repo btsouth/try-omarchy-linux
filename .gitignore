@@ -16,3 +16,6 @@ __pycache__/
 /release/
 /bridge-metadata/
 /release-notes.md
+
+# Local Flatpak bundles kept beside Linux evidence
+docs/evidence/**/*.flatpak

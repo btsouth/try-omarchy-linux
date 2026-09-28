@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -329,6 +330,9 @@ func TestVMRestoreBudgetsCompressedSizeAndRestampsReceipts(t *testing.T) {
 }
 
 func TestVMBackupRejectsDiskChangedWhileReading(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows backups open the disk without write sharing, so no writer can change it")
+	}
 	dir, archive := backupFixture(t)
 	disk := filepath.Join(dir, "vm", "disk.raw")
 	changed := false

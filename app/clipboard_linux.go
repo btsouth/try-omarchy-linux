@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -263,9 +264,21 @@ func runLinuxClipboardBridge() func() {
 		}
 		names = []string{"xclip"}
 	} else if linuxGNOMEWayland() {
-		portal, err := linuxPortalClipboardSession(c)
-		if err != nil {
-			setLinuxClipboardStatus("GNOME did not grant clipboard access. Restart Omarchy to request access again. File drops remain available.", true)
+		var ask func(linuxSetupState) (string, error)
+		if getUI().window != nil {
+			ask = func(state linuxSetupState) (string, error) { return getUI().window.ask(setupContext(), state) }
+		}
+		if !linuxClipboardConsent(ask) {
+			setLinuxClipboardStatus(linuxClipboardOffMessage, false)
+			logf("clipboard: sharing is off; file drops remain available")
+			supported = false
+		} else if portal, err := linuxPortalClipboardSession(c); err != nil {
+			rememberLinuxClipboardDenial(err)
+			message := "GNOME did not allow clipboard sharing, so it is off. " + linuxClipboardHowToTurnOn
+			if !errors.Is(err, errLinuxClipboardDenied) {
+				message = "GNOME did not answer the clipboard request in time, so sharing is off for this session. Quit Omarchy and start it again to be asked once more. You can still drop files on its window."
+			}
+			setLinuxClipboardStatus(message, true)
 			logf("clipboard: GNOME portal: %v", err)
 			supported = false
 		} else {

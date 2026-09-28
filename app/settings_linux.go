@@ -36,6 +36,9 @@ type linuxSettingsForm struct {
 	Share              string             `json:"share"`
 	ShareEnabled       bool               `json:"shareEnabled"`
 	CPUMax             int                `json:"cpuMax"`
+	// Only shown on GNOME Wayland, where clipboard sharing needs a permission.
+	ClipboardShare     bool `json:"clipboardShare"`
+	ClipboardAvailable bool `json:"clipboardAvailable"`
 }
 
 var linuxSettingsOpen atomic.Bool
@@ -87,7 +90,8 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	}
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
-	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs))}
+	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
+	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
 		form.Render = "auto"
 	}
@@ -97,9 +101,6 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	}
 	if audioListErr != nil {
 		status += " Audio devices could not be listed. System default remains available."
-	}
-	if linuxGNOMEWayland() {
-		status += " Clipboard sync asks GNOME for pointer and clipboard permission. Try Omarchy never sends pointer events; you can decline and still drop files."
 	}
 	for {
 		value, err := w.ask(ctx, linuxSetupState{Prompt: "settings", Status: status, Settings: form})
@@ -196,6 +197,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				err = saveLinuxExperiencePreferences(dir, nextExperience)
 				if err == nil {
 					experience = nextExperience
+				}
+			}
+			if err == nil && form.ClipboardAvailable && form.ClipboardShare != clipboardShared {
+				err = setLinuxClipboardSharing(form.ClipboardShare)
+				if err == nil {
+					clipboardShared = form.ClipboardShare
 				}
 			}
 			if err == nil && form.StartAutomatically != launch.StartAutomatically {

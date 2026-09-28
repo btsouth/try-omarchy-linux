@@ -94,6 +94,10 @@ func saveLinuxClipboardRestoreToken(token string) error {
 	return os.Rename(f.Name(), path)
 }
 
+// errLinuxClipboardDenied is the person's own "no", in GNOME's dialog or by
+// leaving Share off. A timeout or a portal failure is not this error.
+var errLinuxClipboardDenied = errors.New("desktop did not grant clipboard access")
+
 func linuxPortalRequest(ctx context.Context, conn *dbus.Conn, signals <-chan *dbus.Signal, method string, args ...any) (map[string]dbus.Variant, error) {
 	var path dbus.ObjectPath
 	if err := conn.Object(linuxPortalDesktop, linuxPortalObject).CallWithContext(ctx, method, 0, args...).Store(&path); err != nil {
@@ -117,7 +121,7 @@ func linuxPortalRequest(ctx context.Context, conn *dbus.Conn, signals <-chan *db
 				return nil, errors.New("invalid portal response")
 			}
 			if code != 0 {
-				return nil, errors.New("clipboard access was not granted")
+				return nil, fmt.Errorf("%w (the request was declined)", errLinuxClipboardDenied)
 			}
 			return results, nil
 		}
@@ -181,7 +185,7 @@ func linuxPortalClipboardSession(c *linuxClipboard) (*linuxPortalClipboard, erro
 	}
 	enabled, ok := results["clipboard_enabled"]
 	if !ok || enabled.Value() != true {
-		return nil, errors.New("desktop did not grant clipboard access")
+		return nil, errLinuxClipboardDenied
 	}
 	if value, ok := results["restore_token"]; ok {
 		if token, valid := value.Value().(string); valid && token != "" {

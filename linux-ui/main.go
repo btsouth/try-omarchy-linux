@@ -85,6 +85,8 @@ type settingsForm struct {
 	Share              string        `json:"share"`
 	ShareEnabled       bool          `json:"shareEnabled"`
 	CPUMax             int           `json:"cpuMax"`
+	ClipboardShare     bool          `json:"clipboardShare"`
+	ClipboardAvailable bool          `json:"clipboardAvailable"`
 }
 
 type audioDevice struct {
@@ -373,6 +375,12 @@ func main() {
 		audioHelp.SetWrap(true)
 		audioHelp.SetHAlign(gtk.AlignStart)
 		form.Append(audioHelp)
+		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
+		form.Append(clipboardShare)
+		clipboardHelp := gtk.NewLabel("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
+		clipboardHelp.SetWrap(true)
+		clipboardHelp.SetHAlign(gtk.AlignStart)
+		form.Append(clipboardHelp)
 		formLabel("Network and SSH")
 		sshEnabled := gtk.NewCheckButtonWithLabel("Allow SSH from this computer")
 		form.Append(sshEnabled)
@@ -647,7 +655,7 @@ func main() {
 				}
 				forwardStart, forwardEnd := forwards.Buffer().Bounds()
 				forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-				data, _ := json.Marshal(settingsForm{Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax})
+				data, _ := json.Marshal(settingsForm{Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
 				reply(string(data))
 			}
 		})
@@ -912,6 +920,9 @@ func main() {
 							audioInputNames = inputNames
 							audioInput.SetModel(gtk.NewStringList(inputLabels))
 							audioInput.SetSelected(inputIndex)
+							clipboardShare.SetActive(next.Settings.ClipboardShare)
+							clipboardShare.SetVisible(next.Settings.ClipboardAvailable)
+							clipboardHelp.SetVisible(next.Settings.ClipboardAvailable)
 							share.SetText(next.Settings.Share)
 							shareEnabled.SetActive(next.Settings.ShareEnabled)
 						}

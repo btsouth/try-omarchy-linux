@@ -99,6 +99,27 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 			form.ShareEnabled = true
 			data, _ := json.Marshal(form)
 			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: string(data)})
+		case "settings-clipboard-off", "settings-clipboard-on", "settings-clipboard-hidden":
+			form := *state.Settings
+			switch mode {
+			case "settings-clipboard-off":
+				if !form.ClipboardAvailable || !form.ClipboardShare {
+					os.Exit(3)
+				}
+				form.ClipboardShare = false
+			case "settings-clipboard-on":
+				if !form.ClipboardAvailable || form.ClipboardShare {
+					os.Exit(3)
+				}
+				form.ClipboardShare = true
+			default:
+				if form.ClipboardAvailable {
+					os.Exit(3)
+				}
+				form.ClipboardShare = false
+			}
+			data, _ := json.Marshal(form)
+			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: string(data)})
 		case "settings-phase9-save", "settings-phase9-reload":
 			if state.Prompt != "settings" || state.Settings == nil || state.Settings.Fullscreen != (mode == "settings-phase9-reload") || state.Settings.Microphone != (mode == "settings-phase9-save") {
 				os.Exit(3)

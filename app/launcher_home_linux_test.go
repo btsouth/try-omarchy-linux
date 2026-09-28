@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -421,5 +422,34 @@ func TestLinuxPrebootSettingsKeepLocationChoice(t *testing.T) {
 	}
 	if pointer, found, err := loadDataLocationPointer(defaultDir); err != nil || !found || pointer != selectedDir {
 		t.Fatalf("pointer: %q %t %v", pointer, found, err)
+	}
+}
+
+// The home loop itself must send the buttons: the window draws only what it is
+// given, so a state without them is a home nobody can leave except by closing.
+func TestTheHomeLoopSendsTheButtonsItDecided(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "states.jsonl")
+	t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	defaultDir := filepath.Join(t.TempDir(), "try-omarchy")
+	if runLinuxHome(linuxScriptedWindow(t, "close"), defaultDir, "", false) {
+		t.Fatal("closing the home must not launch")
+	}
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent linuxSetupState
+	if err := json.Unmarshal(bytes.SplitN(data, []byte("\n"), 2)[0], &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent.Prompt != "home" || len(sent.Actions) == 0 || len(sent.Menu) == 0 {
+		t.Fatalf("home sent without its buttons: %+v", sent)
+	}
+	bare := sent
+	bare.Actions, bare.Menu, bare.Request = nil, nil, 0
+	actions, menu := linuxHomeActions(bare)
+	if !reflect.DeepEqual(sent.Actions, actions) || !reflect.DeepEqual(sent.Menu, menu) {
+		t.Fatalf("sent %+v / %+v, decided %+v / %+v", sent.Actions, sent.Menu, actions, menu)
 	}
 }

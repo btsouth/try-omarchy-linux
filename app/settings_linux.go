@@ -365,6 +365,12 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 		return true
 	}
 	defer w.stop()
+	return runLinuxHome(w, defaultDir, requestedDir, explicitDir)
+}
+
+// runLinuxHome shows the home until the person launches or closes it, and
+// reports whether to launch.
+func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicitDir bool) bool {
 	status := ""
 	for {
 		state, dir := linuxHomeState(defaultDir)
@@ -393,6 +399,8 @@ func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
 				ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
 			}
 		}
+		// The window draws exactly the buttons decided here.
+		state.Actions, state.Menu = linuxHomeActions(state)
 		answer, err := w.ask(ctx, state)
 		cancel()
 		if errors.Is(err, context.DeadlineExceeded) {

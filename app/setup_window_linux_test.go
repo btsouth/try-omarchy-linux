@@ -29,6 +29,13 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 		if json.Unmarshal(scanner.Bytes(), &state) != nil {
 			os.Exit(2)
 		}
+		// Tests that check what the window was sent read this record.
+		if record := os.Getenv("TRY_OMARCHY_STATE_RECORD"); record != "" && state.Request != 0 {
+			if f, err := os.OpenFile(record, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+				f.Write(append(append([]byte(nil), scanner.Bytes()...), '\n'))
+				f.Close()
+			}
+		}
 		switch mode {
 		case "linux-recovery-script":
 			if state.Request == 0 {

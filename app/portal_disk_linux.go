@@ -15,6 +15,7 @@ import (
 func linuxQemuArgs(cfg *config, args []string) []string {
 	args = linuxGraphicsArgs(args, linuxVenusEnabled, linuxHonorGuestPAT)
 	args = linuxAudioArgs(cfg, args)
+	args = linuxWithoutWindowsHello(args)
 	if !linuxDocumentPortalDisk(cfg.disk, os.Getuid()) {
 		return args
 	}

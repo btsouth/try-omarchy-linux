@@ -244,11 +244,9 @@ disposable GNOME VM. CI passes, including native Windows tests.
 
 Before the first release:
 
-1. Publish the built guest as the `linux-v0.1.0` release. The app already pins
-   its URL and `SHA256SUMS` digest; the [v0.1.0 rehearsal](evidence/LINUX-V010-CANDIDATE-2026-09-28.md)
-   passed a fresh install, an upgrade from revision 39, rollback of an
-   unconfirmed update and confirmation of a good one against a local mirror.
-   Then repeat the fresh install against GitHub itself.
+1. Done 2026-09-28: the guest is published as the `linux-v0.1.0` pre-release,
+   and a fresh install with no flags downloaded it from GitHub and reached the
+   desktop. See the [v0.1.0 report](evidence/LINUX-V010-CANDIDATE-2026-09-28.md).
 2. Find the cause of the black GPU desktop. It reproduced on every GPU boot of
    an upgraded personal disk, but not on a fresh trial disk, and Software
    rendering recovers it. Check it on real GPUs.

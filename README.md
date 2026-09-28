@@ -18,7 +18,7 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 
 ## Status
 
-The Linux app works end to end in private testing but has no public release yet. The launcher downloads its guest image from this repository's `linux-v0.1.0` release, which is not published yet, so a build from this repository cannot complete setup until it is. After that release, the app goes to Flathub.
+The Linux app works end to end in testing but has no public release yet. The guest image it downloads on first run is published as the [linux-v0.1.0 pre-release](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-v0.1.0), so a build from this repository completes setup. The app itself will be published on Flathub.
 
 What is left before that release is tracked in the [release gates](docs/LINUX-RELEASE-GATES.md). The main items are guest updates and rollback, reset and move in the app, the public guest download, and testing across more desktops and hardware.
 

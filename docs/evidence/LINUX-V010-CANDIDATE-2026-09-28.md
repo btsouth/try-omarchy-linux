@@ -1,7 +1,8 @@
 # Linux v0.1.0 guest and release rehearsal
 
-Observed 2026-09-28 in a disposable Ubuntu GNOME VM on devbox. Nothing was
-uploaded or released. The guest release URL is pinned but not published yet.
+Observed 2026-09-28 in a disposable Ubuntu GNOME VM on devbox. The guest was
+then published as the [linux-v0.1.0 pre-release](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-v0.1.0).
+The app itself is not released.
 
 ## Exact identities
 
@@ -54,6 +55,17 @@ as GitHub releases, over loopback.
 - **Version.** The app now reports its own version, v0.1.0, instead of the
   Windows launcher's, and reads `linux-vX.Y.Z` release tags.
 
+## Published release
+
+The nine assets were uploaded to a draft and published as a pre-release on tag
+`linux-v0.1.0` at `6a1e646`. An anonymous download of `SHA256SUMS` from the
+pinned URL hashed to the pinned digest, and the sampled assets matched. With
+no flags, a fresh default-location trial install downloaded the guest from
+GitHub in about 80 seconds, verified it and reached the
+[desktop](linux-v010/github-install.jpg); its install receipt records the
+GitHub URL and pinned digest. A returning launch downloaded nothing and
+rendered on GPU with no virgl errors.
+
 ## Real black guest surface
 
 After the upgrade, every GPU boot of that personal disk showed a black
@@ -67,15 +79,13 @@ advice, Settings then Software rendering booted the same disk to a normal
 [desktop](linux-v010/software-recovery.jpg).
 
 The first boot of that disk on the new image rendered normally, and the same
-disk rendered on GPU four times earlier on the old image. The fresh trial disk
-rendered on both GPU boots. The Hyprland configuration files match between the
+disk rendered on GPU four times earlier on the old image. Fresh trial disks
+rendered on all four GPU boots, two from the mirror and two from GitHub. The Hyprland configuration files match between the
 two disks, and the shell logged no distinguishing warnings. The cause is not
 found. This test VM has no host GPU, so QEMU's virgl renders with software GL.
 
 ## Not tested
 
-- Publishing the release and downloading from GitHub. The default pin points
-  at a release that does not exist yet.
 - The black surface on a real GPU, and its cause.
 - Guest image rollback after a genuinely broken image; the rollback here
   followed an update that had booted but was never confirmed.

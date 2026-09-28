@@ -253,6 +253,9 @@ func main() {
 		logf("rendering: %s", reason)
 	}
 
+	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
+		fatal("Could not restore the previous Omarchy image after an interrupted update: %v", err)
+	}
 	if err := ensureGuest(cfg, selectedRelease, selectedSumsSHA256); err != nil {
 		fatal("Setting up the Omarchy image failed: %v\n\n%s", err, linuxSetupFailureHelp(err))
 	}

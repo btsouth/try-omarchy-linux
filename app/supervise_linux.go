@@ -197,8 +197,13 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 	shutdownRetry := time.NewTicker(linuxShutdownRetryInterval)
 	defer shutdownRetry.Stop()
 	graphicsWarningShown := false
+	imageConfirmed := false
 	defer func() { visibility.visible = false; sendLinuxVisibility(visibility) }()
 	for {
+		if !imageConfirmed && guestReady.Load() {
+			commitGuestPayloadUpdate(cfg.dir)
+			imageConfirmed = true
+		}
 		if desktopTimedOut && desktopReady.Load() {
 			logf("guest desktop appeared after startup timeout")
 			getUI().finish()

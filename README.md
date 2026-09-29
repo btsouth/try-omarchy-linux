@@ -1,36 +1,71 @@
 <p align="center">
-  <img src="app/OmarchyIcon.svg" width="88" height="88" alt="Try Omarchy icon">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/try-omarchy-linux-hero.png">
+    <img src="docs/images/try-omarchy-linux.gif" width="960" alt="Try Omarchy for Linux. The full Omarchy desktop, in a window.">
+  </picture>
 </p>
 
 <h1 align="center">Try Omarchy for Linux</h1>
 
 <p align="center">The full Omarchy desktop, running in a window on your Linux PC.</p>
 
-<p align="center">Preview 2 · Hardware testing in progress · Flathub listing planned</p>
+<p align="center">
+  <strong><a href="https://github.com/btsouth/try-omarchy-linux/releases">Download the Linux preview</a></strong>
+  &nbsp;·&nbsp; <a href="docs/LINUX-HELP.md">User guide</a>
+</p>
+
+<p align="center">Preview · Hardware testing in progress</p>
 
 <p align="center">x86_64 · KVM required · Flatpak · Wayland or X11</p>
-
-<img src="docs/images/try-omarchy-linux.jpg" width="960" alt="The Omarchy desktop running in a Try Omarchy window on Ubuntu GNOME">
 
 Try Omarchy runs [Omarchy](https://omarchy.org) in a virtual machine. You can explore its apps, themes, and keyboard-first workflow without replacing your current distro or repartitioning a drive. Your Omarchy files persist between sessions.
 
 This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom/try-omarchy-windows) and [Try Omarchy for macOS](https://github.com/omacom/try-omarchy). It shares the Windows launcher's code and adds a Linux front end, a Flatpak package, and Linux guest integration.
 
-## Install
+<img src="docs/images/try-omarchy-linux-desktop.jpg" width="960" alt="Omarchy’s menu and Tokyo Night desktop running in Try Omarchy on Ubuntu">
 
-Open **[btsouth.github.io/try-omarchy-linux](https://btsouth.github.io/try-omarchy-linux/)** and choose **Install with Software**, or run:
+## Get started
+
+1. **Download the installer from [GitHub Releases](https://github.com/btsouth/try-omarchy-linux/releases).** Choose the newest **Linux app** release and download `com.tryomarchy.TryOmarchy.flatpakref` from its assets, or the `.flatpak` bundle if that is the only installer provided. Open it with **Software** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu, complete the setup below first.
+2. **Open Try Omarchy from your application menu.** Choose **Try it now** to download Omarchy (about 2 GB) and start with a ready-to-use trial account. Choose **Customize** to pick another folder or create your own account.
+3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen. The trial account and password are both `omarchy`.
+
+<details>
+<summary>Ubuntu setup</summary>
+
+Ubuntu's App Center does not install Flatpaks. Install Software and its Flatpak support:
 
 ```sh
-flatpak install --user https://btsouth.github.io/try-omarchy-linux/com.tryomarchy.TryOmarchy.flatpakref
+sudo apt update
+sudo apt install flatpak gnome-software gnome-software-plugin-flatpak
 ```
 
-Then open **Try Omarchy** from your app launcher and choose **Try it now**. It downloads Omarchy (about 2 GB), sets it up and opens the desktop, signed in as `omarchy` with password `omarchy`. **Customize** picks another folder or your own account first.
+Log out and back in, then open the downloaded installer with **Software**.
 
-Updates arrive through Software or `flatpak update` from the app's own signed Flatpak repository. Removing the app keeps your VM unless you also delete its data. The [help page](docs/LINUX-HELP.md) covers KVM problems, storage, updates, uninstalling and recovery.
+After installing, launch **Try Omarchy from the application menu**. On Ubuntu 24.04, Software’s **Open** button can fail with `ldconfig failed, exit status 256` because AppArmor blocks its sandbox launch. The application-menu launcher avoids this issue.
 
-Installed preview 1 from a downloaded file? Uninstall it, choose **Keep** for its data, and install from the link above. Your VM opens as before.
+</details>
 
-This is a preview. Flathub delivery, physical hardware acceptance and extended everyday testing remain open in the [release gates](docs/LINUX-RELEASE-GATES.md). Testers can use the [hardware checklist](docs/LINUX-HARDWARE-TESTING.md).
+<details>
+<summary>Install from a terminal</summary>
+
+After installing Flatpak, open a terminal in the folder containing your downloaded installer:
+
+```sh
+flatpak install --user ./com.tryomarchy.TryOmarchy.flatpakref
+```
+
+If an older preview only provides `com.tryomarchy.TryOmarchy.flatpak`, install that file instead:
+
+```sh
+flatpak install --user --bundle ./com.tryomarchy.TryOmarchy.flatpak
+```
+
+</details>
+
+Your VM and files stay between sessions. Clipboard sharing is optional. The [user guide](docs/LINUX-HELP.md) covers setup, updates, storage, backups and removal.
+
+Signed-repository releases receive updates through Software or `flatpak update`. Preview 1 bundles have no update source; migration to the next preview will be documented with that release.
 
 ## What you can do
 
@@ -56,9 +91,9 @@ hardware support. See the [acceptance checklist](docs/LINUX-ACCEPTANCE.md).
 ## Before you start
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
-- The app is a **Flatpak** built on the GNOME runtime. Most distros include Flatpak. On Ubuntu, install it first with `sudo apt install flatpak gnome-software-plugin-flatpak`, then log out and back in.
+- The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu instructions are above.
 - Isolated tests cover **GNOME Wayland, KDE Wayland and Xfce X11**. Physical hardware and final-candidate Omarchy/Hyprland coverage remain open; see the [test report](docs/evidence/LINUX-RELEASE-CLOSURE-2026-09-28.md) for the exact scope.
-- First setup downloads a guest image of about 2 GB and needs about 13 GB of free space. Omarchy sees a 24 GB disk, but only what it uses takes space.
+- Keep about **15 GB free** for Omarchy and its runtime. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GB disk, but only what it uses takes space.
 
 ## Build from source
 

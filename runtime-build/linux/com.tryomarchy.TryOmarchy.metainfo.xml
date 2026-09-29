@@ -9,7 +9,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <launchable type="desktop-id">com.tryomarchy.TryOmarchy.desktop</launchable>
-  <url type="homepage">https://tryomarchy.com</url>
+  <url type="homepage">https://github.com/btsouth/try-omarchy-linux</url>
   <url type="bugtracker">https://github.com/btsouth/try-omarchy-linux/issues</url>
   <url type="help">https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md</url>
   <url type="vcs-browser">https://github.com/btsouth/try-omarchy-linux</url>
@@ -18,21 +18,25 @@
     explore its apps, themes and keyboard-first workflow without replacing your
     current distro or repartitioning a drive.</p>
     <ul>
-      <li>One step from launch to a working Omarchy desktop, with a ready trial account or your own</li>
+      <li>Start with a ready-to-use trial account, or make Omarchy your own</li>
       <li>GPU accelerated graphics, with software rendering as a fallback</li>
       <li>Clipboard and file sharing with your desktop, plus an optional shared folder</li>
       <li>A persistent disk with backup, restore and move</li>
       <li>Settings for memory, processors, display scale and microphone access</li>
     </ul>
     <p>The first launch downloads Omarchy, about 2 GB, and needs about 13 GB
-    of free space. The app needs a 64-bit x86 PC with hardware virtualization
+    of free space for Omarchy, plus space for the Flatpak runtime. The app needs a 64-bit x86 PC with hardware virtualization
     and access to KVM. Removing the app keeps your VM unless you also delete
     its data.</p>
   </description>
   <screenshots>
     <screenshot type="default">
       <caption>The Omarchy desktop running in a window on GNOME</caption>
-      <image>https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux.jpg</image>
+      <image>https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux-desktop.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption>Meet Try Omarchy for Linux</caption>
+      <video codec="vp9" container="webm" width="1280" height="720">https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux.webm</video>
     </screenshot>
   </screenshots>
   <branding>

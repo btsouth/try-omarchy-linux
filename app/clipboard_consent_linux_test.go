@@ -67,9 +67,15 @@ func TestClipboardConsentWithoutAWindowKeepsTheTerminalBehavior(t *testing.T) {
 
 func TestClipboardConsentClosedOrCancelledIsNotADecision(t *testing.T) {
 	consentTest(t)
+	configureSetupCancellation(false)
+	t.Cleanup(func() { configureSetupCancellation(false) })
 	if linuxClipboardConsent(func(linuxSetupState) (string, error) { return "cancel", nil }) || linuxClipboardSharingOff() {
 		t.Fatal("dismissing the explanation skips this launch only")
 	}
+	if !setupCancelled() {
+		t.Fatal("Cancel must stop setup, not silently continue to boot")
+	}
+	configureSetupCancellation(false)
 	if linuxClipboardConsent(func(linuxSetupState) (string, error) { return "", context.Canceled }) || linuxClipboardSharingOff() {
 		t.Fatal("a closed window skips this launch only")
 	}

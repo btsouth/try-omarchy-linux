@@ -83,6 +83,10 @@ func linuxClipboardConsent(ask func(linuxSetupState) (string, error)) bool {
 	if err != nil {
 		return false
 	}
+	if answer == "cancel" {
+		requestSetupCancel()
+		return false
+	}
 	if answer != "primary" {
 		if answer == "secondary" {
 			if err := setLinuxClipboardSharing(false); err != nil {

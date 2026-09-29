@@ -315,12 +315,6 @@ func main() {
 		logf("rendering: %s", reason)
 	}
 
-	// Ask for clipboard access now, while the person is still at the window.
-	// Setup can run for minutes, and a permission dialog that appears at the
-	// end goes unanswered or looks like something else is happening.
-	stopClipboard := runLinuxClipboardBridge()
-	defer stopClipboard()
-
 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
 		fatal("Could not restore the previous Omarchy image after an interrupted update: %v", err)
 	}
@@ -378,6 +372,15 @@ func main() {
 
 	cfg.displayWidth, cfg.displayHeight = *width, *height
 	cmdline += fmt.Sprintf(" video=%dx%d", cfg.displayWidth, cfg.displayHeight)
+	if err := checkSetupCancelled(); err != nil {
+		fatal("%v", err)
+	}
+
+	// Optional sharing comes after downloads and disk preparation succeed.
+	// A failed or cancelled install must not request access to the clipboard.
+	// Keep the setup window alive to explain GNOME's permission before boot.
+	stopClipboard := runLinuxClipboardBridge()
+	defer stopClipboard()
 	if err := checkSetupCancelled(); err != nil {
 		fatal("%v", err)
 	}

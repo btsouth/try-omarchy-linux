@@ -278,7 +278,9 @@ func runLinuxClipboardBridge() func() {
 			if !errors.Is(err, errLinuxClipboardDenied) {
 				message = "GNOME did not answer the clipboard request in time, so sharing is off for this session. Quit Omarchy and start it again to be asked once more. You can still drop files on its window."
 			}
-			setLinuxClipboardStatus(message, true)
+			// Declining an optional permission is a choice, not an error.
+			// The explanation already says how to enable it later.
+			setLinuxClipboardStatus(message, !errors.Is(err, errLinuxClipboardDenied))
 			logf("clipboard: GNOME portal: %v", err)
 			supported = false
 		} else {
@@ -291,6 +293,9 @@ func runLinuxClipboardBridge() func() {
 		setLinuxClipboardStatus(message, true)
 		logf("clipboard: %s", message)
 		supported = false
+	}
+	if setupCancelled() {
+		return func() {}
 	}
 	for _, name := range names {
 		if _, err := exec.LookPath(name); err != nil {

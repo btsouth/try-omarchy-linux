@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -313,12 +314,13 @@ func decompress(src, dest, wantSum string, ui *progressUI) error {
 
 type countingReader struct {
 	r io.Reader
-	n int64
+	// zstd reads ahead on a worker while the copy loop reports progress.
+	n atomic.Int64
 }
 
 func (c *countingReader) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
-	c.n += int64(n)
+	c.n.Add(int64(n))
 	return n, err
 }
 
@@ -338,7 +340,7 @@ func sparseCopyStream(dst *os.File, src io.Reader, srcTotal int64, counted *coun
 				}
 			}
 			off += int64(n)
-			ui.setProgress(counted.n, srcTotal)
+			ui.setProgress(counted.n.Load(), srcTotal)
 		}
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			return dst.Truncate(off)

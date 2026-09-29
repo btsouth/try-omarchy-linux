@@ -1,3 +1,0 @@
-618eaf8af04e72e71619002e80d014f372aa322e38863f9c2d2f52e5168df242  /mnt/artifacts/phase10j-delete.flatpak
-Installing app/com.tryomarchy.TryOmarchy/x86_64/master
-      Commit: 500fb2e388c44382b90dc848392606f806a258f93457cc4bc9294aaf42ef1483

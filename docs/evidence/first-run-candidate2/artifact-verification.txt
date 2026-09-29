@@ -1,3 +1,0 @@
-com.tryomarchy.TryOmarchy.flatpak: OK
-com.tryomarchy.TryOmarchy.flatpakref: OK
-flatpak-site.tar.gz: OK

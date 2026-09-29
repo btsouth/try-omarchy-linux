@@ -35,7 +35,11 @@ copy.
    the metainfo, with `~` before a preview suffix (`0.1.0~preview.3`) so the
    final `0.1.0` sorts after it.
 2. Build from a clean checkout of the release commit:
-   `runtime-build/linux/build-flatpak.sh OUT`.
+   `runtime-build/linux/build-flatpak.sh OUT`. The metainfo's screenshot
+   URLs must already load from `master`, because `appstreamcli compose` drops
+   any it cannot download and Software then shows "No Screenshots". Check
+   `zcat OUT/build/files/share/app-info/xmls/*.xml.gz | grep -c '<screenshot'`
+   is not 0.
 3. Sign it into the site. Reuse the previous site directory when you have it,
    so clients get update deltas:
 

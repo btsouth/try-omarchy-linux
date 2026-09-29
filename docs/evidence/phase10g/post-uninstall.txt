@@ -1,4 +1,0 @@
-64769:1121432:25769803776:1790522947
-app-removed
-guest-artifacts-retained
-shared-external-folder-retained

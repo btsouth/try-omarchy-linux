@@ -1,1 +1,0 @@
-3a7f1d962d1d6fd1ebe1dfef635311dc781dc0286980e7598a2ff68645d38fcb  /workspace/try-omarchy-linux/phase10m-capacity/desktop-overlay.qcow2

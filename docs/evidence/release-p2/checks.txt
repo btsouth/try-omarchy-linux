@@ -1,7 +1,0 @@
-ok  	github.com/omacom/try-omarchy-windows/app	74.598s
-ok  	github.com/omacom/try-omarchy-windows/app/cmd/sign-update	1.016s
-ok  	github.com/omacom/try-omarchy-windows/linux-ui	0.049s
-f7c6c3d4a5f4d541a3fc8e41eb43c1f88806b9c78e6475301dc1006c101023d1  com.tryomarchy.TryOmarchy.flatpak
-f1fbe4dae729afc11399f768af5d1b3f8a191e8ef88c2b9dbafc1e0ba9c6ff6e  com.tryomarchy.TryOmarchy.flatpakref
-05f95826b56154cee22b07365b2355be71d53b0f6a38bda9ba1fd6800d953777  flatpak-site.tar.gz
-894a951be58d1bfeb482d62ec01d554289e8982ec862143f742d69ce1b3066bc

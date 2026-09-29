@@ -17,8 +17,8 @@ __pycache__/
 /bridge-metadata/
 /release-notes.md
 
-# Local Flatpak bundles kept beside Linux evidence
-docs/evidence/**/*.flatpak
+# Local Flatpak bundles
+*.flatpak
 
 # Public Linux presentation assets and reproducible source capture
 !docs/images/try-omarchy-linux-hero.png

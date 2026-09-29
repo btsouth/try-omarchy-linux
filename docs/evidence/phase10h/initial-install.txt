@@ -1,2 +1,0 @@
-Installing app/com.tryomarchy.TryOmarchy/x86_64/master
-9efb4d4ab14423f143acbef87891f3857a74b802c8c5c9339744cb80e857c803

@@ -1,7 +1,0 @@
-{
-  "version": 1,
-  "path": "/run/user/1000/doc/bfae2c61/data"
-}
-64769:1121432 25769803776 /home/tester/matrix/data/vm/disk.raw
-faae744f2682a674610b17146bca11f14a65b21ccf4554c75e690ad3f7bc02cc  /home/tester/matrix/exchange/text
-documents	bfae2c61	com.tryomarchy.TryOmarchy	read,write,grant-permissions	(b'/home/tester/matrix/data', 64769, 1121383, 4)

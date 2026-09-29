@@ -1,2 +1,0 @@
-go: downloading github.com/klauspost/compress v1.19.2
-fetch.go:13:2: github.com/klauspost/compress@v1.19.2: Get "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.19.2.zip": dial tcp: lookup proxy.golang.org: i/o timeout

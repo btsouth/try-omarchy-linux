@@ -9,8 +9,5 @@ guest-build/*.patch text eol=lf whitespace=-blank-at-eol,-blank-at-eof
 scripts/gpu/blender/*.sh text eol=lf
 scripts/gpu/blender/*.patch text eol=lf whitespace=-blank-at-eol,-blank-at-eof
 
-# Captured command output in Linux evidence is kept byte for byte.
-docs/evidence/**/*.txt whitespace=-blank-at-eol,-blank-at-eof
-
 # The Flatpak repository signing key is embedded byte for byte in bundles and .flatpakref files.
 runtime-build/linux/try-omarchy-repo.gpg binary

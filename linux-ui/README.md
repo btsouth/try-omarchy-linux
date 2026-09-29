@@ -59,5 +59,5 @@ Dismissal, helper failure, and repeated close requests never force-stop the VM.
 `-no-gui` retains immediate ACPI shutdown on window close. A second terminal
 interrupt remains the explicit force-stop action.
 
-Run GUI checks only inside an omabox or the explicitly approved isolated
-devbox harness. Do not connect a test to the host audio or session bus.
+Run GUI checks in an isolated session or VM. Do not connect a test to the host
+audio or session bus.

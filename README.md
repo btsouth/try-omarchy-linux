@@ -99,13 +99,13 @@ starting the VM. Networking uses NAT with local SSH and port forwarding.
 
 Real GPU, audio, microphone, battery, suspend/resume and monitor behavior still
 need reports from hardware testers. Isolated desktop VM tests do not establish
-hardware support. See the [acceptance checklist](docs/LINUX-ACCEPTANCE.md).
+hardware support. See the [hardware testing checklist](docs/LINUX-HARDWARE-TESTING.md).
 
 ## Before you start
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
 - The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu instructions are above.
-- Isolated tests cover **GNOME Wayland, KDE Wayland and Xfce X11**. Physical hardware and final-candidate Omarchy/Hyprland coverage remain open; see the [test report](docs/evidence/LINUX-RELEASE-CLOSURE-2026-09-28.md) for the exact scope.
+- Isolated tests cover **GNOME Wayland, KDE Wayland and Xfce X11**. Physical hardware and Omarchy/Hyprland hosts still need testing.
 - Keep about **15 GB free** for Omarchy and its runtime. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GB disk, but only what it uses takes space.
 
 ## Build from source
@@ -130,12 +130,6 @@ scripts/linux/check.sh /tmp/try-omarchy-checks
 ## Under the hood
 
 Try Omarchy uses QEMU with KVM, VirGL for OpenGL acceleration, and an x86_64 Arch guest image. The Go launcher in [app](app) handles setup, VM supervision, backups, and host integration, and is shared with the Windows version. The GTK home and setup window is in [linux-ui](linux-ui). The Flatpak manifest, QEMU patches, and build script are in [runtime-build/linux](runtime-build/linux), and the guest patches are in [guest-build](guest-build).
-
-Linux planning and acceptance notes:
-
-- [Plan](docs/LINUX-PLAN.md) and [parity with Windows and Mac](docs/LINUX-PARITY.md)
-- [Release gates](docs/LINUX-RELEASE-GATES.md) and [acceptance](docs/LINUX-ACCEPTANCE.md)
-- [Test evidence](docs/evidence), dated by phase
 
 Shared launcher fixes come from the Windows repository. This repository keeps its history so those changes merge normally.
 

@@ -58,7 +58,7 @@ FACT_CHECKS = {
     "recorder": "pacman -Q gpu-screen-recorder >/dev/null 2>&1 && echo present || echo missing",
     "foreign": "pacman -Qmq 2>/dev/null | wc -l",
     "sshd": "systemctl is-active sshd 2>/dev/null || true",
-    "quick-start-ssh": "k=$(mktemp -u) && ssh-keygen -q -t ed25519 -N '' -f $k && sudo sshd -T -h $k -C user=omarchy,host=h,addr=127.0.0.1 | grep -qx 'passwordauthentication no' && sudo sshd -T -h $k -C user=someone,host=h,addr=127.0.0.1 | grep -qx 'passwordauthentication yes' && echo yes || echo no",
+    "quick-start-ssh": "k=$(mktemp -u) && ssh-keygen -q -t ed25519 -N '' -f $k && sudo sshd -T -h $k -C user=omarchy,host=h,addr=127.0.0.1 | grep -qix 'passwordauthentication no' && sudo sshd -T -h $k -C user=someone,host=h,addr=127.0.0.1 | grep -qix 'passwordauthentication yes' && echo yes || echo no",
     "omarchy-repo-signed": "grep -A2 '^\\[omarchy\\]' /etc/pacman.conf | grep -q TrustAll && echo no || echo yes",
     "input-group": "id -nG | tr ' ' '\\n' | grep -qx input && echo yes || echo no",
     "compat-version": "test \"$(cat /usr/share/try-omarchy/compat-version)\" = \"19:$(uname -r)\" && echo yes || echo no",

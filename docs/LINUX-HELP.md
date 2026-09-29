@@ -10,21 +10,20 @@ You need a 64-bit x86 PC with virtualization turned on, Flatpak, and about
 15 GB free: Omarchy takes about 13 GB once set up, and Software also installs
 the GNOME runtime the first time if you do not have it yet.
 
-1. Open [GitHub Releases](https://github.com/btsouth/try-omarchy-linux/releases)
-   and choose the newest **Linux app** release. Download
-   `com.tryomarchy.TryOmarchy.flatpakref` from its assets (or the `.flatpak`
-   bundle for an older preview), open it with
-   **Software**, then choose **Install**. It adds the GNOME runtime if missing.
+1. [Download the installer](https://tryomarchy.com/linux.flatpakref), open it
+   with **Software** or **Discover**, then choose **Install**. It adds the
+   GNOME runtime if missing. [tryomarchy.com/linux](https://tryomarchy.com/linux/)
+   walks through the same steps.
 2. Open **Try Omarchy** from your app launcher and choose **Try it now**.
 
-From a terminal in the folder containing the downloaded installer:
+From a terminal:
 
 ```sh
-flatpak install --user ./com.tryomarchy.TryOmarchy.flatpakref
+flatpak install --user https://tryomarchy.com/linux.flatpakref
 ```
 
-Older previews may only provide `com.tryomarchy.TryOmarchy.flatpak`. Install
-that file with `flatpak install --user --bundle ./com.tryomarchy.TryOmarchy.flatpak`.
+Each [release](https://github.com/btsouth/try-omarchy-linux/releases) also
+carries the installer and a standalone `.flatpak` bundle.
 
 Ubuntu's App Center does not install Flatpaks. Install Software and its
 Flatpak support, then log out and back in:

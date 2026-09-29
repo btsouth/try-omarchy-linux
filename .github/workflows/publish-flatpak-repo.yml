@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: App release tag, for example linux-app-v0.1.0-preview.2
+        description: App release tag, for example linux-app-v0.1.0-preview.3
         required: true
 
 permissions:

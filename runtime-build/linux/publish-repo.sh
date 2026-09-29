@@ -7,7 +7,7 @@
 # deltas; a new directory starts a fresh repository, which clients update from
 # just as well. RELEASE_DIR receives the release assets: a bundle that installs
 # the repository as its update source, the .flatpakref, the site as
-# flatpak-site.tar.gz for the Pages workflow, and SHA256SUMS. The secret key is
+# flatpak-site.tar.gz for deploy-repo.sh, and SHA256SUMS. The secret key is
 # read from standard input into a keyring in memory and written nowhere else.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -34,8 +34,10 @@ docker run --rm -i --network=none --tmpfs /keys:mode=0700 \
   [[ -f /site/repo/config ]] || ostree init --mode=archive-z2 --repo=/site/repo
   flatpak build-commit-from --src-repo=/build/repo --gpg-sign="$key" --gpg-homedir=/keys \
     --no-update-summary /site/repo "app/$app/x86_64/$BRANCH"
+  # --redirect-url moves installs that still use an older address to REPO_URL
+  # on their next update; for installs already there it changes nothing.
   flatpak build-update-repo --gpg-sign="$key" --gpg-homedir=/keys \
-    --title="$TITLE" --comment="$COMMENT" --homepage="$HOMEPAGE" --icon="${SITE_URL}icon.svg" \
+    --redirect-url="$REPO_URL" --title="$TITLE" --comment="$COMMENT" --homepage="$HOMEPAGE" --icon="${SITE_URL}icon.svg" \
     --default-branch="$BRANCH" --gpg-import=/linux/try-omarchy-repo.gpg \
     --generate-static-deltas --prune --prune-depth=3 /site/repo
   flatpak build-bundle --repo-url="$REPO_URL" --runtime-repo="$RUNTIME_REPO" \
@@ -68,6 +70,11 @@ REPO
   install -m644 /linux/site/index.html /site/index.html
   install -m644 /linux/site/icon.svg /site/icon.svg
   touch /site/.nojekyll
+  # Cloudflare Pages answers a missing file with index.html unless the site has
+  # a 404 page, and Flatpak probes for files that may not exist.
+  printf "Not found\n" > /site/404.html
+  printf "%s\n" "/*.flatpakref" "  Content-Type: application/vnd.flatpak.ref" \
+    "/*.flatpakrepo" "  Content-Type: application/vnd.flatpak.repo" > /site/_headers
   ostree --repo=/site/repo rev-parse "app/$app/x86_64/$BRANCH" > /site/commit.txt
   cp "/site/$app.flatpakref" /release/
   tar -C /site --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -cf - . | gzip -n > /release/flatpak-site.tar.gz

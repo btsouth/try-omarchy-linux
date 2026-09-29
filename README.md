@@ -10,7 +10,8 @@
 <p align="center">The full Omarchy desktop, running in a window on your Linux PC.</p>
 
 <p align="center">
-  <strong><a href="https://github.com/btsouth/try-omarchy-linux/releases">Download the Linux preview</a></strong>
+  <strong><a href="https://tryomarchy.com/linux.flatpakref">Download for Linux</a></strong>
+  &nbsp;·&nbsp; <a href="https://tryomarchy.com/linux/">tryomarchy.com/linux</a>
   &nbsp;·&nbsp; <a href="docs/LINUX-HELP.md">User guide</a>
 </p>
 
@@ -26,7 +27,7 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 
 ## Get started
 
-1. **Download the installer from [GitHub Releases](https://github.com/btsouth/try-omarchy-linux/releases).** Choose the newest **Linux app** release and download `com.tryomarchy.TryOmarchy.flatpakref` from its assets, or the `.flatpak` bundle if that is the only installer provided. Open it with **Software** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu, complete the setup below first.
+1. **[Download the installer](https://tryomarchy.com/linux.flatpakref)** and open it with **Software**, **Discover** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu, complete the setup below first.
 2. **Open Try Omarchy from your application menu.** Choose **Try it now** to download Omarchy (about 2 GB) and start with a ready-to-use trial account. Choose **Customize** to pick another folder or create your own account.
 3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen. The trial account and password are both `omarchy`.
 
@@ -49,17 +50,13 @@ After installing, launch **Try Omarchy from the application menu**. On Ubuntu 24
 <details>
 <summary>Install from a terminal</summary>
 
-After installing Flatpak, open a terminal in the folder containing your downloaded installer:
+After installing Flatpak:
 
 ```sh
-flatpak install --user ./com.tryomarchy.TryOmarchy.flatpakref
+flatpak install --user https://tryomarchy.com/linux.flatpakref
 ```
 
-If an older preview only provides `com.tryomarchy.TryOmarchy.flatpak`, install that file instead:
-
-```sh
-flatpak install --user --bundle ./com.tryomarchy.TryOmarchy.flatpak
-```
+Each [release](https://github.com/btsouth/try-omarchy-linux/releases) also has the installer and a standalone `.flatpak` bundle.
 
 </details>
 

@@ -34,7 +34,7 @@ func TestHelpAnswersTheFirstHourQuestions(t *testing.T) {
 		"Ctrl+Alt+G", "Ctrl+Alt+F", "Super+Space", "Super+K",
 		"App Settings & Data", "--delete-data", "never touched", "Use existing data folder",
 		"Software or flatpak update", "goes back to the old ones",
-		"github.com/btsouth/try-omarchy-linux", "0.1.0 preview 2",
+		"github.com/btsouth/try-omarchy-linux", "0.1.0 preview 3",
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("help lacks %q", want)
@@ -46,7 +46,7 @@ func TestHelpAnswersTheFirstHourQuestions(t *testing.T) {
 			t.Errorf("the removal help does not distinguish: missing %q", want)
 		}
 	}
-	if !strings.Contains(state.Status, "0.1.0 preview 2") || state.Prompt != "about" {
+	if !strings.Contains(state.Status, "0.1.0 preview 3") || state.Prompt != "about" {
 		t.Fatalf("about state: %+v", state)
 	}
 }

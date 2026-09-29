@@ -34,6 +34,24 @@ type linuxSetupState struct {
 	CanForget      bool               `json:"canForget,omitempty"`
 	CanDelete      bool               `json:"canDelete,omitempty"`
 	Settings       *linuxSettingsForm `json:"settings,omitempty"`
+	// Plain-language content laid out by the window: a one-line headline, a
+	// notice shown as a banner (with an optional help link), and headed rows.
+	Headline string         `json:"headline,omitempty"`
+	Notice   string         `json:"notice,omitempty"`
+	HelpURL  string         `json:"helpUrl,omitempty"`
+	Sections []linuxSection `json:"sections,omitempty"`
+	// Progress detail under the bar, and whether an error page offers Try again.
+	Detail   string `json:"detail,omitempty"`
+	CanRetry bool   `json:"canRetry,omitempty"`
+	// The home replaces Launch with Check again while KVM is unavailable.
+	CheckAgain bool `json:"checkAgain,omitempty"`
+	Installed  bool `json:"installed,omitempty"`
+	// Setup is "customize" when a first setup cannot use the default location.
+	Setup string `json:"setup,omitempty"`
+	// The home's buttons are decided here: Actions in the footer, Menu behind
+	// the header's overflow button. Each reply is what the window sends back.
+	Actions []linuxAction `json:"actions,omitempty"`
+	Menu    []linuxAction `json:"menu,omitempty"`
 	// A "choice" prompt: Primary replies "primary", Secondary "secondary".
 	Title       string `json:"title,omitempty"`
 	Primary     string `json:"primary,omitempty"`
@@ -44,6 +62,15 @@ type linuxSetupState struct {
 	CanReset      bool `json:"canReset,omitempty"`
 	CanCleanMove  bool `json:"canCleanMove,omitempty"`
 	CanCleanReset bool `json:"canCleanReset,omitempty"`
+	// Unfinished backup or restore files an interrupted run left behind.
+	CanCleanLeftovers bool `json:"canCleanLeftovers,omitempty"`
+}
+
+type linuxAction struct {
+	Label       string `json:"label"`
+	Reply       string `json:"reply"`
+	Suggested   bool   `json:"suggested,omitempty"`
+	Destructive bool   `json:"destructive,omitempty"`
 }
 
 type linuxSetupReply struct {

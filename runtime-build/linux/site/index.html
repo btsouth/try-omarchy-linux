@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Try Omarchy for Linux</title>
+<link rel="icon" href="icon.svg">
+<style>
+  :root { color-scheme: light dark; --accent: #9ece6a; --ink: #151912; }
+  body { margin: 0; font: 17px/1.55 system-ui, sans-serif; background: #f6f7f4; color: #1d2119; }
+  main { max-width: 40rem; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+  header { text-align: center; margin-bottom: 2.5rem; }
+  header img { width: 88px; height: 88px; }
+  h1 { font-size: 2rem; margin: .75rem 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; }
+  .install { display: inline-block; margin-top: 1.25rem; padding: .8rem 1.6rem; border-radius: 999px;
+    background: var(--accent); color: var(--ink); font-weight: 700; text-decoration: none; }
+  .install:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+  code { background: #e7eae2; padding: .1rem .35rem; border-radius: .3rem; font-size: .92em; overflow-wrap: anywhere; }
+  pre code { display: block; padding: .75rem 1rem; white-space: pre-wrap; }
+  a { color: inherit; }
+  ul { padding-left: 1.25rem; }
+  ol { padding-left: 1.5rem; }
+  li { margin-bottom: .55rem; }
+  details { border: 1px solid #92998a; border-radius: .7rem; padding: 1rem; margin: 1rem 0; }
+  summary { cursor: pointer; font-weight: 650; }
+  .note { font-size: .92rem; }
+  @media (prefers-color-scheme: dark) { body { background: var(--ink); color: #e6e9e1; } code { background: #22281d; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <img src="icon.svg" alt="">
+  <h1>Try Omarchy for Linux</h1>
+  <p>Try the Omarchy desktop in a window. Your current Linux installation stays in place.</p>
+  <p class="note">Linux preview for x86_64 PCs. Hardware compatibility is still being tested.</p>
+  <p><a href="https://github.com/btsouth/try-omarchy-linux">Screenshots, downloads and the getting-started guide on GitHub</a></p>
+</header>
+
+<h2>Before you install</h2>
+<ul>
+  <li>A 64-bit x86 PC with virtualization turned on in its firmware settings.</li>
+  <li>Flatpak with support in your software manager. See the Ubuntu instructions below or <a href="https://flathub.org/en/setup">set up Flatpak for your distribution</a>.</li>
+  <li>About 15 GB free. Omarchy takes about 13 GB, downloaded once (about 2 GB) on first launch, and Software adds the GNOME runtime if you do not have it.</li>
+</ul>
+
+<a class="install" href="com.tryomarchy.TryOmarchy.flatpakref" download>Download install file</a>
+<p class="note">On Ubuntu, complete the setup below before opening this file.</p>
+
+<details>
+  <summary>Using Ubuntu? Start here</summary>
+  <p>Ubuntu's App Center does not install Flatpaks. Install Software and its Flatpak support:</p>
+  <pre><code>sudo apt update
+sudo apt install flatpak gnome-software gnome-software-plugin-flatpak</code></pre>
+  <p>Log out and back in so the app appears in your application menu. Then return to this page.</p>
+</details>
+
+<h2>Install and start trying</h2>
+<ol>
+  <li>Download the install file above. Open it with <strong>Software</strong> or your distribution's Flatpak installer, then choose <strong>Install</strong>. The GNOME runtime is installed too if needed.</li>
+  <li>Open <strong>Try Omarchy</strong> from your application menu. On Ubuntu 24.04, Software’s Open button can fail with <code>ldconfig failed, exit status 256</code>; use the application menu if this happens.</li>
+  <li>Choose <strong>Try it now</strong>. It downloads about 2 GB, prepares your VM and signs you into the trial account. Choose <strong>Customize</strong> instead to create your own account.</li>
+</ol>
+<p class="note">Setup may take several minutes. You can cancel and continue later. On GNOME, clipboard sharing is optional; you can choose Not now and still try Omarchy.</p>
+
+<details>
+<summary>The install file will not open, or prefer a terminal?</summary>
+<p>After setting up Flatpak, run:</p>
+<pre><code>flatpak install --user https://btsouth.github.io/try-omarchy-linux/com.tryomarchy.TryOmarchy.flatpakref</code></pre>
+<p>Then open Try Omarchy from your application menu, or run:</p>
+<pre><code>flatpak run com.tryomarchy.TryOmarchy</code></pre>
+</details>
+
+<h2>Your first session</h2>
+<p><strong>Ctrl+Alt+G</strong> gives your keyboard back to your Linux desktop. Click the Omarchy window to send keys to it again. <strong>Ctrl+Alt+F</strong> switches fullscreen. Inside Omarchy, <strong>Super+Space</strong> opens its menu.</p>
+<p>The trial account is <strong>omarchy</strong>, with password <strong>omarchy</strong>. Your files stay in the VM when you shut it down. Closing its window asks before shutting down.</p>
+
+<h2>Updates</h2>
+<p>Software updates Try Omarchy like any other app, or run <code>flatpak update</code>. Your VM and settings stay.</p>
+
+<h2>Removing it</h2>
+<p>Uninstall in Software. To keep your VM for later, keep the app's data when Software asks. A VM in a folder you chose stays either way, and backups are never touched.</p>
+
+<p>Already using preview 1? It never updates itself, and your menu keeps opening it while it is installed. Close it, run <code>flatpak uninstall --user com.tryomarchy.TryOmarchy//master</code> and keep its data, then install from this page. Your VM stays. <a href="https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#moving-from-preview-1">Details</a></p>
+
+<h2>Help</h2>
+<p><a href="https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md">Help and troubleshooting</a> ·
+<a href="https://github.com/btsouth/try-omarchy-linux">Source</a> ·
+<a href="https://github.com/btsouth/try-omarchy-linux/issues">Report a problem</a></p>
+</main>
+</body>
+</html>

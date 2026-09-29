@@ -1,0 +1,3 @@
+d5e102cd8be03be725c7f114f77cf119b6da10fddf332df675077a8d0e7cd01d
+flathub	Flathub	https://dl.flathub.org/repo/	-	-	-	1	system	Central repository of Flatpak applications	Central repository of Flatpak applications	https://flathub.org/	https://dl.flathub.org/repo/logo.svg
+try-omarchy	Try Omarchy	https://btsouth.github.io/try-omarchy-linux/repo/	-	-	-	1	system	Try the Omarchy desktop in a window	-	https://tryomarchy.com	https://btsouth.github.io/try-omarchy-linux/icon.svg

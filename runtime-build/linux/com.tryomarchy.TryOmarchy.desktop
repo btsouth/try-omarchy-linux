@@ -6,4 +6,5 @@ Exec=try-omarchy
 Icon=com.tryomarchy.TryOmarchy
 Terminal=false
 Categories=System;Emulator;
+Keywords=Omarchy;Hyprland;Arch;virtual machine;VM;
 StartupWMClass=com.tryomarchy.TryOmarchy

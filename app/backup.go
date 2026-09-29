@@ -180,11 +180,11 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
 		return fmt.Errorf("choose a new backup filename")
 	}
-	f, err := os.CreateTemp(filepath.Dir(destination), ".try-omarchy-backup-*")
+	f, err := createStagingFile(filepath.Dir(destination), ".try-omarchy-backup-", "backup")
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer removeStagingFile(f.Name())
 	defer f.Close()
 	zw := zip.NewWriter(f)
 	var processed int64
@@ -343,11 +343,11 @@ func restoreVMBackupReader(z *zip.Reader, destination string, report backupProgr
 	if err = requireDiskSpace(filepath.Dir(destination), restoreSpaceEstimate(manifest, files)); err != nil {
 		return err
 	}
-	staging, err := os.MkdirTemp(filepath.Dir(destination), ".try-omarchy-restore-*")
+	staging, err := createStagingDir(filepath.Dir(destination), ".try-omarchy-restore-", "restore")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(staging)
+	defer removeStagingDir(staging)
 	var processed int64
 	for _, entry := range manifest.Files {
 		target := filepath.Join(staging, filepath.FromSlash(entry.Name))

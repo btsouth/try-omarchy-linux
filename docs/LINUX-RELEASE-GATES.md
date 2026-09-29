@@ -244,6 +244,13 @@ the public site, publishing a repository or uploading a release.
 
 ## Repository and distribution
 
+Current distribution decision: use a clean GitHub README and GitHub Releases
+as the public entry point. A separate website and tryomarchy.com changes are
+deferred. The existing signed Flatpak repository still requires static hosting
+for automatic updates; GitHub Pages is package infrastructure, not a required
+public landing page. See [release instructions](LINUX-RELEASING.md).
+
+
 Decided 2026-09-28. The Linux app lives in the public repository
 [btsouth/try-omarchy-linux](https://github.com/btsouth/try-omarchy-linux),
 which keeps the Windows repository's history so shared launcher fixes merge

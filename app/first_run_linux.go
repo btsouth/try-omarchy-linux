@@ -6,7 +6,43 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 )
+
+// linuxQuickSetup is set when the home's Try it now was chosen: the default
+// location and the trial account, without asking either question.
+var linuxQuickSetup atomic.Bool
+
+// A first setup needs room for the download, the unpacked system files and the
+// VM's own copy of them. Say so before anything is downloaded, not halfway.
+func linuxSetupSpaceError(dir string) error {
+	free := linuxFreeBytes(dir)
+	if free < 0 || free >= linuxGuestSpaceBytes {
+		return nil
+	}
+	return fmt.Errorf("only %s is free where %s would go, and setup needs about %s. Free some space or choose another folder", linuxGB(free), linuxDisplayPath(dir), linuxGB(linuxGuestSpaceBytes))
+}
+
+func linuxLocationState(defaultDir, notice string) linuxSetupState {
+	rows := []linuxRow{
+		{Title: "Default location", Detail: linuxDisplayPath(defaultDir) + "\nInside the app's own storage."},
+		{Title: "Space", Detail: "About " + linuxGB(linuxGuestSpaceBytes) + ". Omarchy sees a " + linuxGB(int64(24)<<30) + " disk, but only what it uses takes space."},
+	}
+	if free := linuxFreeBytes(defaultDir); free >= 0 {
+		rows[0].Detail += " " + linuxGB(free) + " is free."
+	}
+	return linuxSetupState{Prompt: "location", Path: defaultDir, Notice: notice,
+		Status:   "Omarchy lives in one folder on this computer. Use the default, or pick a bigger drive. You can move it later.",
+		Sections: []linuxSection{{Rows: rows}}}
+}
+
+func linuxAccountState() linuxSetupState {
+	return linuxSetupState{Prompt: "account", Status: "How do you want to start?",
+		Sections: []linuxSection{{Rows: []linuxRow{
+			{Title: "Try it now", Detail: "You are signed in automatically as " + trialUsername + " (password " + trialPassword + ")."},
+			{Title: "Set up my own account", Detail: "Choose your own name and password inside Omarchy."},
+		}}}}
+}
 
 // Explicit flags bypass saved choices. Remembered removable locations must
 // still exist; never silently create a replacement VM after a drive disappears.
@@ -166,13 +202,22 @@ func linuxPrebootSettingsOnly(dir string) bool {
 }
 
 func (u *progressUI) chooseLocation(defaultDir string) (string, bool, error) {
-	status := ""
+	notice := ""
+	// Try it now takes the default without asking, but it still has to pass the
+	// checks below. If it does not, the questions come back with the reason.
+	ask := !linuxQuickSetup.Load()
 	for {
-		value, err := u.window.ask(setupContext(), linuxSetupState{Prompt: "location", Path: defaultDir, Status: status})
-		if err != nil {
-			return "", false, err
+		value := "default"
+		if ask {
+			var err error
+			value, err = u.window.ask(setupContext(), linuxLocationState(defaultDir, notice))
+			if err != nil {
+				return "", false, err
+			}
 		}
+		ask = true
 		selected := defaultDir
+		var err error
 		if value != "default" {
 			selected, err = validateDataLocationPath(value)
 			if err == nil && filepath.Base(selected) != "try-omarchy" {
@@ -183,7 +228,7 @@ func (u *progressUI) chooseLocation(defaultDir string) (string, bool, error) {
 			var selectable bool
 			selectable, err = linuxDataLocationSelectable(selected, defaultDir)
 			if err == nil && !selectable {
-				err = fmt.Errorf("%s already contains other files or an incomplete installation. Choose an empty folder, or use -dir to resume that installation", selected)
+				err = fmt.Errorf("%s already contains other files or an incomplete installation. Choose an empty folder, or use -dir to resume that installation", linuxDisplayPath(selected))
 			}
 		}
 		if err == nil {
@@ -195,12 +240,16 @@ func (u *progressUI) chooseLocation(defaultDir string) (string, bool, error) {
 			}
 		}
 		if err == nil {
+			err = linuxSetupSpaceError(selected)
+		}
+		if err == nil {
 			err = ensureDataDirectoryWritable(selected)
 		}
 		if err == nil {
 			return selected, true, nil
 		}
-		status = "Cannot use that folder: " + err.Error()
+		linuxQuickSetup.Store(false)
+		notice = "Cannot use that folder: " + err.Error()
 	}
 }
 

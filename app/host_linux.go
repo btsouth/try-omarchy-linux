@@ -151,19 +151,26 @@ func posixLocaleName(values ...string) string {
 	return ""
 }
 
-// checkKVM explains the two ways /dev/kvm is usually unavailable.
+// kvmError is a KVM problem in words: Short is the one-line summary, and the
+// message says what to change.
+type kvmError struct{ Short, msg string }
+
+func (e *kvmError) Error() string { return e.msg }
+
+// checkKVM says which of the usual KVM problems this is and what to change.
+// It is a setting on this computer, not a fault in the app.
 func checkKVM() error {
 	f, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
 	if err == nil {
 		return f.Close()
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("this computer has no /dev/kvm. Turn on virtualization (Intel VT-x or AMD-V) in the firmware settings")
+		return &kvmError{Short: "This computer does not offer KVM.", msg: "this computer does not offer KVM, which Omarchy needs to run. Turn on virtualization (Intel VT-x or AMD-V, sometimes called SVM) in the firmware settings. Inside a virtual machine, turn on nested virtualization for it"}
 	}
 	if errors.Is(err, fs.ErrPermission) {
-		return fmt.Errorf("this account cannot use /dev/kvm. Add it to the kvm group (sudo usermod -aG kvm $USER), then sign out and back in")
+		return &kvmError{Short: "This account cannot use KVM.", msg: "this account is not allowed to use KVM. Add it to the kvm group with: sudo usermod -aG kvm $USER. Then sign out and back in"}
 	}
-	return fmt.Errorf("cannot open /dev/kvm: %w", err)
+	return &kvmError{Short: "KVM could not be opened.", msg: fmt.Sprintf("cannot open /dev/kvm: %v", err)}
 }
 
 // renderNodeVendors lists the PCI vendor of each DRM render node.

@@ -19,3 +19,7 @@ __pycache__/
 
 # Local Flatpak bundles kept beside Linux evidence
 docs/evidence/**/*.flatpak
+
+# Public Linux presentation assets and reproducible source capture
+!docs/images/try-omarchy-linux-hero.png
+!docs/images/linux-media/desktop-source.png

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Build the Linux Flatpak in the Flathub build image and export a bundle.
+# Build the Linux Flatpak in the Flathub build image and export an unsigned
+# bundle for local testing. publish-repo.sh turns the build into the signed
+# repository and the bundle people download.
 #   build-flatpak.sh OUTPUT_DIR
 # OUTPUT_DIR keeps the builder state between runs, so rebuilds only redo the
 # modules whose sources changed.
@@ -11,9 +13,10 @@ out=$(cd "$1" && pwd)
 image=ghcr.io/flathub-infra/flatpak-github-actions@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
 docker run --rm --network=host --privileged -v "$repo":/src:ro -v "$out":/out "$image" bash -c "
   set -e
-  flatpak-builder --disable-rofiles-fuse --force-clean --state-dir /out/state --repo /out/repo \
+  flatpak-builder --disable-rofiles-fuse --force-clean --default-branch=stable \
+    --state-dir /out/state --repo /out/repo \
     /out/build /src/runtime-build/linux/com.tryomarchy.TryOmarchy.yml
-  flatpak build-bundle /out/repo /out/com.tryomarchy.TryOmarchy.flatpak com.tryomarchy.TryOmarchy
+  flatpak build-bundle /out/repo /out/com.tryomarchy.TryOmarchy.flatpak com.tryomarchy.TryOmarchy stable
   chown -R $(id -u):$(id -g) /out"
 sha256sum "$out/com.tryomarchy.TryOmarchy.flatpak" > "$out/bundle.sha256"
 echo "bundle: $out/com.tryomarchy.TryOmarchy.flatpak"

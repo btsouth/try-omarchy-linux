@@ -37,3 +37,9 @@ Report each step as passed, failed or not tested, with the exact trigger for a
 failure and a screenshot where useful. Never report camera, gesture, USB,
 bridged networking, host-app launching or host authentication as supported:
 those are outside the first Linux release.
+
+## Reports so far
+
+| Date | Host | Hardware | Install | Result |
+| --- | --- | --- | --- | --- |
+| 2026-09-29 | Debian testing (forky), COSMIC on Wayland (cosmic-comp) | Intel i3-8130U laptop, UHD 620, 16 GB RAM | Preview 3, `--user` Flatpak through COSMIC Store, separate unprivileged account | Worked for a few minutes of use. Keyboard shortcuts and window resizing were smooth. The app gave the VM 2 CPUs and about 6 GB of memory. Audio, clipboard, suspend and the other steps above were not reported. |

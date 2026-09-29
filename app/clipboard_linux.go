@@ -41,6 +41,7 @@ type linuxClipboard struct {
 	key    [32]byte
 	serial uint32
 	portal *linuxPortalClipboard
+	owner  linuxSelectionOwner
 }
 
 func clipboardCommand(input []byte, limit int64, name string, args ...string) ([]byte, error) {
@@ -221,19 +222,7 @@ func (c *linuxClipboard) set(item clipItem) bool {
 	if c.portal != nil {
 		return c.portal.set(mime, item.Data)
 	}
-	return linuxCopy(mime, item.Data)
-}
-func linuxCopy(mime string, data []byte) bool {
-	// wl-copy detaches its selection owner after installing the selection.
-	// Direct /dev/null output avoids retaining a pipe in that child.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "wl-copy", "--type", mime)
-	if os.Getenv("WAYLAND_DISPLAY") == "" {
-		cmd = exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-in", "-target", mime)
-	}
-	cmd.Stdin = bytes.NewReader(data)
-	return cmd.Run() == nil
+	return c.owner.copy(mime, item.Data)
 }
 func (c *linuxClipboard) setPaths(paths []string) bool {
 	var text strings.Builder
@@ -250,7 +239,7 @@ func (c *linuxClipboard) setPaths(paths []string) bool {
 	if c.portal != nil {
 		return c.portal.setPaths(paths)
 	}
-	return linuxCopy("text/uri-list", []byte(text.String()))
+	return c.owner.copy("text/uri-list", []byte(text.String()))
 }
 
 func runLinuxClipboardBridge() func() {
@@ -376,6 +365,7 @@ func runLinuxClipboardBridge() func() {
 		if c.portal != nil {
 			c.portal.close()
 		}
+		c.owner.close()
 		desktopClipboard.CompareAndSwap(b, nil)
 		for _, l := range listeners {
 			l.Close()

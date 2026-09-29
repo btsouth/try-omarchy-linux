@@ -1,4 +1,0 @@
-2498 bash -c pgrep -af try-omarchy || true; flatpak install --user -y --noninteractive /mnt/artifacts/phase10g-reattach-build/com.tryomarchy.TryOmarchy.flatpak; flatpak info --user --show-commit com.tryomarchy.TryOmarchy; stat -c %d:%i:%s:%Y /home/tester/matrix/data/vm/disk.raw
-Installing app/com.tryomarchy.TryOmarchy/x86_64/master
-cf8266a2f1a8e3571750067885588f2177888d6d13fb14c3173f681d6fa7367d
-64769:1121432:25769803776:1790532343

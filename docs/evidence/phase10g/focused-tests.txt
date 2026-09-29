@@ -1,1 +1,0 @@
-ok  	github.com/omacom/try-omarchy-windows/app	0.291s

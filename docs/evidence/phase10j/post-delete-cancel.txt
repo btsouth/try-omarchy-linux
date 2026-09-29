@@ -1,3 +1,0 @@
-no-vm-recreated
-e10d593d3a97ca60238c28a7e5dafd48d1772592c580fa5a7b1ddef7892765b2  /home/fresh10i/SharedFixture/keep.txt
-      Commit: 500fb2e388c44382b90dc848392606f806a258f93457cc4bc9294aaf42ef1483

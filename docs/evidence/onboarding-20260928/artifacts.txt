@@ -1,3 +1,0 @@
-a43126c1cac5dac58fc3a9f38e4a5afcb718a8bb1560cb02ff39cd42b54b4c48  com.tryomarchy.TryOmarchy.flatpak
-7140d6ed878b8e02db18ed9dfea8ddbc03d1257ee8c5319700c314e59a9e617f  com.tryomarchy.TryOmarchy.flatpakref
-0000cbec5d2d8f2081afae45314e92dcc1564e61d385c46562be1c6632d52f66  flatpak-site.tar.gz

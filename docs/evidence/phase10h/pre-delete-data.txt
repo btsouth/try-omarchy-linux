@@ -1,8 +1,0 @@
-cf8266a2f1a8e3571750067885588f2177888d6d13fb14c3173f681d6fa7367d
-64769:1121432:25769803776:1790533010
-faae744f2682a674610b17146bca11f14a65b21ccf4554c75e690ad3f7bc02cc  /home/tester/matrix/exchange/text
-{
-  "version": 1,
-  "path": "/run/user/1000/doc/92d05703/data"
-}
-drwxr-xr-x 7 tester tester 4096 Sep 26 23:30 /home/tester/.var/app/com.tryomarchy.TryOmarchy

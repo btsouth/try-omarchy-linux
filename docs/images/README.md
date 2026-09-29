@@ -30,11 +30,11 @@ The official wordmark is preserved in `scripts/linux/media/omarchy-wordmark.svg`
 from the Try Omarchy site’s `brand/omarchy-wordmark.svg`. Omarchy’s marks remain
 subject to their owners’ trademark rights; see the third-party notices.
 
-Regenerate on devbox with Python 3, DejaVu fonts, `rsvg-convert` and FFmpeg:
+Regenerate with Python 3, DejaVu fonts, `rsvg-convert` and FFmpeg:
 
 ```sh
 python3 scripts/linux/media/render.py docs/images/linux-media/desktop-source.png docs/images
 ```
 
 Publish these files on the repository’s default branch before shipping metadata
-that references their public URLs. The new gallery URLs are not live yet.
+that references their public URLs.

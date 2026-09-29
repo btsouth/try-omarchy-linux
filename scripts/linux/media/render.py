@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render the Linux presentation from the official vector mark and a real capture.
-Requires rsvg-convert and ffmpeg. Run on devbox, not the user's desktop.
+Requires rsvg-convert and ffmpeg.
 """
 from pathlib import Path
 import math, subprocess, tempfile, xml.etree.ElementTree as ET

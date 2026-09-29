@@ -1,1 +1,0 @@
-ee8dacb683bf04a762cc1d826ec3bda5dc40baf0d115ca57bb57e7665550f1b7  /home/fresh10i/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy/vm/disk.raw

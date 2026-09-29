@@ -1,8 +1,0 @@
-Host: devbox
-Source: /workspace/try-omarchy-linux/fc-cand2-src/app
-Runtime: docker image golang:1.27.1
-Command: go test -count=1 -run "Test.*(Home|QuickSetup|Tips|ClipboardConsent|Experience|SetupState)" ./...
-Result: PASS
-app: ok (0.009s)
-app/cmd/sign-update: ok (no tests to run)
-The first attempt using host go could not run because go was absent from PATH. The container invocation above completed successfully.

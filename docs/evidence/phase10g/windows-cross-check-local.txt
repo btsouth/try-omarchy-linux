@@ -1,4 +1,0 @@
-GOOS=windows GOARCH=amd64 go -C app vet -unsafeptr=false ./...
-GOOS=windows GOARCH=amd64 go -C app build -o /dev/null .
-GOOS=windows GOARCH=amd64 go -C app test -c -o /dev/null .
-Windows vet, cross-build and test compilation passed. Native tests not run.

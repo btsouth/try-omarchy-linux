@@ -39,8 +39,13 @@ from your application menu. This worked in our Ubuntu 24.04 test where
 Software's launch was blocked by AppArmor.
 
 **Try it now** downloads Omarchy (about 2 GB), sets it up and starts it,
-signed in as `omarchy` with the password `omarchy`. **Customize** lets you pick
-the folder first, and whether to set up your own account inside Omarchy.
+signed in to a ready-made account: username `omarchy`, password `omarchy`.
+**Customize** asks where to store Omarchy first, then offers **Set up my own
+account**, which runs Omarchy's normal setup so you choose your own username
+and password. The ready-made account is a regular Omarchy user, not a
+time-limited trial. The one difference is that `sudo` does not ask it for a
+password. The choice is made once, at first setup. To switch later, back up
+anything you want to keep, choose **Delete this VM**, and set it up again.
 Memory, processors and the rest are in **Settings**. If the download stops,
 **Try again** or the next launch continues where it left off.
 

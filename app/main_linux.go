@@ -102,7 +102,7 @@ func main() {
 	timeZoneFlag := flag.String("timezone", "", "guest time zone: blank follows this computer, keep leaves the guest alone, or an IANA name")
 	keyboardFlag := flag.String("keyboard", "", "guest keyboard layout: blank follows exposed host XKB settings, keep preserves the guest, or an XKB layout such as de or us:intl")
 	localeFlag := flag.String("locale", "", "guest language: blank follows this computer, keep leaves the guest alone, or a locale such as de_DE")
-	flag.BoolVar(&cfg.instant, "instant", false, "skip first-boot questions and use the trial account")
+	flag.BoolVar(&cfg.instant, "instant", false, "skip first-boot questions and use the ready-made omarchy account")
 	var forwards forwardList
 	flag.Var(&forwards, "forward", "forward a local port into Omarchy: tcp:2222:22; repeatable")
 	sshPort := flag.Int("ssh", 0, "forward this loopback port to Omarchy's sshd and start sshd for the session")

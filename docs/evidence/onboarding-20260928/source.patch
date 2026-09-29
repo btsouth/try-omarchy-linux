@@ -1,0 +1,256 @@
+diff --git i/app/clipboard_consent_linux.go w/app/clipboard_consent_linux.go
+index 2d9c374..cf00d97 100644
+--- i/app/clipboard_consent_linux.go
++++ w/app/clipboard_consent_linux.go
+@@ -83,6 +83,10 @@ func linuxClipboardConsent(ask func(linuxSetupState) (string, error)) bool {
+ 	if err != nil {
+ 		return false
+ 	}
++	if answer == "cancel" {
++		requestSetupCancel()
++		return false
++	}
+ 	if answer != "primary" {
+ 		if answer == "secondary" {
+ 			if err := setLinuxClipboardSharing(false); err != nil {
+diff --git i/app/clipboard_consent_linux_test.go w/app/clipboard_consent_linux_test.go
+index 2f53b17..a30a636 100644
+--- i/app/clipboard_consent_linux_test.go
++++ w/app/clipboard_consent_linux_test.go
+@@ -67,9 +67,15 @@ func TestClipboardConsentWithoutAWindowKeepsTheTerminalBehavior(t *testing.T) {
+ 
+ func TestClipboardConsentClosedOrCancelledIsNotADecision(t *testing.T) {
+ 	consentTest(t)
++	configureSetupCancellation(false)
++	t.Cleanup(func() { configureSetupCancellation(false) })
+ 	if linuxClipboardConsent(func(linuxSetupState) (string, error) { return "cancel", nil }) || linuxClipboardSharingOff() {
+ 		t.Fatal("dismissing the explanation skips this launch only")
+ 	}
++	if !setupCancelled() {
++		t.Fatal("Cancel must stop setup, not silently continue to boot")
++	}
++	configureSetupCancellation(false)
+ 	if linuxClipboardConsent(func(linuxSetupState) (string, error) { return "", context.Canceled }) || linuxClipboardSharingOff() {
+ 		t.Fatal("a closed window skips this launch only")
+ 	}
+diff --git i/app/clipboard_linux.go w/app/clipboard_linux.go
+index 890fe63..b8786a1 100644
+--- i/app/clipboard_linux.go
++++ w/app/clipboard_linux.go
+@@ -292,6 +292,9 @@ func runLinuxClipboardBridge() func() {
+ 		logf("clipboard: %s", message)
+ 		supported = false
+ 	}
++	if setupCancelled() {
++		return func() {}
++	}
+ 	for _, name := range names {
+ 		if _, err := exec.LookPath(name); err != nil {
+ 			logf("clipboard: %s unavailable", name)
+diff --git i/app/fetch.go w/app/fetch.go
+index defce3e..4959d2a 100644
+--- i/app/fetch.go
++++ w/app/fetch.go
+@@ -8,6 +8,7 @@ import (
+ 	"os"
+ 	"path/filepath"
+ 	"strings"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/klauspost/compress/zstd"
+@@ -313,12 +314,13 @@ func decompress(src, dest, wantSum string, ui *progressUI) error {
+ 
+ type countingReader struct {
+ 	r io.Reader
+-	n int64
++	// zstd reads ahead on a worker while the copy loop reports progress.
++	n atomic.Int64
+ }
+ 
+ func (c *countingReader) Read(p []byte) (int, error) {
+ 	n, err := c.r.Read(p)
+-	c.n += int64(n)
++	c.n.Add(int64(n))
+ 	return n, err
+ }
+ 
+@@ -338,7 +340,7 @@ func sparseCopyStream(dst *os.File, src io.Reader, srcTotal int64, counted *coun
+ 				}
+ 			}
+ 			off += int64(n)
+-			ui.setProgress(counted.n, srcTotal)
++			ui.setProgress(counted.n.Load(), srcTotal)
+ 		}
+ 		if err == io.EOF || err == io.ErrUnexpectedEOF {
+ 			return dst.Truncate(off)
+diff --git i/app/main_linux.go w/app/main_linux.go
+index c57f89f..95d8f0e 100644
+--- i/app/main_linux.go
++++ w/app/main_linux.go
+@@ -315,12 +315,6 @@ func main() {
+ 		logf("rendering: %s", reason)
+ 	}
+ 
+-	// Ask for clipboard access now, while the person is still at the window.
+-	// Setup can run for minutes, and a permission dialog that appears at the
+-	// end goes unanswered or looks like something else is happening.
+-	stopClipboard := runLinuxClipboardBridge()
+-	defer stopClipboard()
+-
+ 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
+ 		fatal("Could not restore the previous Omarchy image after an interrupted update: %v", err)
+ 	}
+@@ -382,6 +376,15 @@ func main() {
+ 		fatal("%v", err)
+ 	}
+ 
++	// Optional sharing comes after downloads and disk preparation succeed.
++	// A failed or cancelled install must not request access to the clipboard.
++	// Keep the setup window alive to explain GNOME's permission before boot.
++	stopClipboard := runLinuxClipboardBridge()
++	defer stopClipboard()
++	if err := checkSetupCancelled(); err != nil {
++		fatal("%v", err)
++	}
++
+ 	reclaimDir.Store(&cfg.dir)
+ 	reclaimSupported.Store(true)
+ 	go runLinuxGuestAgent(cfg.dir)
+diff --git i/app/settings_linux.go w/app/settings_linux.go
+index 0cb0887..e629684 100644
+--- i/app/settings_linux.go
++++ w/app/settings_linux.go
+@@ -271,6 +271,7 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
+ 	} else if os.IsNotExist(err) {
+ 		state.Headline = "Omarchy is not set up yet."
+ 		state.Status = "Try it now downloads Omarchy, sets it up and starts it. You can move or delete it later."
++		state.Detail = "About " + linuxGB(linuxGuestDownloadBytes) + " to download and " + linuxGB(linuxGuestSpaceBytes) + " of free space needed.\nTry it now uses a trial account. Customize lets you create your own."
+ 		state.Sections = []linuxSection{{Heading: "What setup does", Rows: linuxSetupRows(dir, defaultDir, free)}}
+ 	} else {
+ 		state.Headline = "Omarchy's storage cannot be read."
+diff --git i/linux-ui/main.go w/linux-ui/main.go
+index bb9d687..a726ab7 100644
+--- i/linux-ui/main.go
++++ w/linux-ui/main.go
+@@ -237,7 +237,7 @@ func main() {
+ 		homeContent.SetMarginStart(24)
+ 		homeContent.SetMarginEnd(24)
+ 		homeIcon := gtk.NewImageFromIconName("com.tryomarchy.TryOmarchy")
+-		homeIcon.SetPixelSize(64)
++		homeIcon.SetPixelSize(48)
+ 		homeIcon.SetHAlign(gtk.AlignCenter)
+ 		named(homeIcon, "Try Omarchy")
+ 		homeContent.Append(homeIcon)
+@@ -264,7 +264,9 @@ func main() {
+ 		homeDetail.AddCSSClass("dim-label")
+ 		homeContent.Append(homeDetail)
+ 		homeSections := gtk.NewBox(gtk.OrientationVertical, 12)
+-		homeContent.Append(homeSections)
++		homeDetails := gtk.NewExpander("Storage and account details")
++		homeDetails.SetChild(homeSections)
++		homeContent.Append(homeDetails)
+ 		homeClamp := adw.NewClamp()
+ 		homeClamp.SetMaximumSize(480)
+ 		homeClamp.SetChild(homeContent)
+@@ -819,6 +821,14 @@ func main() {
+ 					}
+ 					page.SetTitle("Try Omarchy")
+ 					page.SetIconName("com.tryomarchy.TryOmarchy")
++					if next.Prompt != "" {
++						page.AddCSSClass("compact")
++						if len(next.Sections) > 0 {
++							page.SetIconName("")
++						}
++					} else {
++						page.RemoveCSSClass("compact")
++					}
+ 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
+ 					homeScroll.SetVisible(next.Prompt == "home")
+ 					settingsScroll.SetVisible(next.Prompt == "settings")
+@@ -830,6 +840,8 @@ func main() {
+ 					settingsStatus.SetText(next.Status)
+ 					secondary.RemoveCSSClass("destructive-action")
+ 					fillSections(homeSections, sectionsIf(next.Prompt == "home", next.Sections))
++					homeDetails.SetVisible(next.Prompt == "home" && len(next.Sections) > 0)
++					homeDetails.SetExpanded(next.Installed)
+ 					fillSections(pageSections, sectionsIf(next.Prompt != "home" && next.Prompt != "settings", next.Sections))
+ 					clearChildren(menuBox)
+ 					for _, item := range next.Menu {
+diff --git i/runtime-build/linux/site/index.html w/runtime-build/linux/site/index.html
+index e37f247..89411c6 100644
+--- i/runtime-build/linux/site/index.html
++++ w/runtime-build/linux/site/index.html
+@@ -8,7 +8,6 @@
+ <style>
+   :root { color-scheme: light dark; --accent: #9ece6a; --ink: #151912; }
+   body { margin: 0; font: 17px/1.55 system-ui, sans-serif; background: #f6f7f4; color: #1d2119; }
+-  @media (prefers-color-scheme: dark) { body { background: var(--ink); color: #e6e9e1; } code { background: #22281d; } }
+   main { max-width: 40rem; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+   header { text-align: center; margin-bottom: 2.5rem; }
+   header img { width: 88px; height: 88px; }
+@@ -21,6 +20,12 @@
+   pre code { display: block; padding: .75rem 1rem; white-space: pre-wrap; }
+   a { color: inherit; }
+   ul { padding-left: 1.25rem; }
++  ol { padding-left: 1.5rem; }
++  li { margin-bottom: .55rem; }
++  details { border: 1px solid #92998a; border-radius: .7rem; padding: 1rem; margin: 1rem 0; }
++  summary { cursor: pointer; font-weight: 650; }
++  .note { font-size: .92rem; }
++  @media (prefers-color-scheme: dark) { body { background: var(--ink); color: #e6e9e1; } code { background: #22281d; } }
+ </style>
+ </head>
+ <body>
+@@ -28,19 +33,47 @@
+ <header>
+   <img src="icon.svg" alt="">
+   <h1>Try Omarchy for Linux</h1>
+-  <p>The full Omarchy desktop in a window on your Linux PC. Preview release.</p>
+-  <a class="install" href="com.tryomarchy.TryOmarchy.flatpakref">Install with Software</a>
++  <p>Try the Omarchy desktop in a window. Your current Linux installation stays in place.</p>
++  <p class="note">Linux preview for x86_64 PCs. Hardware compatibility is still being tested.</p>
+ </header>
+ 
+ <h2>Before you install</h2>
+ <ul>
+   <li>A 64-bit x86 PC with virtualization turned on in its firmware settings.</li>
+-  <li>Flatpak. Ubuntu needs <code>sudo apt install flatpak gnome-software-plugin-flatpak</code> first; Fedora, Mint and most other distros already have it.</li>
++  <li>Flatpak with support in your software manager. See the Ubuntu instructions below or <a href="https://flathub.org/en/setup">set up Flatpak for your distribution</a>.</li>
+   <li>About 15 GB free. Omarchy takes about 13 GB, downloaded once (about 2 GB) on first launch, and Software adds the GNOME runtime if you do not have it.</li>
+ </ul>
+ 
+-<h2>Install from a terminal</h2>
++<a class="install" href="com.tryomarchy.TryOmarchy.flatpakref" download>Download install file</a>
++<p class="note">On Ubuntu, complete the setup below before opening this file.</p>
++
++<details>
++  <summary>Using Ubuntu? Start here</summary>
++  <p>Ubuntu's App Center does not install Flatpaks. Install Software and its Flatpak support:</p>
++  <pre><code>sudo apt update
++sudo apt install flatpak gnome-software gnome-software-plugin-flatpak</code></pre>
++  <p>Log out and back in so the app appears in your application menu. Then return to this page.</p>
++</details>
++
++<h2>Install and start trying</h2>
++<ol>
++  <li>Download the install file above. Open it with <strong>Software</strong> or your distribution's Flatpak installer, then choose <strong>Install</strong>. The GNOME runtime is installed too if needed.</li>
++  <li>Open <strong>Try Omarchy</strong> from your application menu.</li>
++  <li>Choose <strong>Try it now</strong>. It downloads about 2 GB, prepares your VM and signs you into the trial account. Choose <strong>Customize</strong> instead to create your own account.</li>
++</ol>
++<p class="note">Setup may take several minutes. You can cancel and continue later. On GNOME, clipboard sharing is optional; you can choose Not now and still try Omarchy.</p>
++
++<details>
++<summary>The install file will not open, or prefer a terminal?</summary>
++<p>After setting up Flatpak, run:</p>
+ <pre><code>flatpak install --user https://btsouth.github.io/try-omarchy-linux/com.tryomarchy.TryOmarchy.flatpakref</code></pre>
++<p>Then open Try Omarchy from your application menu, or run:</p>
++<pre><code>flatpak run com.tryomarchy.TryOmarchy</code></pre>
++</details>
++
++<h2>Your first session</h2>
++<p><strong>Ctrl+Alt+G</strong> gives your keyboard back to your Linux desktop. Click the Omarchy window to send keys to it again. <strong>Ctrl+Alt+F</strong> switches fullscreen. Inside Omarchy, <strong>Super+Space</strong> opens its menu.</p>
++<p>The trial account is <strong>omarchy</strong>, with password <strong>omarchy</strong>. Your files stay in the VM when you shut it down. Closing its window asks before shutting down.</p>
+ 
+ <h2>Updates</h2>
+ <p>Software updates Try Omarchy like any other app, or run <code>flatpak update</code>. Your VM and settings stay.</p>

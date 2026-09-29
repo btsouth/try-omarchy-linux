@@ -10,20 +10,34 @@ You need a 64-bit x86 PC with virtualization turned on, Flatpak, and about
 15 GB free: Omarchy takes about 13 GB once set up, and Software also installs
 the GNOME runtime the first time if you do not have it yet.
 
-1. Open [btsouth.github.io/try-omarchy-linux](https://btsouth.github.io/try-omarchy-linux/)
-   and choose **Install with Software**. Software opens and installs Try
-   Omarchy, adding Flathub for the runtime if it is missing.
+1. Open [GitHub Releases](https://github.com/btsouth/try-omarchy-linux/releases)
+   and choose the newest **Linux app** release. Download
+   `com.tryomarchy.TryOmarchy.flatpakref` from its assets (or the `.flatpak`
+   bundle for an older preview), open it with
+   **Software**, then choose **Install**. It adds the GNOME runtime if missing.
 2. Open **Try Omarchy** from your app launcher and choose **Try it now**.
 
-From a terminal:
+From a terminal in the folder containing the downloaded installer:
 
 ```sh
-flatpak install --user https://btsouth.github.io/try-omarchy-linux/com.tryomarchy.TryOmarchy.flatpakref
+flatpak install --user ./com.tryomarchy.TryOmarchy.flatpakref
 ```
 
-Ubuntu does not ship Flatpak. Install it first with
-`sudo apt install flatpak gnome-software-plugin-flatpak`, then log out and back
-in. Fedora, Linux Mint, Pop!_OS and most other distros already have it.
+Older previews may only provide `com.tryomarchy.TryOmarchy.flatpak`. Install
+that file with `flatpak install --user --bundle ./com.tryomarchy.TryOmarchy.flatpak`.
+
+Ubuntu's App Center does not install Flatpaks. Install Software and its
+Flatpak support, then log out and back in:
+
+```sh
+sudo apt update
+sudo apt install flatpak gnome-software gnome-software-plugin-flatpak
+```
+
+If Software installs the app but its **Open** button fails with
+`ldconfig failed, exit status 256`, open **Try Omarchy**
+from your application menu. This worked in our Ubuntu 24.04 test where
+Software's launch was blocked by AppArmor.
 
 **Try it now** downloads Omarchy (about 2 GB), sets it up and starts it,
 signed in as `omarchy` with the password `omarchy`. **Customize** lets you pick

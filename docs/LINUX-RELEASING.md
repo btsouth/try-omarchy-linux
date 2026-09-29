@@ -1,9 +1,15 @@
 # Releasing the Linux app
 
-The Linux app ships as a Flatpak from its own signed repository on GitHub
-Pages, `https://btsouth.github.io/try-omarchy-linux/repo/`, until Flathub
-carries it. People install it once from the `.flatpakref` link and then get
-updates through Software or `flatpak update`. The addresses live in
+The public entry point is the [GitHub README](../README.md), with installer
+assets on GitHub Releases. No separate landing website or tryomarchy.com
+update is required for this preview.
+
+GitHub Pages serves the signed Flatpak update repository behind the scenes at
+`https://btsouth.github.io/try-omarchy-linux/repo/`, until Flathub carries it.
+People download the `.flatpakref` from a GitHub release and then get updates
+through Software or `flatpak update`. The package still needs that repository
+to be reachable; a GitHub release attachment alone does not serve its update
+objects. The addresses live in
 [repository.env](../runtime-build/linux/repository.env).
 
 App versions and guest images are separate. App releases are tagged
@@ -48,7 +54,10 @@ copy.
    `flatpak-site.tar.gz` against `SHA256SUMS` and deploys it to Pages. It never
    builds or signs anything. The first time, set Pages to deploy from GitHub
    Actions in the repository settings.
-7. Check that `flatpak remote-ls try-omarchy` on an installed machine lists the
+7. Smoke-test the README's GitHub release download and install route. Keep
+   prerelease download links explicit: GitHub's `releases/latest` shortcut is
+   not the app-preview selector, and this repository also has guest releases.
+8. Check that `flatpak remote-ls try-omarchy` on an installed machine lists the
    new commit, and that Software offers the update.
 
 ## Moving to Flathub later

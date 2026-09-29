@@ -27,7 +27,7 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 
 ## Get started
 
-1. **[Download the installer](https://tryomarchy.com/linux.flatpakref)** and open it with **Software**, **Discover** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu, complete the setup below first.
+1. **[Download the installer](https://tryomarchy.com/linux.flatpakref)** and open it with **Software**, **Discover** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu or NixOS, complete the setup below first.
 2. **Open Try Omarchy from your application menu.** Choose **Set up Omarchy**, then **Set up my own account** to pick your username and password, or **Quick start as omarchy** to skip that and sign in as `omarchy` with the password `omarchy`. Setup then downloads Omarchy (about 2 GB). **Customize** lets you choose another folder first.
 3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen.
 
@@ -48,11 +48,13 @@ After installing, launch **Try Omarchy from the application menu**. On Ubuntu 24
 </details>
 
 <details>
-<summary>Fedora and Linux Mint</summary>
+<summary>Fedora, Linux Mint and NixOS</summary>
 
 On Fedora, Software may ask whether to enable third-party repositories. Choose **Enable**. The app's GNOME runtime comes from Flathub, and enabling it uses Fedora's own Flathub setup. Choosing **Ignore** still works, but Flatpak then adds a second Flathub source named `flathub-1` for the runtime.
 
 On Linux Mint, Software Manager lists the app as `com.tryomarchy.TryOmarchy` with a generic icon and an **Unverified Flatpak** badge before it is installed, as it does for any app from outside Flathub. The installed app has its proper name and icon.
+
+NixOS does not enable Flatpak by default. Add `services.flatpak.enable = true;` to `/etc/nixos/configuration.nix`, run `sudo nixos-rebuild switch`, then log out and back in. You don't need to add Flathub first. The installer adds it for the app's GNOME runtime.
 
 </details>
 
@@ -110,8 +112,9 @@ hardware support. See the [hardware testing checklist](docs/LINUX-HARDWARE-TESTI
 ## Before you start
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
-- The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu instructions are above.
-- Tested end to end on fresh **Ubuntu 24.04, Fedora 44 and Linux Mint 22.3** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds. Physical hardware and Omarchy/Hyprland hosts still need testing.
+- The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu and NixOS instructions are above.
+- Tested end to end on fresh **Ubuntu 24.04, Fedora 44, Linux Mint 22.3 and NixOS 26.05** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds. Omarchy/Hyprland hosts and more physical hardware still need testing.
+- A user reported it working on **Debian testing (forky) with COSMIC** on Wayland, installed as a `--user` Flatpak through COSMIC Store on an Intel i3-8130U laptop with UHD 620 graphics and 16 GB of RAM. See [reports so far](docs/LINUX-HARDWARE-TESTING.md#reports-so-far).
 - Keep about **15 GB free** for Omarchy and its runtime. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GB disk, but only what it uses takes space.
 
 ## Build from source

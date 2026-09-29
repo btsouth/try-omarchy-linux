@@ -51,6 +51,13 @@ It shows every app from outside Flathub that way. Once installed, the menu
 entry has the right name and icon. Mint names the app's update source
 `tryomarchy-origin` rather than `try-omarchy`.
 
+NixOS does not enable Flatpak by default. Add
+`services.flatpak.enable = true;` to `/etc/nixos/configuration.nix`, run
+`sudo nixos-rebuild switch`, then log out and back in so the application menu
+picks up Flatpak apps. Flathub does not need to be added first; the installer
+adds it for the app's GNOME runtime. `/dev/kvm` is usable by every user on
+NixOS, so no group change is needed.
+
 **Set up Omarchy** asks how you want to sign in, then downloads Omarchy
 (about 2 GB), sets it up and starts it. **Set up my own account** runs
 Omarchy's normal setup, so you choose your own username and password. **Quick

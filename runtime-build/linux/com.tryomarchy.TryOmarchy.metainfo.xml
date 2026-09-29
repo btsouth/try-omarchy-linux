@@ -55,6 +55,7 @@
           <li>A short explanation comes before GNOME's clipboard permission, and Settings can turn sharing on or off</li>
           <li>Ctrl+Alt+G gives the keyboard back to your desktop, and a one-time tip says so</li>
           <li>Backup and recovery can remove what an interrupted backup or restore left behind</li>
+          <li>Settings groups its options under clear headings</li>
         </ul>
       </description>
     </release>

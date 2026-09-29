@@ -237,7 +237,7 @@ func main() {
 		homeContent.SetMarginStart(24)
 		homeContent.SetMarginEnd(24)
 		homeIcon := gtk.NewImageFromIconName("com.tryomarchy.TryOmarchy")
-		homeIcon.SetPixelSize(64)
+		homeIcon.SetPixelSize(48)
 		homeIcon.SetHAlign(gtk.AlignCenter)
 		named(homeIcon, "Try Omarchy")
 		homeContent.Append(homeIcon)
@@ -264,7 +264,9 @@ func main() {
 		homeDetail.AddCSSClass("dim-label")
 		homeContent.Append(homeDetail)
 		homeSections := gtk.NewBox(gtk.OrientationVertical, 12)
-		homeContent.Append(homeSections)
+		homeDetails := gtk.NewExpander("Storage and account details")
+		homeDetails.SetChild(homeSections)
+		homeContent.Append(homeDetails)
 		homeClamp := adw.NewClamp()
 		homeClamp.SetMaximumSize(480)
 		homeClamp.SetChild(homeContent)
@@ -284,19 +286,32 @@ func main() {
 		settingsStatus.SetWrap(true)
 		settingsStatus.SetHAlign(gtk.AlignStart)
 		settingsContent.Append(settingsStatus)
-		form := gtk.NewBox(gtk.OrientationVertical, 10)
+		form := gtk.NewBox(gtk.OrientationVertical, 8)
+		// Headings stand apart from the controls above them, and help text
+		// reads as secondary, so the long form scans as separate groups.
+		formLabel := func(title string) {
+			l := gtk.NewLabel(title)
+			l.SetWrap(true)
+			l.SetXAlign(0)
+			l.AddCSSClass("heading")
+			if form.FirstChild() != nil {
+				l.SetMarginTop(12)
+			}
+			form.Append(l)
+		}
+		formHelp := func(text string) *gtk.Label {
+			l := gtk.NewLabel(text)
+			l.SetWrap(true)
+			l.SetXAlign(0)
+			l.AddCSSClass("dim-label")
+			form.Append(l)
+			return l
+		}
 		entry := func(title string) *gtk.Entry {
-			titleLabel := gtk.NewLabel(title)
-			titleLabel.SetHAlign(gtk.AlignStart)
-			form.Append(titleLabel)
+			formLabel(title)
 			input := gtk.NewEntry()
 			form.Append(input)
 			return input
-		}
-		formLabel := func(title string) {
-			l := gtk.NewLabel(title)
-			l.SetHAlign(gtk.AlignStart)
-			form.Append(l)
 		}
 		formLabel("Memory for Omarchy (GiB)")
 		autoMemory := gtk.NewCheckButtonWithLabel("Choose memory automatically")
@@ -319,10 +334,7 @@ func main() {
 		render := gtk.NewDropDownFromStrings([]string{"Automatic (recommended)", "Graphics acceleration", "Software rendering"})
 		named(render, "Rendering")
 		form.Append(render)
-		description := gtk.NewLabel("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
-		description.SetWrap(true)
-		description.SetHAlign(gtk.AlignStart)
-		form.Append(description)
+		formHelp("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
 		defaults := gtk.NewButtonWithLabel("Restore resource defaults")
 		defaults.ConnectClicked(func() {
 			autoMemory.SetActive(true)
@@ -338,10 +350,7 @@ func main() {
 		form.Append(standardDisk)
 		form.Append(diskGiB)
 		standardDisk.ConnectToggled(func() { diskGiB.SetSensitive(!standardDisk.Active()) })
-		diskHelp := gtk.NewLabel("A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
-		diskHelp.SetWrap(true)
-		diskHelp.SetHAlign(gtk.AlignStart)
-		form.Append(diskHelp)
+		formHelp("A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
 		formLabel("Display and audio")
 		fullscreen := gtk.NewCheckButtonWithLabel("Open Omarchy fullscreen")
 		form.Append(fullscreen)
@@ -357,10 +366,7 @@ func main() {
 		named(keyboard, "Guest keyboard layout")
 		form.Append(keyboard)
 		keyboardNames := []string{""}
-		keyboardHelp := gtk.NewLabel("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
-		keyboardHelp.SetWrap(true)
-		keyboardHelp.SetHAlign(gtk.AlignStart)
-		form.Append(keyboardHelp)
+		formHelp("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
 		microphone := gtk.NewCheckButtonWithLabel("Allow microphone access")
 		form.Append(microphone)
 		formLabel("Audio output")
@@ -372,16 +378,10 @@ func main() {
 		named(audioInput, "Audio input")
 		form.Append(audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
-		audioHelp := gtk.NewLabel("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
-		audioHelp.SetWrap(true)
-		audioHelp.SetHAlign(gtk.AlignStart)
-		form.Append(audioHelp)
+		formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
 		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
 		form.Append(clipboardShare)
-		clipboardHelp := gtk.NewLabel("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
-		clipboardHelp.SetWrap(true)
-		clipboardHelp.SetHAlign(gtk.AlignStart)
-		form.Append(clipboardHelp)
+		clipboardHelp := formHelp("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
 		formLabel("Network and SSH")
 		sshEnabled := gtk.NewCheckButtonWithLabel("Allow SSH from this computer")
 		form.Append(sshEnabled)
@@ -390,10 +390,7 @@ func main() {
 		named(sshPort, "SSH port on this computer")
 		form.Append(sshPort)
 		sshEnabled.ConnectToggled(func() { sshPort.SetSensitive(sshEnabled.Active()) })
-		sshHelp := gtk.NewLabel("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
-		sshHelp.SetWrap(true)
-		sshHelp.SetHAlign(gtk.AlignStart)
-		form.Append(sshHelp)
+		formHelp("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
 		sshKey := entry("SSH public key (optional)")
 		sshKey.SetEditable(false)
 		named(sshKey, "SSH public key file")
@@ -432,10 +429,7 @@ func main() {
 		formLabel("Startup")
 		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
 		form.Append(startAutomatically)
-		startupHelp := gtk.NewLabel("The launcher stays open for 10 seconds so you can choose Settings or Close.")
-		startupHelp.SetWrap(true)
-		startupHelp.SetHAlign(gtk.AlignStart)
-		form.Append(startupHelp)
+		formHelp("The launcher stays open for 10 seconds so you can choose Settings or Close.")
 		share := entry("Shared folder")
 		share.SetEditable(false)
 		named(share, "Shared folder")
@@ -477,6 +471,7 @@ func main() {
 		dynamicActions := gtk.NewBox(gtk.OrientationVertical, 8)
 		dynamicActions.SetVisible(false)
 		actions := gtk.NewBox(gtk.OrientationVertical, 8)
+		actions.SetMarginTop(12)
 		actions.SetMarginStart(24)
 		actions.SetMarginEnd(24)
 		actions.SetMarginBottom(16)
@@ -494,6 +489,25 @@ func main() {
 		layout.Append(scroll)
 		layout.Append(homeScroll)
 		layout.Append(settingsScroll)
+		// When the page scrolls, a rule marks where it ends above the pinned
+		// buttons, so cut-off text does not look like it runs into them.
+		footerRule := gtk.NewSeparator(gtk.OrientationHorizontal)
+		footerRule.SetVisible(false)
+		layout.Append(footerRule)
+		updateFooterRule := func() {
+			overflow := false
+			for _, pane := range []*gtk.ScrolledWindow{scroll, homeScroll, settingsScroll} {
+				adjustment := pane.VAdjustment()
+				if pane.Visible() && adjustment.Upper() > adjustment.PageSize()+1 {
+					overflow = true
+				}
+			}
+			footerRule.SetVisible(overflow)
+		}
+		for _, pane := range []*gtk.ScrolledWindow{scroll, homeScroll, settingsScroll} {
+			pane.VAdjustment().ConnectChanged(updateFooterRule)
+			pane.NotifyProperty("visible", updateFooterRule)
+		}
 		actionClamp := adw.NewClamp()
 		actionClamp.SetMaximumSize(480)
 		actionClamp.SetChild(actions)
@@ -819,6 +833,14 @@ func main() {
 					}
 					page.SetTitle("Try Omarchy")
 					page.SetIconName("com.tryomarchy.TryOmarchy")
+					if next.Prompt != "" {
+						page.AddCSSClass("compact")
+						if len(next.Sections) > 0 {
+							page.SetIconName("")
+						}
+					} else {
+						page.RemoveCSSClass("compact")
+					}
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
@@ -830,6 +852,8 @@ func main() {
 					settingsStatus.SetText(next.Status)
 					secondary.RemoveCSSClass("destructive-action")
 					fillSections(homeSections, sectionsIf(next.Prompt == "home", next.Sections))
+					homeDetails.SetVisible(next.Prompt == "home" && len(next.Sections) > 0)
+					homeDetails.SetExpanded(next.Installed)
 					fillSections(pageSections, sectionsIf(next.Prompt != "home" && next.Prompt != "settings", next.Sections))
 					clearChildren(menuBox)
 					for _, item := range next.Menu {

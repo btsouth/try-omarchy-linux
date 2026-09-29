@@ -19,7 +19,7 @@
 
 <p align="center">x86_64 · KVM required · Flatpak · Wayland or X11</p>
 
-Try Omarchy runs [Omarchy](https://omarchy.org) in a virtual machine. You can explore its apps, themes, and keyboard-first workflow without replacing your current distro or repartitioning a drive. Your Omarchy files persist between sessions.
+Try Omarchy runs [Omarchy](https://omarchy.org) in a virtual machine. You can explore its apps, themes, and keyboard-first workflow without replacing your current distro or repartitioning a drive. It is the full Omarchy desktop, not a demo or time-limited trial, and your Omarchy files persist between sessions.
 
 This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom/try-omarchy-windows) and [Try Omarchy for macOS](https://github.com/omacom/try-omarchy). It shares the Windows launcher's code and adds a Linux front end, a Flatpak package, and Linux guest integration.
 
@@ -28,8 +28,8 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 ## Get started
 
 1. **[Download the installer](https://tryomarchy.com/linux.flatpakref)** and open it with **Software**, **Discover** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu, complete the setup below first.
-2. **Open Try Omarchy from your application menu.** Choose **Try it now** to download Omarchy (about 2 GB) and start with a ready-to-use trial account. Choose **Customize** to pick another folder or create your own account.
-3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen. The trial account and password are both `omarchy`.
+2. **Open Try Omarchy from your application menu.** Choose **Try it now** to download Omarchy (about 2 GB) and start with a ready-made account. To use your own username and password instead, choose **Customize**, pick where to store Omarchy, then choose **Set up my own account**.
+3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen. The ready-made account's username and password are both `omarchy`.
 
 <details>
 <summary>Ubuntu setup</summary>

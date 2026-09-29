@@ -11,7 +11,7 @@ Record distro/version, desktop and Wayland/X11 session, CPU, GPU/driver,
 kernel, Flatpak runtime and whether `/dev/kvm` is accessible. Do not include
 private files or unreviewed diagnostic bundles.
 
-1. Install, find Try Omarchy in the app launcher, and choose Try it now.
+1. Install, find Try Omarchy in the app launcher, and choose Set up Omarchy.
    Check that the guest desktop draws fully and keyboard capture can be released
    with Ctrl+Alt+G. Close and reopen three times; also reboot from inside Omarchy.
 2. Copy Unicode text, a PNG and a file in both directions. On GNOME, test portal

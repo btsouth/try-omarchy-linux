@@ -68,7 +68,7 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 		"Download": "About 2 GB, once. If it is interrupted, it continues where it stopped.",
 		"Space":    "About 13 GB.",
 		"Location": linuxDisplayPath(root),
-		"Account":  "signed in as omarchy (password omarchy)",
+		"Account":  "Your own username and password, or a quick-start account",
 	} {
 		if !strings.Contains(rows[title], want) {
 			t.Fatalf("%s row lacks %q: %q", title, want, rows[title])
@@ -103,8 +103,8 @@ func TestLinuxHomeActionsFollowTheStateOfThings(t *testing.T) {
 		suggested string
 	}{
 		{"first setup", linuxSetupState{CanAttach: true},
-			[]string{"Try it now=try", "Customize...=customize", "Settings=settings", "Close=close"},
-			[]string{"About and help=about", "Use existing data folder=attach"}, "try"},
+			[]string{"Set up Omarchy=setup", "Customize...=customize", "Settings=settings", "Close=close"},
+			[]string{"About and help=about", "Use existing data folder=attach"}, "setup"},
 		{"first setup without room", linuxSetupState{Setup: "customize"},
 			[]string{"Choose another folder...=customize", "Settings=settings", "Close=close"},
 			[]string{"About and help=about"}, "customize"},

@@ -14,7 +14,7 @@ the GNOME runtime the first time if you do not have it yet.
    with **Software** or **Discover**, then choose **Install**. It adds the
    GNOME runtime if missing. [tryomarchy.com/linux](https://tryomarchy.com/linux/)
    walks through the same steps.
-2. Open **Try Omarchy** from your app launcher and choose **Try it now**.
+2. Open **Try Omarchy** from your app launcher and choose **Set up Omarchy**.
 
 From a terminal:
 
@@ -51,14 +51,16 @@ It shows every app from outside Flathub that way. Once installed, the menu
 entry has the right name and icon. Mint names the app's update source
 `tryomarchy-origin` rather than `try-omarchy`.
 
-**Try it now** downloads Omarchy (about 2 GB), sets it up and starts it,
-signed in to a ready-made account: username `omarchy`, password `omarchy`.
-**Customize** asks where to store Omarchy first, then offers **Set up my own
-account**, which runs Omarchy's normal setup so you choose your own username
-and password. The ready-made account is a regular Omarchy user, not a
-time-limited trial. The one difference is that `sudo` does not ask it for a
-password. The choice is made once, at first setup. To switch later, back up
-anything you want to keep, choose **Delete this VM**, and set it up again.
+**Set up Omarchy** asks how you want to sign in, then downloads Omarchy
+(about 2 GB), sets it up and starts it. **Set up my own account** runs
+Omarchy's normal setup, so you choose your own username and password. **Quick
+start as omarchy** skips that and signs you in as `omarchy` with the password
+`omarchy`. Sudo does not ask that account for a password, and SSH accepts only
+keys for it, since its password is public. It is meant for a first look; run
+`passwd` in Omarchy to change the password. **Customize** asks where to store
+Omarchy first, then asks the same question. The choice is made once, at first
+setup. To switch later, back up anything you want to keep, choose **Delete this
+VM**, and set it up again.
 Memory, processors and the rest are in **Settings**. If the download stops,
 **Try again** or the next launch continues where it left off.
 

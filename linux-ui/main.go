@@ -490,9 +490,11 @@ func main() {
 		layout.Append(homeScroll)
 		layout.Append(settingsScroll)
 		// When the page scrolls, a rule marks where it ends above the pinned
-		// buttons, so cut-off text does not look like it runs into them.
+		// buttons, so cut-off text does not look like it runs into them. It
+		// fades rather than hides: this runs during layout, and showing or
+		// hiding a widget there left the buttons below it undrawn.
 		footerRule := gtk.NewSeparator(gtk.OrientationHorizontal)
-		footerRule.SetVisible(false)
+		footerRule.SetOpacity(0)
 		layout.Append(footerRule)
 		updateFooterRule := func() {
 			overflow := false
@@ -502,7 +504,11 @@ func main() {
 					overflow = true
 				}
 			}
-			footerRule.SetVisible(overflow)
+			if overflow {
+				footerRule.SetOpacity(1)
+			} else {
+				footerRule.SetOpacity(0)
+			}
 		}
 		for _, pane := range []*gtk.ScrolledWindow{scroll, homeScroll, settingsScroll} {
 			pane.VAdjustment().ConnectChanged(updateFooterRule)

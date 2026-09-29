@@ -1,0 +1,117 @@
+sdl2: on X11, keep the keyboard grab only while the pointer is over the window
+
+On X11 SDL implements the focus keyboard grab with an active keyboard grab.
+Holding it after the pointer left the window kept the desktop's panel menus
+and popups from taking the keyboard: Cinnamon's menu opened with typing going
+to the guest, applets needed a second click, and a notification popup could
+stay stuck open. The grab now also needs the pointer over the window on X11,
+as in virt-viewer, and the title only offers Ctrl+Alt+G while it is held.
+
+SDL can keep a stale pointer focus from a crossing made while a dialog had the
+focus, so the check asks the X server where the pointer is. The absolute
+pointer grab taken when focus returns uses the same check: an X11 grab
+confines the pointer to the window, so grabbing on a stale position pulled the
+pointer into the window. Wayland keeps both grabs as before.
+
+diff --git i/ui/sdl2.c w/ui/sdl2.c
+index b87dde3..a49b9af 100644
+--- i/ui/sdl2.c
++++ w/ui/sdl2.c
+@@ -203,6 +203,35 @@ static bool focus_keyboard_grab;
+  */
+ static bool keyboard_released;
+ 
++/*
++ * On X11 a keyboard grab is an active grab: while it is held, the panel's
++ * menus and popups cannot take the keyboard, so after the pointer leaves the
++ * window they open with their input going to the guest, or get stuck open.
++ * There the grab follows the pointer as well as focus, as in virt-viewer: the
++ * keyboard goes to the guest while the window has focus and the pointer is
++ * over it.  Wayland's keyboard shortcuts inhibitor needs no such care.
++ */
++static bool sdl_x11_pointer_outside(struct sdl2_console *scon)
++{
++    int x, y, win_x, win_y, win_w, win_h;
++
++    if (g_strcmp0(SDL_GetCurrentVideoDriver(), "x11") != 0) {
++        return false;
++    }
++    if (SDL_GetMouseFocus() != scon->real_window) {
++        return true;
++    }
++    /*
++     * SDL can keep the pointer focus from a crossing made while another
++     * window, such as a dialog, had the focus.  Ask the server where the
++     * pointer really is before taking the keyboard.
++     */
++    SDL_GetGlobalMouseState(&x, &y);
++    SDL_GetWindowPosition(scon->real_window, &win_x, &win_y);
++    SDL_GetWindowSize(scon->real_window, &win_w, &win_h);
++    return x < win_x || y < win_y || x >= win_x + win_w || y >= win_y + win_h;
++}
++
+ static void sdl_update_caption(struct sdl2_console *scon)
+ {
+     char win_title[1024];
+@@ -213,7 +242,8 @@ static void sdl_update_caption(struct sdl2_console *scon)
+         status = " [Stopped]";
+     } else if (focus_keyboard_grab) {
+         if (!keyboard_released && scon->real_window &&
+-            (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS)) {
++            (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS) &&
++            !sdl_x11_pointer_outside(scon)) {
+             status = alt_grab ? " - Press Ctrl+Alt+Shift+G to release the keyboard" :
+                      ctrl_grab ? " - Press Right-Ctrl+G to release the keyboard" :
+                      " - Press Ctrl+Alt+G to release the keyboard";
+@@ -298,7 +328,9 @@ static void sdl_focus_keyboard_grab(struct sdl2_console *scon, bool grab)
+ #if SDL_VERSION_ATLEAST(2, 0, 16)
+     if (focus_keyboard_grab && scon->real_window) {
+         SDL_SetWindowKeyboardGrab(scon->real_window,
+-                                  grab && !keyboard_released ? SDL_TRUE : SDL_FALSE);
++                                  grab && !keyboard_released &&
++                                  !sdl_x11_pointer_outside(scon) ?
++                                  SDL_TRUE : SDL_FALSE);
+     }
+ #endif
+ }
+@@ -350,6 +382,15 @@ static void absolute_mouse_grab(struct sdl2_console *scon)
+ {
+     int mouse_x, mouse_y;
+     int scr_w, scr_h;
++
++    /*
++     * On X11 a grab confines the pointer to the window, so grabbing on a
++     * stale position, such as when focus returns from a dialog, would pull
++     * the pointer into the window from wherever it is.
++     */
++    if (sdl_x11_pointer_outside(scon)) {
++        return;
++    }
+     SDL_GetMouseState(&mouse_x, &mouse_y);
+     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
+     if (mouse_x > 0 && mouse_x < scr_w - 1 &&
+@@ -721,6 +762,10 @@ static void handle_windowevent(SDL_Event *ev)
+         sdl_update_caption(scon);
+         /* fall through */
+     case SDL_WINDOWEVENT_ENTER:
++        if (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS) {
++            sdl_focus_keyboard_grab(scon, true);
++            sdl_update_caption(scon);
++        }
+         if (!gui_grab && (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled)) {
+             absolute_mouse_grab(scon);
+         }
+@@ -733,6 +778,13 @@ static void handle_windowevent(SDL_Event *ev)
+          */
+         scon->ignore_hotkeys = get_mod_state();
+         break;
++    case SDL_WINDOWEVENT_LEAVE:
++        /* On X11 the keyboard goes back to the desktop with the pointer. */
++        if (sdl_x11_pointer_outside(scon)) {
++            sdl_focus_keyboard_grab(scon, false);
++            sdl_update_caption(scon);
++        }
++        break;
+     case SDL_WINDOWEVENT_FOCUS_LOST:
+         if (gui_grab && !gui_fullscreen) {
+             sdl_grab_end(scon);

@@ -25,6 +25,8 @@ type linuxSettingsForm struct {
 	AudioInput         string             `json:"audioInput"`
 	AudioOutputs       []linuxAudioDevice `json:"audioOutputs,omitempty"`
 	AudioInputs        []linuxAudioDevice `json:"audioInputs,omitempty"`
+	AudioLive          bool               `json:"audioLive"`
+	RefreshAudio       bool               `json:"refreshAudio,omitempty"`
 	DiskGiB            string             `json:"diskGiB"`
 	Scale              string             `json:"scale"`
 	Keyboard           string             `json:"keyboard"`
@@ -59,8 +61,8 @@ func showLinuxSettings(parent context.Context, dir string) {
 	showLinuxSettingsInWindow(ctx, w, dir, true)
 }
 
-// The home and running VM use the same form. Saving while QEMU is running
-// changes the next launch, never the live process or a guest reboot.
+// The home and running VM use the same form. PipeWire device routes can
+// change live; microphone permission and the other host settings need a launch.
 func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir string, running bool) string {
 	saved, err := loadSettings(settingsPath(dir))
 	if err != nil {
@@ -91,13 +93,17 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
 	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
+	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
 	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
 		form.Render = "auto"
 	}
 	status := "Changes apply when the VM starts."
 	if running {
-		status = "Saved changes require shutting down Omarchy and launching it again. Rebooting inside Omarchy will not apply host settings."
+		status = "Changes require shutting down Omarchy and launching it again. A guest reboot does not apply host settings."
+		if form.AudioLive {
+			status = "Audio device choices apply when you save. Microphone access and other changes need a shutdown and launch."
+		}
 	}
 	if audioListErr != nil {
 		status += " Audio devices could not be listed. System default remains available."
@@ -107,9 +113,22 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err != nil || value == "cancel" {
 			return ""
 		}
+		audioLive := form.AudioLive
+		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
 		err = json.Unmarshal([]byte(value), form)
+		form.AudioLive = audioLive
+		form.AudioOutputs, form.AudioInputs = audioOutputs, audioInputs
 		if err != nil {
 			status = "Could not read the settings."
+			continue
+		}
+		if form.RefreshAudio {
+			form.RefreshAudio = false
+			form.AudioOutputs, form.AudioInputs, err = listLinuxAudioDevices()
+			status = "Audio devices refreshed. Your changes have not been saved."
+			if err != nil {
+				status = "Audio devices could not be listed. Your changes have not been saved."
+			}
 			continue
 		}
 		forwardsText, err := linuxForwardsFromForm(form.SSHEnabled, form.SSHPort, form.Forwards)
@@ -214,9 +233,19 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				}
 			}
 		}
+		if err == nil && form.AudioLive {
+			// Always retry a live apply, even if an earlier Save already persisted
+			// these names but QMP failed. A failed disk write never changes routes.
+			if routeErr := applyLinuxAudioRoutes(ctx, audio); routeErr != nil {
+				err = fmt.Errorf("Audio choices saved, but could not switch devices: %v. Try Save again, or shut down Omarchy and launch it again", routeErr)
+			}
+		}
 		if err == nil {
 			if running {
 				message := "Settings saved. Shut down Omarchy and launch it again to apply them. A guest reboot does not restart the VM."
+				if form.AudioLive {
+					message = "Audio device choices applied. Microphone access and other settings apply after shutting down Omarchy and launching it again."
+				}
 				w.ask(ctx, linuxSetupState{Prompt: "settings-saved", Status: message})
 				return message
 			}

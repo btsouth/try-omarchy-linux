@@ -75,6 +75,8 @@ type settingsForm struct {
 	AudioInput         string        `json:"audioInput"`
 	AudioOutputs       []audioDevice `json:"audioOutputs"`
 	AudioInputs        []audioDevice `json:"audioInputs"`
+	AudioLive          bool          `json:"audioLive"`
+	RefreshAudio       bool          `json:"refreshAudio,omitempty"`
 	DiskGiB            string        `json:"diskGiB"`
 	Scale              string        `json:"scale"`
 	Keyboard           string        `json:"keyboard"`
@@ -378,7 +380,9 @@ func main() {
 		named(audioInput, "Audio input")
 		form.Append(audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
-		formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
+		audioRefresh := gtk.NewButtonWithLabel("Refresh audio devices")
+		form.Append(audioRefresh)
+		audioHelp := formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
 		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
 		form.Append(clipboardShare)
 		clipboardHelp := formHelp("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
@@ -587,6 +591,29 @@ func main() {
 			return false
 		})
 		window.AddController(keys)
+		settingsValue := func(refresh bool) string {
+			memoryValue, cpuValue := "0", "0"
+			if !autoMemory.Active() {
+				memoryValue = strconv.Itoa(int(memory.Value()*1024 + 0.5))
+			}
+			if !autoCPUs.Active() {
+				cpuValue = strconv.Itoa(cpus.ValueAsInt())
+			}
+			modes := []string{"auto", "gpu", "cpu"}
+			diskValue := "0"
+			if !standardDisk.Active() {
+				diskValue = strconv.Itoa(diskGiB.ValueAsInt())
+			}
+			forwardStart, forwardEnd := forwards.Buffer().Bounds()
+			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
+			data, _ := json.Marshal(settingsForm{RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
+			return string(data)
+		}
+		audioRefresh.ConnectClicked(func() {
+			if current.Prompt == "settings" {
+				reply(settingsValue(true))
+			}
+		})
 		primary.ConnectClicked(func() {
 			switch current.Prompt {
 			case "about", "settings-saved":
@@ -681,22 +708,7 @@ func main() {
 					reply(string(data))
 				})
 			case "settings":
-				memoryValue, cpuValue := "0", "0"
-				if !autoMemory.Active() {
-					memoryValue = strconv.Itoa(int(memory.Value()*1024 + 0.5))
-				}
-				if !autoCPUs.Active() {
-					cpuValue = strconv.Itoa(cpus.ValueAsInt())
-				}
-				modes := []string{"auto", "gpu", "cpu"}
-				diskValue := "0"
-				if !standardDisk.Active() {
-					diskValue = strconv.Itoa(diskGiB.ValueAsInt())
-				}
-				forwardStart, forwardEnd := forwards.Buffer().Bounds()
-				forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-				data, _ := json.Marshal(settingsForm{Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
-				reply(string(data))
+				reply(settingsValue(false))
 			}
 		})
 		secondary.ConnectClicked(func() {
@@ -970,6 +982,11 @@ func main() {
 							forwards.Buffer().SetText(next.Settings.Forwards)
 							startAutomatically.SetActive(next.Settings.StartAutomatically)
 							outputLabels, outputNames, outputIndex := namedChoices("System default", "Unavailable: ", next.Settings.AudioOutputs, next.Settings.AudioOutput)
+							if next.Settings.AudioLive {
+								audioHelp.SetText("Audio device choices apply when you save. Microphone access changes apply on the next launch. System default follows your desktop's current device.")
+							} else {
+								audioHelp.SetText("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
+							}
 							audioOutputNames = outputNames
 							audioOutput.SetModel(gtk.NewStringList(outputLabels))
 							audioOutput.SetSelected(outputIndex)

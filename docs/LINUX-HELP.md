@@ -142,6 +142,18 @@ it never moves your pointer or types for you. In GNOME's dialog, turn on
 works and file drops still work, and Try Omarchy does not ask again. Turn
 sharing back on in **Settings**, **Share the clipboard with Omarchy**.
 
+## Audio devices
+
+Settings lets you choose separate playback and microphone devices. System
+default follows the device selected by your Linux desktop. Microphone access
+changes require shutting down Omarchy and launching it again.
+
+In published preview 4, device choices also need a shutdown and launch.
+Development builds apply device choices when you save while Omarchy is running.
+Use **Refresh audio devices** after connecting a headset; refreshing keeps your
+edits without saving them. If a live switch fails, Settings shows the error and
+keeps the saved choices for the next launch. You can retry Save.
+
 ## Updates
 
 Try Omarchy installs from its own Flatpak repository, so Software shows its

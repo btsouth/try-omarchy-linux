@@ -1,0 +1,312 @@
+--- a/audio/pwaudio.c
++++ b/audio/pwaudio.c
+@@ -11,6 +11,7 @@
+ #include "qemu/osdep.h"
+ #include "qemu/module.h"
+ #include "qemu/audio.h"
++#include "qemu/queue.h"
+ #include "qemu/error-report.h"
+ #include "qapi/error.h"
+ #include "qom/object.h"
+@@ -32,6 +33,8 @@
+ 
+ static AudioBackendClass *audio_pw_parent_class;
+ 
++typedef struct PWVoice PWVoice;
++
+ struct AudioPw {
+     AudioMixengBackend parent_obj;
+ 
+@@ -41,6 +44,7 @@
+     struct pw_core *core;
+     struct spa_hook core_listener;
+     int last_seq, pending_seq, error;
++    QLIST_HEAD(, PWVoice) voices;
+ };
+ 
+ 
+@@ -49,7 +53,7 @@
+     float values[SPA_AUDIO_MAX_CHANNELS];
+ } pwvolume;
+ 
+-typedef struct PWVoice {
++struct PWVoice {
+     struct pw_stream *stream;
+     struct spa_hook stream_listener;
+     struct spa_audio_info_raw info;
+@@ -60,7 +64,10 @@
+ 
+     pwvolume volume;
+     bool muted;
+-} PWVoice;
++    bool enabled;
++    enum spa_direction direction;
++    QLIST_ENTRY(PWVoice) next;
++};
+ 
+ typedef struct PWVoiceOut {
+     HWVoiceOut hw;
+@@ -234,7 +241,7 @@
+     uint32_t index;
+ 
+     pw_thread_loop_lock(c->thread_loop);
+-    if (pw_stream_get_state(v->stream, &error) != PW_STREAM_STATE_STREAMING) {
++    if (!v->stream || pw_stream_get_state(v->stream, &error) != PW_STREAM_STATE_STREAMING) {
+         /* wait for stream to become ready */
+         l = 0;
+         goto done_unlock;
+@@ -270,7 +277,7 @@
+     uint32_t index;
+ 
+     pw_thread_loop_lock(c->thread_loop);
+-    if (pw_stream_get_state(v->stream, &error) != PW_STREAM_STATE_STREAMING) {
++    if (!v->stream || pw_stream_get_state(v->stream, &error) != PW_STREAM_STATE_STREAMING) {
+         /* wait for stream to become ready */
+         avail = 0;
+         goto done_unlock;
+@@ -295,7 +302,7 @@
+     uint32_t index;
+ 
+     pw_thread_loop_lock(c->thread_loop);
+-    if (pw_stream_get_state(v->stream, &error) != PW_STREAM_STATE_STREAMING) {
++    if (!v->stream || pw_stream_get_state(v->stream, &error) != PW_STREAM_STATE_STREAMING) {
+         /* wait for stream to become ready */
+         len = 0;
+         goto done_unlock;
+@@ -422,15 +429,134 @@
+     }
+ }
+ 
++/* Called with the PipeWire thread loop locked, outside the RT callback. */
++static int qpw_stream_connect(PWVoice *v)
++{
++    uint8_t buffer[1024];
++    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
++    const struct spa_pod *params[] = {
++        spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &v->info)
++    };
++
++    return pw_stream_connect(v->stream,
++        v->direction == SPA_DIRECTION_INPUT ? PW_DIRECTION_INPUT :
++                                             PW_DIRECTION_OUTPUT,
++        PW_ID_ANY, PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_INACTIVE |
++        PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS, params, 1);
++}
++
++static int qpw_stream_create(AudioPw *c, PWVoice *v, const char *stream_name,
++                             const char *name, enum spa_direction dir);
++
++static int qpw_stream_retarget(AudioPw *c, PWVoice *v, const char *name)
++{
++    AudiodevPipewireOptions *opts = &AUDIO_MIXENG_BACKEND(c)->dev->u.pipewire;
++    AudiodevPipewirePerDirectionOptions *direction =
++        v->direction == SPA_DIRECTION_INPUT ? opts->in : opts->out;
++    const struct pw_stream_control *control;
++    int res;
++
++    if (v->stream) {
++        control = pw_stream_get_control(v->stream, SPA_PROP_channelVolumes);
++        if (control && control->n_values <= SPA_AUDIO_MAX_CHANNELS) {
++            v->volume.channels = control->n_values;
++            memcpy(v->volume.values, control->values,
++                   control->n_values * sizeof(float));
++        }
++        control = pw_stream_get_control(v->stream, SPA_PROP_mute);
++        if (control && control->n_values) {
++            v->muted = control->values[0] != 0.f;
++        }
++    }
++    /* A fresh node avoids retaining the previous graph's clock on reconnect. */
++    if (v->stream) {
++        pw_stream_destroy(v->stream);
++    }
++    spa_ringbuffer_init(&v->ring);
++    res = qpw_stream_create(c, v,
++        direction->stream_name ?: AUDIO_MIXENG_BACKEND(c)->dev->id,
++        name, v->direction);
++    if (res < 0) {
++        return res;
++    }
++    if (v->volume.channels) {
++        float mute = v->muted ? 1.f : 0.f;
++        pw_stream_set_control(v->stream, SPA_PROP_channelVolumes,
++                              v->volume.channels, v->volume.values, 0);
++        pw_stream_set_control(v->stream, SPA_PROP_mute, 1, &mute, 0);
++    }
++    return pw_stream_set_active(v->stream, v->enabled);
++}
++
++/* Only this backend's streams change. Host defaults and other clients stay put. */
++static void qpw_set_target(Object *obj, const char *name, Error **errp,
++                           bool capture)
++{
++    AudioPw *c = AUDIO_PW(obj);
++    AudiodevPipewireOptions *opts = &AUDIO_MIXENG_BACKEND(c)->dev->u.pipewire;
++    AudiodevPipewirePerDirectionOptions *direction = capture ? opts->in : opts->out;
++    const char *target = *name ? name : NULL;
++    PWVoice *v;
++    int res = 0;
++
++    if (strlen(name) > 4096 || !g_utf8_validate(name, -1, NULL)) {
++        error_setg(errp, "Invalid PipeWire target name");
++        return;
++    }
++    if (!g_strcmp0(direction->name, target)) {
++        return;
++    }
++    pw_thread_loop_lock(c->thread_loop);
++    QLIST_FOREACH(v, &c->voices, next) {
++        if ((v->direction == SPA_DIRECTION_INPUT) != capture) {
++            continue;
++        }
++        res = qpw_stream_retarget(c, v, target);
++        if (res < 0) {
++            break;
++        }
++    }
++    if (res < 0) {
++        /* Restore every voice, including one whose reconnect failed. */
++        QLIST_FOREACH(v, &c->voices, next) {
++            if ((v->direction == SPA_DIRECTION_INPUT) == capture &&
++                qpw_stream_retarget(c, v, direction->name) < 0) {
++                error_report("pipewire: failed to restore the previous route");
++            }
++        }
++        error_setg(errp, "Could not change PipeWire route: %s", spa_strerror(res));
++    } else {
++        g_free(direction->name);
++        direction->name = g_strdup(target);
++    }
++    pw_thread_loop_unlock(c->thread_loop);
++}
++
++static void qpw_set_output(Object *obj, const char *name, Error **errp)
++{
++    qpw_set_target(obj, name, errp, false);
++}
++
++static void qpw_set_input(Object *obj, const char *name, Error **errp)
++{
++    qpw_set_target(obj, name, errp, true);
++}
++
++static char *qpw_get_output(Object *obj, Error **errp)
++{
++    return g_strdup(AUDIO_MIXENG_BACKEND(obj)->dev->u.pipewire.out->name ?: "");
++}
++
++static char *qpw_get_input(Object *obj, Error **errp)
++{
++    return g_strdup(AUDIO_MIXENG_BACKEND(obj)->dev->u.pipewire.in->name ?: "");
++}
++
+ static int
+-qpw_stream_new(AudioPw *c, PWVoice *v, const char *stream_name,
++qpw_stream_create(AudioPw *c, PWVoice *v, const char *stream_name,
+                const char *name, enum spa_direction dir)
+ {
+     int res;
+-    uint32_t n_params;
+-    const struct spa_pod *params[2];
+-    uint8_t buffer[1024];
+-    struct spa_pod_builder b;
+     uint64_t buf_samples;
+     struct pw_properties *props;
+ 
+@@ -464,21 +590,8 @@
+                             &v->stream_listener, &playback_stream_events, v);
+     }
+ 
+-    n_params = 0;
+-    spa_pod_builder_init(&b, buffer, sizeof(buffer));
+-    params[n_params++] = spa_format_audio_raw_build(&b,
+-                            SPA_PARAM_EnumFormat,
+-                            &v->info);
+-
+-    /* connect the stream to a sink or source */
+-    res = pw_stream_connect(v->stream,
+-                            dir ==
+-                            SPA_DIRECTION_INPUT ? PW_DIRECTION_INPUT :
+-                            PW_DIRECTION_OUTPUT, PW_ID_ANY,
+-                            PW_STREAM_FLAG_AUTOCONNECT |
+-                            PW_STREAM_FLAG_INACTIVE |
+-                            PW_STREAM_FLAG_MAP_BUFFERS |
+-                            PW_STREAM_FLAG_RT_PROCESS, params, n_params);
++    v->direction = dir;
++    res = qpw_stream_connect(v);
+     if (res < 0) {
+         error_report("Failed to connect PW stream: %s", g_strerror(errno));
+         pw_stream_destroy(v->stream);
+@@ -486,6 +599,16 @@
+     }
+ 
+     return 0;
++}
++
++static int qpw_stream_new(AudioPw *c, PWVoice *v, const char *stream_name,
++                          const char *name, enum spa_direction dir)
++{
++    int res = qpw_stream_create(c, v, stream_name, name, dir);
++    if (res == 0) {
++        QLIST_INSERT_HEAD(&c->voices, v, next);
++    }
++    return res;
+ }
+ 
+ static void
+@@ -612,11 +735,11 @@
+ static void
+ qpw_voice_fini(AudioPw *c, PWVoice *v)
+ {
+-    if (!v->stream) {
+-        return;
+-    }
+     pw_thread_loop_lock(c->thread_loop);
+-    pw_stream_destroy(v->stream);
++    QLIST_REMOVE(v, next);
++    if (v->stream) {
++        pw_stream_destroy(v->stream);
++    }
+     v->stream = NULL;
+     pw_thread_loop_unlock(c->thread_loop);
+ }
+@@ -637,7 +760,10 @@
+ qpw_voice_set_enabled(AudioPw *c, PWVoice *v, bool enable)
+ {
+     pw_thread_loop_lock(c->thread_loop);
+-    pw_stream_set_active(v->stream, enable);
++    v->enabled = enable;
++    if (v->stream) {
++        pw_stream_set_active(v->stream, enable);
++    }
+     pw_thread_loop_unlock(c->thread_loop);
+ }
+ 
+@@ -665,11 +791,15 @@
+         v->volume.values[i] = (float)vol->vol[i] / 255;
+     }
+ 
++    v->muted = vol->mute;
++    if (!v->stream) {
++        pw_thread_loop_unlock(c->thread_loop);
++        return;
++    }
+     ret = pw_stream_set_control(v->stream,
+         SPA_PROP_channelVolumes, v->volume.channels, v->volume.values, 0);
+     trace_pw_vol(ret == 0 ? "success" : "failed");
+ 
+-    v->muted = vol->mute;
+     float val = v->muted ? 1.f : 0.f;
+     ret = pw_stream_set_control(v->stream, SPA_PROP_mute, 1, &val, 0);
+     pw_thread_loop_unlock(c->thread_loop);
+@@ -828,6 +958,10 @@
+ 
+     audio_pw_parent_class = AUDIO_BACKEND_CLASS(object_class_get_parent(klass));
+ 
++    object_class_property_add_str(klass, "try-omarchy-output-device",
++                                  qpw_get_output, qpw_set_output);
++    object_class_property_add_str(klass, "try-omarchy-input-device",
++                                  qpw_get_input, qpw_set_input);
+     b->realize = audio_pw_realize;
+     k->max_voices_out = INT_MAX;
+     k->max_voices_in = INT_MAX;

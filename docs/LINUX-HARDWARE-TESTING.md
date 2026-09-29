@@ -1,6 +1,6 @@
 # Linux hardware testing
 
-Use the [0.1.0 preview 1 bundle](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.1),
+Use the [0.1.0 preview 4 bundle](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.4),
 and include its SHA256 with the report. Physical results are still
 pending; desktop VM tests do not establish hardware support.
 
@@ -37,6 +37,24 @@ Report each step as passed, failed or not tested, with the exact trigger for a
 failure and a screenshot where useful. Never report camera, gesture, USB,
 bridged networking, host-app launching or host authentication as supported:
 those are outside the first Linux release.
+
+## Live audio in development builds
+
+This is not in published preview 4. Record the candidate bundle hash when
+checking it. With a USB headset and the built-in speakers and microphone:
+
+1. Start playback and recording inside Omarchy. Open Settings while it runs,
+   switch each direction independently, and save. Confirm sound and recording
+   move to the selected devices without restarting the VM.
+2. Switch back and select System default. Change your desktop's default device
+   and confirm Omarchy follows it without changing other apps' routes.
+3. Unplug and reconnect the selected headset. Check fallback and recovery;
+   **Refresh audio devices** updates the list without saving other edits.
+4. Shut down and launch again. Confirm the device choices are kept. Start with
+   microphone access disabled and confirm selecting an input cannot enable it.
+
+Virtual PipeWire nodes can check routing and disconnection behavior, but do not
+establish physical playback or recording acceptance.
 
 ## Reports so far
 

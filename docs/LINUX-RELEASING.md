@@ -7,14 +7,19 @@ repository at `https://flatpak.tryomarchy.com/repo/`, so updates arrive through
 Software or `flatpak update`. The addresses live in
 [repository.env](../runtime-build/linux/repository.env).
 
-`flatpak.tryomarchy.com` is this repository's GitHub Pages custom domain, a
-DNS-only CNAME to the account's `github.io` host in tryomarchy.com's
-Cloudflare DNS. Installed copies update from that address, so it must keep
-working: when the repository moves to another account, set the same custom
-domain in the new repository's Pages settings and point the CNAME at the new
-owner's `github.io` host. GitHub does not redirect Pages sites after a
-transfer. The repository summary carries `--redirect-url`, which moves any
-install still using an older address the next time it updates.
+`flatpak.tryomarchy.com` is the Cloudflare Pages project `try-omarchy-flatpak`
+in the account that owns tryomarchy.com, with a proxied CNAME to
+`try-omarchy-flatpak.pages.dev`. Pages has no bandwidth cap for static files,
+which matters because every install downloads the app from it. Installed
+copies update from that address, so it must keep working wherever the source
+repository lives. The repository summary carries `--redirect-url`, which moves
+any install still using an older address the next time it updates.
+
+Preview 2 installed from `https://btsouth.github.io/try-omarchy-linux/repo/`.
+Keep deploying each release there too, with the **Publish Flatpak repository**
+workflow, so those installs receive the summary that moves them. GitHub does
+not redirect Pages sites after a repository transfer, so once the repository
+moves, installs that never updated have to reinstall.
 
 tryomarchy.com is the `btsouth/tryomarchy-site` repository on Cloudflare
 Pages. It serves the Linux page and a copy of the `.flatpakref` at
@@ -62,10 +67,11 @@ copy.
 4. Test those exact files: install from the `.flatpakref`, update from the
    previous release, uninstall and reinstall.
 5. Publish a GitHub release with the tag and the four files from `RELEASE`.
-6. Run the **Publish Flatpak repository** workflow with the tag. It checks
-   `flatpak-site.tar.gz` against `SHA256SUMS` and deploys it to Pages. It never
-   builds or signs anything. The first time, set Pages to deploy from GitHub
-   Actions in the repository settings.
+6. Run `runtime-build/linux/deploy-repo.sh TAG` with wrangler logged in. It
+   checks `flatpak-site.tar.gz` against `SHA256SUMS` and uploads it to
+   flatpak.tryomarchy.com. Then run the **Publish Flatpak repository** workflow
+   with the tag for the old GitHub Pages address. Neither builds or signs
+   anything.
 7. If the `.flatpakref` changed, copy it to `linux.flatpakref` in
    tryomarchy-site and push. Then install from
    `https://tryomarchy.com/linux.flatpakref` on a clean account.

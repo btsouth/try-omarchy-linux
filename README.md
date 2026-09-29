@@ -102,8 +102,9 @@ The Flatpak does not get access to your home folder. Folders and files reach the
 
 Camera capture, live audio route switching, touchpad gestures, bridged/LAN networking,
 USB passthrough, opening host apps from the guest, and host biometric authentication
-are outside the first Linux release. Audio route changes require stopping and
-starting the VM. Networking uses NAT with local SSH and port forwarding.
+are outside the first Linux release. The published preview 4 requires stopping and starting the VM to change audio
+routes. Development builds switch playback and microphone devices from Settings
+while Omarchy runs; microphone permission changes still require a new launch. Networking uses NAT with local SSH and port forwarding.
 
 Real GPU, audio, microphone, battery, suspend/resume and monitor behavior still
 need reports from hardware testers. Isolated desktop VM tests do not establish

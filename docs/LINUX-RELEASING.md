@@ -1,16 +1,24 @@
 # Releasing the Linux app
 
-The public entry point is the [GitHub README](../README.md), with installer
-assets on GitHub Releases. No separate landing website or tryomarchy.com
-update is required for this preview.
-
-GitHub Pages serves the signed Flatpak update repository behind the scenes at
-`https://btsouth.github.io/try-omarchy-linux/repo/`, until Flathub carries it.
-People download the `.flatpakref` from a GitHub release and then get updates
-through Software or `flatpak update`. The package still needs that repository
-to be reachable; a GitHub release attachment alone does not serve its update
-objects. The addresses live in
+People find the app at [tryomarchy.com/linux](https://tryomarchy.com/linux/)
+and in the [README](../README.md), and install it from
+`https://tryomarchy.com/linux.flatpakref`. That file adds the signed update
+repository at `https://flatpak.tryomarchy.com/repo/`, so updates arrive through
+Software or `flatpak update`. The addresses live in
 [repository.env](../runtime-build/linux/repository.env).
+
+`flatpak.tryomarchy.com` is this repository's GitHub Pages custom domain, a
+DNS-only CNAME to the account's `github.io` host in tryomarchy.com's
+Cloudflare DNS. Installed copies update from that address, so it must keep
+working: when the repository moves to another account, set the same custom
+domain in the new repository's Pages settings and point the CNAME at the new
+owner's `github.io` host. GitHub does not redirect Pages sites after a
+transfer. The repository summary carries `--redirect-url`, which moves any
+install still using an older address the next time it updates.
+
+tryomarchy.com is the `btsouth/tryomarchy-site` repository on Cloudflare
+Pages. It serves the Linux page and a copy of the `.flatpakref` at
+`/linux.flatpakref`, which must match the one `publish-repo.sh` writes.
 
 App versions and guest images are separate. App releases are tagged
 `linux-app-vX.Y.Z` (previews add `-preview.N`) and carry the Flatpak. Guest
@@ -58,16 +66,8 @@ copy.
    `flatpak-site.tar.gz` against `SHA256SUMS` and deploys it to Pages. It never
    builds or signs anything. The first time, set Pages to deploy from GitHub
    Actions in the repository settings.
-7. Smoke-test the README's GitHub release download and install route. Keep
-   prerelease download links explicit: GitHub's `releases/latest` shortcut is
-   not the app-preview selector, and this repository also has guest releases.
+7. If the `.flatpakref` changed, copy it to `linux.flatpakref` in
+   tryomarchy-site and push. Then install from
+   `https://tryomarchy.com/linux.flatpakref` on a clean account.
 8. Check that `flatpak remote-ls try-omarchy` on an installed machine lists the
    new commit, and that Software offers the update.
-
-## Moving to Flathub later
-
-Flathub builds and signs its own copy under the same app ID. Installs from
-this repository will not switch on their own; when Flathub is live, publish a
-final update here that says so in its release notes, and document
-uninstalling this copy (keeping data) and installing from Flathub. The VM and
-settings live under the app ID, so they carry over.

@@ -9,7 +9,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <launchable type="desktop-id">com.tryomarchy.TryOmarchy.desktop</launchable>
-  <url type="homepage">https://github.com/btsouth/try-omarchy-linux</url>
+  <url type="homepage">https://tryomarchy.com/linux/</url>
   <url type="bugtracker">https://github.com/btsouth/try-omarchy-linux/issues</url>
   <url type="help">https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md</url>
   <url type="vcs-browser">https://github.com/btsouth/try-omarchy-linux</url>
@@ -45,6 +45,15 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.0~preview.3" date="2026-09-29" type="development">
+      <description>
+        <p>Third preview.</p>
+        <ul>
+          <li>Updates now come from flatpak.tryomarchy.com, and existing installs switch to it automatically</li>
+          <li>Software shows screenshots and a short video of the app</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0~preview.2" date="2026-09-28" type="development">
       <description>
         <p>Second preview.</p>

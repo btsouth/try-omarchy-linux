@@ -34,8 +34,10 @@ docker run --rm -i --network=none --tmpfs /keys:mode=0700 \
   [[ -f /site/repo/config ]] || ostree init --mode=archive-z2 --repo=/site/repo
   flatpak build-commit-from --src-repo=/build/repo --gpg-sign="$key" --gpg-homedir=/keys \
     --no-update-summary /site/repo "app/$app/x86_64/$BRANCH"
+  # --redirect-url moves installs that still use an older address to REPO_URL
+  # on their next update; for installs already there it changes nothing.
   flatpak build-update-repo --gpg-sign="$key" --gpg-homedir=/keys \
-    --title="$TITLE" --comment="$COMMENT" --homepage="$HOMEPAGE" --icon="${SITE_URL}icon.svg" \
+    --redirect-url="$REPO_URL" --title="$TITLE" --comment="$COMMENT" --homepage="$HOMEPAGE" --icon="${SITE_URL}icon.svg" \
     --default-branch="$BRANCH" --gpg-import=/linux/try-omarchy-repo.gpg \
     --generate-static-deltas --prune --prune-depth=3 /site/repo
   flatpak build-bundle --repo-url="$REPO_URL" --runtime-repo="$RUNTIME_REPO" \

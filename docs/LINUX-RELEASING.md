@@ -75,5 +75,7 @@ copy.
 7. If the `.flatpakref` changed, copy it to `linux.flatpakref` in
    tryomarchy-site and push. Then install from
    `https://tryomarchy.com/linux.flatpakref` on a clean account.
-8. Check that `flatpak remote-ls try-omarchy` on an installed machine lists the
-   new commit, and that Software offers the update.
+8. Check that `flatpak remote-ls "$(flatpak info --show-origin com.tryomarchy.TryOmarchy)"`
+   on an installed machine lists the new commit, and that Software offers the
+   update. The update source is `try-omarchy` when installed with Software or
+   the terminal, but Mint's Software Manager names it `tryomarchy-origin`.

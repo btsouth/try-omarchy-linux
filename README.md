@@ -48,6 +48,15 @@ After installing, launch **Try Omarchy from the application menu**. On Ubuntu 24
 </details>
 
 <details>
+<summary>Fedora and Linux Mint</summary>
+
+On Fedora, Software may ask whether to enable third-party repositories. Choose **Enable**. The app's GNOME runtime comes from Flathub, and enabling it uses Fedora's own Flathub setup. Choosing **Ignore** still works, but Flatpak then adds a second Flathub source named `flathub-1` for the runtime.
+
+On Linux Mint, Software Manager lists the app as `com.tryomarchy.TryOmarchy` with a generic icon and an **Unverified Flatpak** badge before it is installed, as it does for any app from outside Flathub. The installed app has its proper name and icon.
+
+</details>
+
+<details>
 <summary>Install from a terminal</summary>
 
 After installing Flatpak:

@@ -38,6 +38,19 @@ If Software installs the app but its **Open** button fails with
 from your application menu. This worked in our Ubuntu 24.04 test where
 Software's launch was blocked by AppArmor.
 
+On Fedora, Software may first ask whether to enable third-party repositories.
+Choose **Enable**. The app's GNOME runtime comes from Flathub, which Fedora
+ships turned off, and enabling it lets the install use Fedora's own Flathub
+setup. If you choose **Ignore**, the install still works, but Flatpak adds a
+second Flathub source of its own, named `flathub-1`, for the runtime. From a
+terminal, run `sudo fedora-third-party enable` before installing.
+
+On Linux Mint, Software Manager shows the app as `com.tryomarchy.TryOmarchy`
+with a generic icon and an **Unverified Flatpak** badge until it is installed.
+It shows every app from outside Flathub that way. Once installed, the menu
+entry has the right name and icon. Mint names the app's update source
+`tryomarchy-origin` rather than `try-omarchy`.
+
 **Try it now** downloads Omarchy (about 2 GB), sets it up and starts it,
 signed in as `omarchy` with the password `omarchy`. **Customize** lets you pick
 the folder first, and whether to set up your own account inside Omarchy.
@@ -89,6 +102,10 @@ recovery**, **Move this VM**.
   to release the keyboard**. Ctrl+Alt+G gives your keyboard back to your
   desktop until you click the Omarchy window again. Clicking another window
   works too.
+- On X11 desktops such as Cinnamon, MATE and Xfce, Omarchy has the keyboard
+  only while the pointer is over its window. Move the pointer out and your
+  desktop's shortcuts, panel menus and applets work as usual; move it back and
+  Omarchy has the keyboard again.
 - The first time, GNOME asks whether Try Omarchy may inhibit shortcuts. Allow
   it. If you refused, Super opens GNOME's overview instead of Omarchy's menu.
   Turn **Inhibit Shortcuts** back on in GNOME Settings, Apps, Try Omarchy.

@@ -113,7 +113,8 @@ hardware support. See the [hardware testing checklist](docs/LINUX-HARDWARE-TESTI
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
 - The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu and NixOS instructions are above.
-- Tested end to end on fresh **Ubuntu 24.04, Fedora 44, Linux Mint 22.3 and NixOS 26.05** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds. Physical hardware and Omarchy/Hyprland hosts still need testing.
+- Tested end to end on fresh **Ubuntu 24.04, Fedora 44, Linux Mint 22.3 and NixOS 26.05** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds. Omarchy/Hyprland hosts and more physical hardware still need testing.
+- A user reported it working on **Debian testing (forky) with COSMIC** on Wayland, installed as a `--user` Flatpak through COSMIC Store on an Intel i3-8130U laptop with UHD 620 graphics and 16 GB of RAM. See [reports so far](docs/LINUX-HARDWARE-TESTING.md#reports-so-far).
 - Keep about **15 GB free** for Omarchy and its runtime. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GB disk, but only what it uses takes space.
 
 ## Build from source

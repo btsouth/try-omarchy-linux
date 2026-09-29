@@ -108,6 +108,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	if audioListErr != nil {
 		status += " Audio devices could not be listed. System default remains available."
 	}
+	if running {
+		if clipboardStatus, ok := linuxClipboardStatus.Load().(string); ok && clipboardStatus != "" {
+			status += "\n\nClipboard: " + clipboardStatus
+		}
+	}
 	for {
 		value, err := w.ask(ctx, linuxSetupState{Prompt: "settings", Status: status, Settings: form})
 		if err != nil || value == "cancel" {

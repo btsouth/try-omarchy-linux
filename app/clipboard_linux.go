@@ -278,8 +278,10 @@ func runLinuxClipboardBridge() func() {
 		}
 		names = nil
 	} else if _, err := clipboardCommand(nil, 128, "try-omarchy-clipboard-capabilities"); err != nil {
-		message := "This desktop does not support automatic clipboard synchronization. Use a shared folder to exchange files."
-		setLinuxClipboardStatus(message, true)
+		message := "Automatic clipboard sharing is unavailable in this session. You can still drop files on Omarchy or use a shared folder."
+		// Missing optional compositor support is a capability notice, not a
+		// runtime error. A separate window disrupts tiling desktops at startup.
+		setLinuxClipboardStatus(message, false)
 		logf("clipboard: %s", message)
 		supported = false
 	}

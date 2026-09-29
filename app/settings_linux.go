@@ -270,8 +270,8 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 		state.Sections = []linuxSection{{Heading: "Storage", Rows: linuxStorageRows(dir, defaultDir, false)}}
 	} else if os.IsNotExist(err) {
 		state.Headline = "Omarchy is not set up yet."
-		state.Status = "Try it now downloads Omarchy, sets it up and starts it. You can move or delete it later."
-		state.Detail = "About " + linuxGB(linuxGuestDownloadBytes) + " to download and " + linuxGB(linuxGuestSpaceBytes) + " of free space needed.\nTry it now signs you in to a ready-made account. Customize lets you set up your own."
+		state.Status = "Set up Omarchy asks how you want to sign in, then downloads Omarchy and starts it. You can move or delete it later."
+		state.Detail = "About " + linuxGB(linuxGuestDownloadBytes) + " to download and " + linuxGB(linuxGuestSpaceBytes) + " of free space needed.\nCustomize lets you choose another folder first."
 		state.Sections = []linuxSection{{Heading: "What setup does", Rows: linuxSetupRows(dir, defaultDir, free)}}
 	} else {
 		state.Headline = "Omarchy's storage cannot be read."
@@ -312,7 +312,7 @@ func linuxSetupRows(dir, defaultDir string, free int64) []linuxRow {
 		{Title: "Download", Detail: "About " + linuxGB(linuxGuestDownloadBytes) + ", once. If it is interrupted, it continues where it stopped."},
 		{Title: "Space", Detail: space},
 		location,
-		{Title: "Account", Detail: "You are signed in as " + trialUsername + " (password " + trialPassword + "). Choose Customize to set up your own."},
+		{Title: "Account", Detail: "Your own username and password, or a quick-start account signed in as " + trialUsername + " (password " + trialPassword + "). You choose before Omarchy starts."},
 	}
 }
 
@@ -336,7 +336,7 @@ func linuxHomeActions(state linuxSetupState) (actions, menu []linuxAction) {
 	case !state.Installed && state.Setup == "customize":
 		actions = append(actions, linuxAction{Label: "Choose another folder...", Reply: "customize", Suggested: true})
 	case !state.Installed:
-		actions = append(actions, linuxAction{Label: "Try it now", Reply: "try", Suggested: true}, linuxAction{Label: "Customize...", Reply: "customize"})
+		actions = append(actions, linuxAction{Label: "Set up Omarchy", Reply: "setup", Suggested: true}, linuxAction{Label: "Customize...", Reply: "customize"})
 	default:
 		actions = append(actions, linuxAction{Label: "Launch Omarchy", Reply: "launch", Suggested: true})
 	}
@@ -413,14 +413,14 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 		switch answer {
 		case "check":
 			status = ""
-		case "launch", "customize", "try":
+		case "launch", "customize", "setup":
 			// Check again after a fix that needs no restart, such as loading the
 			// KVM module. The banner keeps saying what is wrong until it is gone.
 			if err := linuxKVMCheck(); err != nil {
 				status = ""
 				continue
 			}
-			linuxQuickSetup.Store(answer == "try")
+			linuxQuickSetup.Store(answer == "setup")
 			return true
 		case "settings":
 			if dir == "" {

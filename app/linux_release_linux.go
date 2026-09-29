@@ -9,19 +9,19 @@ import (
 )
 
 // The Linux guest is built from the shared guest series plus the Linux patches
-// (compatibility revision 43) and published on this repository's releases.
+// (compatibility revision 44) and published on this repository's releases.
 // Windows release defaults in manifest.go are deliberately untouched.
 var (
-	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.0"
-	linuxGuestSumsSHA256 = "3ba8b875bc9ffff3dd223367a7c00e1e1e9d3b77a314bb147bba9b4361aeba73"
+	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.1"
+	linuxGuestSumsSHA256 = "e0c5113c0eb9fa489bae3fc0c0abdf5696c35515f6b80db0660d4d3492d4a694"
 )
 
-// Measured on the pinned guest image (linux-v0.1.0): the archive, kernel and
+// Measured on the pinned guest image (linux-v0.1.1): the archive, kernel and
 // initramfs are 2.03 GB together, and a first launch ends with 5.7 GB of system
 // files, the VM's own 5.7 GB copy of them and about 1.4 GB the first boot
 // writes. Update these with the pin; the release manifest lists the sizes.
 const (
-	linuxGuestDownloadBytes = 2_176_000_000
+	linuxGuestDownloadBytes = 2_177_000_000
 	linuxGuestSpaceBytes    = int64(13) << 30
 	// A sparse VM disk can grow past what its drive has left. Below this the
 	// guest can hit write errors, so the home says so.

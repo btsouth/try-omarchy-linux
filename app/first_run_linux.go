@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 )
 
-// linuxQuickSetup is set when the home's Try it now was chosen: the default
-// location and the trial account, without asking either question.
+// linuxQuickSetup is set when the home's Set up Omarchy was chosen: the default
+// location without asking. The account question is still asked.
 var linuxQuickSetup atomic.Bool
 
 // A first setup needs room for the download, the unpacked system files and the
@@ -39,8 +39,8 @@ func linuxLocationState(defaultDir, notice string) linuxSetupState {
 func linuxAccountState() linuxSetupState {
 	return linuxSetupState{Prompt: "account", Status: "How do you want to start?",
 		Sections: []linuxSection{{Rows: []linuxRow{
-			{Title: "Try it now", Detail: "You are signed in automatically as " + trialUsername + " (password " + trialPassword + ")."},
-			{Title: "Set up my own account", Detail: "Choose your own name and password inside Omarchy."},
+			{Title: "Set up my own account", Detail: "Omarchy's setup asks for your name and password when it first starts. Sudo and the lock screen use that password."},
+			{Title: "Quick start as " + trialUsername, Detail: "Skips setup and signs you in automatically as " + trialUsername + " (password " + trialPassword + "). Sudo does not ask for a password. Good for a first look."},
 		}}}}
 }
 
@@ -203,7 +203,7 @@ func linuxPrebootSettingsOnly(dir string) bool {
 
 func (u *progressUI) chooseLocation(defaultDir string) (string, bool, error) {
 	notice := ""
-	// Try it now takes the default without asking, but it still has to pass the
+	// Set up Omarchy takes the default without asking, but it still has to pass the
 	// checks below. If it does not, the questions come back with the reason.
 	ask := !linuxQuickSetup.Load()
 	for {

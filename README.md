@@ -28,8 +28,8 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 ## Get started
 
 1. **[Download the installer](https://tryomarchy.com/linux.flatpakref)** and open it with **Software**, **Discover** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu or NixOS, complete the setup below first.
-2. **Open Try Omarchy from your application menu.** Choose **Try it now** to download Omarchy (about 2 GB) and start with a ready-made account. To use your own username and password instead, choose **Customize**, pick where to store Omarchy, then choose **Set up my own account**.
-3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen. The ready-made account's username and password are both `omarchy`.
+2. **Open Try Omarchy from your application menu.** Choose **Set up Omarchy**, then **Set up my own account** to pick your username and password, or **Quick start as omarchy** to skip that and sign in as `omarchy` with the password `omarchy`. Setup then downloads Omarchy (about 2 GB). **Customize** lets you choose another folder first.
+3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen.
 
 <details>
 <summary>Ubuntu setup</summary>

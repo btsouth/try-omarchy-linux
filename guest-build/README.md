@@ -94,6 +94,12 @@ existing lifecycle channel. The earlier system `ready` report still serves
 image rollback and does not close Linux setup. Compatibility revision 43
 updates the service on existing disks.
 
+Patch 0109 makes SSH accept only keys for the quick-start `omarchy` account,
+whose password is public. Provisioning installs a `Match User omarchy` drop-in
+in `/etc/ssh/sshd_config.d`, and compatibility revision 44 adds it once to
+existing quick-start disks. Own-account disks keep password logins. The
+first-desktop notice now calls it the quick-start login and points to `passwd`.
+
 The second command needs Docker and currently takes about ten minutes. Release
 CI also boots the resulting factory image with `scripts/release/smoke-guest.py`
 before it uploads anything.

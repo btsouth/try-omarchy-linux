@@ -594,7 +594,7 @@ func main() {
 			case "location":
 				reply("default")
 			case "account":
-				reply("instant")
+				reply("personal")
 			case "close":
 				reply("keep")
 			case "forget-location":
@@ -702,7 +702,7 @@ func main() {
 		secondary.ConnectClicked(func() {
 			switch current.Prompt {
 			case "account":
-				reply("personal")
+				reply("instant")
 			case "close":
 				reply("shutdown")
 			case "forget-location":
@@ -989,8 +989,8 @@ func main() {
 						secondary.SetLabel("Choose another folder...")
 					case "account":
 						page.SetTitle("Make yourself at home")
-						primary.SetLabel("Try it now")
-						secondary.SetLabel("Set up my own account")
+						primary.SetLabel("Set up my own account")
+						secondary.SetLabel("Quick start as omarchy")
 					case "share":
 						page.SetTitle("Share a folder with Omarchy?")
 						primary.SetLabel("Not now")

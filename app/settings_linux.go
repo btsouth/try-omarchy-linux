@@ -271,6 +271,7 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 	} else if os.IsNotExist(err) {
 		state.Headline = "Omarchy is not set up yet."
 		state.Status = "Try it now downloads Omarchy, sets it up and starts it. You can move or delete it later."
+		state.Detail = "About " + linuxGB(linuxGuestDownloadBytes) + " to download and " + linuxGB(linuxGuestSpaceBytes) + " of free space needed.\nTry it now uses a trial account. Customize lets you create your own."
 		state.Sections = []linuxSection{{Heading: "What setup does", Rows: linuxSetupRows(dir, defaultDir, free)}}
 	} else {
 		state.Headline = "Omarchy's storage cannot be read."

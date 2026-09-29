@@ -45,6 +45,19 @@ the folder first, and whether to set up your own account inside Omarchy.
 Memory, processors and the rest are in **Settings**. If the download stops,
 **Try again** or the next launch continues where it left off.
 
+## Moving from preview 1
+
+Preview 1 was a standalone bundle. It never updates itself, and while it is
+installed your application menu keeps opening it instead of a newer release.
+To move to the current release and keep your VM:
+
+1. Shut down Omarchy and close Try Omarchy.
+2. Remove preview 1 without deleting its data:
+   `flatpak uninstall --user com.tryomarchy.TryOmarchy//master`.
+   Answer no if Flatpak offers to delete the app's data.
+3. Install the current release as described above.
+4. Open Try Omarchy. Your VM, account and files are still there.
+
 ## KVM
 
 Try Omarchy needs KVM, the virtualization built into Linux. When it is missing

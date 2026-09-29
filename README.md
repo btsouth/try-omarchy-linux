@@ -65,7 +65,20 @@ flatpak install --user --bundle ./com.tryomarchy.TryOmarchy.flatpak
 
 Your VM and files stay between sessions. Clipboard sharing is optional. The [user guide](docs/LINUX-HELP.md) covers setup, updates, storage, backups and removal.
 
-Signed-repository releases receive updates through Software or `flatpak update`. Preview 1 bundles have no update source; migration to the next preview will be documented with that release.
+Signed-repository releases receive updates through Software or `flatpak update`.
+
+<details>
+<summary>Coming from preview 1</summary>
+
+Preview 1 was a standalone bundle, so it never updates itself, and while it is installed your application menu keeps opening it. Shut down Omarchy and close Try Omarchy, then remove preview 1 without deleting its data:
+
+```sh
+flatpak uninstall --user com.tryomarchy.TryOmarchy//master
+```
+
+Answer no if Flatpak offers to delete the app's data. Then install the new release as above. Your VM, account and files are still there the next time you open Try Omarchy, and later updates arrive through Software.
+
+</details>
 
 ## What you can do
 

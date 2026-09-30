@@ -1068,9 +1068,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 									resourceProfile.SetSelected(0)
 								}
 							}
+							automaticSummary = next.Settings.ResourceSummary
 							updateResources()
 							if resourceProfile.Selected() == 0 {
-								automaticSummary = next.Settings.ResourceSummary
 								resourceSummary.SetText(automaticSummary)
 							}
 							cpus.SetRange(1, float64(max(next.Settings.CPUMax, 1)))

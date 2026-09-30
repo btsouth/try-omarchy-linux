@@ -37,7 +37,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "home", Actions: []action{{Label: "Launch Omarchy", Reply: "launch", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Storage", Rows: []row{{Title: "Location", Detail: strings.Repeat("Long folder/", 30)}}}}, Installed: true}, "Launch Omarchy"},
 		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3"}}, "Save settings"},
 		{state{Prompt: "settings", Notice: "Could not save resource profile.", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "0", CPUs: "0"}}, "Save settings"},
-		{state{Prompt: "account"}, "Set up my own account"},
+		{state{Prompt: "account"}, "Continue"},
 		{state{Prompt: "error", CanRetry: true}, "Try again"},
 		{state{Prompt: "recovery", CanMove: true, CanReset: true, CanCleanMove: true, CanCleanReset: true, CanCleanLeftovers: true}, "Back"},
 		{state{Prompt: "about", Sections: []section{{Heading: "Settings and devices", Rows: []row{{Title: "When changes apply", Detail: strings.Repeat("Long help text ", 40)}}}}}, "Back"},
@@ -50,6 +50,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Status: "Downloading Omarchy", Current: 42, Total: 100}, "Cancel"},
 		{state{Status: "Starting Omarchy", Booting: true}, "Stop Omarchy"},
 		{state{Prompt: "home", Installed: true, CheckAgain: true, Headline: "Saved settings need attention.", Notice: "Saved settings could not be read.", HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#settings", Actions: []action{{Label: "Check again", Reply: "check", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Integrations", Rows: []row{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}}}}, "Check again"},
+		{state{Prompt: "settings", Notice: "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again.", Settings: &settingsForm{Running: true, AudioLive: true, ResourceProfile: "balanced", CPUMax: 8}}, "Save settings"},
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
@@ -76,18 +77,19 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
 			var refresh *gtk.Button
+			var pages *gtk.Stack
 			brandVisible, integrationsVisible := false, false
 			noticeVisible := false
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
-				if !widget.Visible() && widget.CSSName() != "spinbutton" {
-					return
+				if stack, ok := widget.Object.Cast().(*gtk.Stack); ok && stack.HasCSSClass("settings-pages") {
+					pages = stack
 				}
 				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
 				}
 				if l, ok := widget.Object.Cast().(*gtk.Label); ok {
-					if l.Text() == "OMARCHY · LINUX" {
+					if strings.HasPrefix(l.Text(), "LINUX") && l.Mapped() {
 						brandVisible = true
 					}
 					if l.Text() == "Resources" && cases[index].state.Prompt == "home" {
@@ -104,7 +106,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 					bounds, ok := notice.ComputeBounds(&window.Window)
 					noticeVisible = ok && bounds.X() >= 0 && bounds.Y() >= 0 && bounds.X()+bounds.Width() <= float32(window.Width())+1 && bounds.Y()+bounds.Height() <= float32(window.Height())+1
 				}
-				if scroller, ok := widget.Object.Cast().(*gtk.ScrolledWindow); ok {
+				if scroller, ok := widget.Object.Cast().(*gtk.ScrolledWindow); ok && scroller.Mapped() {
 					adjustment := scroller.HAdjustment()
 					if adjustment.Upper()-adjustment.PageSize() > 1 {
 						t.Errorf("%s: content requires horizontal scrolling (%.0f > %.0f)", cases[index].state.Prompt, adjustment.Upper(), adjustment.PageSize())
@@ -163,6 +165,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 				}
 			}
 			if index == 1 && refresh != nil {
+				pages.SetVisibleChildName("Devices")
 				refresh.GrabFocus()
 				refresh.Emit("clicked")
 			}
@@ -215,8 +218,8 @@ func TestNativeMultilineEnter(t *testing.T) {
 			var text *gtk.TextView
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
-				if expander, ok := widget.Object.Cast().(*gtk.Expander); ok && expander.Label() == "Advanced network settings" {
-					expander.SetExpanded(true)
+				if stack, ok := widget.Object.Cast().(*gtk.Stack); ok && stack.HasCSSClass("settings-pages") {
+					stack.SetVisibleChildName("Advanced")
 				}
 				if view, ok := widget.Object.Cast().(*gtk.TextView); ok {
 					text = view
@@ -253,4 +256,197 @@ func TestNativeMultilineEnter(t *testing.T) {
 			return true
 		})
 	})
+}
+
+// Switching settings pages must preserve edits in hidden controls and keep the
+// product identity and actions outside the scrolling content.
+func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
+	if os.Getenv("TRYOMARCHY_UI_TEST") != "1" {
+		t.Skip("requires an isolated native GTK desktop")
+	}
+	r, w := io.Pipe()
+	updates := make(chan state, 1)
+	go func() {
+		defer w.Close()
+		for s := range updates {
+			if json.NewEncoder(w).Encode(s) != nil {
+				return
+			}
+		}
+	}()
+	var output bytes.Buffer
+	updates <- state{Request: 801, Prompt: "settings", Version: "v0.1.0-preview.5", Settings: &settingsForm{
+		ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3", Microphone: true,
+		Camera: true, CameraID: "missing-camera", AudioOutput: "missing-output", AudioInput: "missing-input",
+		Scale: "1.5", Keyboard: "de", SSHEnabled: true, SSHPort: "2222", SSHKey: "/tmp/test-key.pub",
+		Forwards: "tcp:8080:80", DiskGiB: "48", Share: "/tmp/test-share", ShareEnabled: true,
+	}}
+	phase, ticks := 0, 0
+	var headerY float32
+	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		glib.TimeoutAdd(250, func() bool {
+			ticks++
+			if ticks > 60 {
+				t.Error("native page/account inspection timed out")
+				close(updates)
+				return false
+			}
+			var stack *gtk.Stack
+			var header *gtk.Box
+			buttons := map[string]*gtk.Button{}
+			checks := map[string]*gtk.CheckButton{}
+			var memory *gtk.SpinButton
+			var cpus *gtk.SpinButton
+			var settingScroll *gtk.ScrolledWindow
+			var walk func(*gtk.Widget)
+			walk = func(widget *gtk.Widget) {
+				if box, ok := widget.Object.Cast().(*gtk.Box); ok && box.HasCSSClass("product-header") {
+					header = box
+				}
+				if pages, ok := widget.Object.Cast().(*gtk.Stack); ok && pages.HasCSSClass("settings-pages") {
+					stack = pages
+				}
+				if button, ok := widget.Object.Cast().(*gtk.Button); ok && button.Mapped() {
+					buttons[button.Label()] = button
+				}
+				if check, ok := widget.Object.Cast().(*gtk.CheckButton); ok {
+					checks[check.Label()] = check
+				}
+				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok {
+					if spin.Digits() == 2 {
+						memory = spin
+					} else if spin.Adjustment().Upper() == 8 {
+						cpus = spin
+					}
+				}
+				if scroller, ok := widget.Object.Cast().(*gtk.ScrolledWindow); ok && scroller.Mapped() {
+					settingScroll = scroller
+					if scroller.HAdjustment().Upper()-scroller.HAdjustment().PageSize() > 1 {
+						t.Error("page content requires horizontal scrolling")
+					}
+				}
+				for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+					walk(gtk.BaseWidget(child))
+				}
+			}
+			walk(&window.Window.Widget)
+			if header == nil || !header.Mapped() || stack == nil {
+				return true
+			}
+			bounds, ok := header.ComputeBounds(&window.Window)
+			if !ok || bounds.Y() < 0 || bounds.Y()+bounds.Height() > float32(window.Height()) {
+				t.Error("shared header is outside the window")
+			}
+			if phase > 0 && bounds.Y() != headerY {
+				t.Error("scrolling/settings navigation moved the shared product header")
+			}
+			assertFooter := func(label string) {
+				button := buttons[label]
+				if button == nil {
+					t.Errorf("%q footer action is not mapped", label)
+					return
+				}
+				b, ok := button.ComputeBounds(&window.Window)
+				if !ok || b.Y()+b.Height() > float32(window.Height())+1 || b.X()+b.Width() > float32(window.Width())+1 {
+					t.Errorf("%q footer action is outside the window", label)
+				}
+			}
+			switch phase {
+			case 0:
+				if buttons["Save settings"] == nil {
+					return true
+				}
+				headerY = bounds.Y()
+				if stack.VisibleChildName() != "General" || checks["Allow camera access"].Mapped() {
+					t.Error("Settings did not begin on its General page")
+				}
+				memory.SetValue(8)
+				cpus.SetValue(5)
+				checks["Open fullscreen"].SetActive(true)
+				settingScroll.VAdjustment().SetValue(settingScroll.VAdjustment().Upper())
+				assertFooter("Save settings")
+			case 1:
+				assertFooter("Save settings")
+				stack.SetVisibleChildName("Devices")
+			case 2:
+				if !checks["Allow camera access"].Mapped() || memory.Mapped() {
+					t.Error("Devices page did not isolate its own controls")
+				}
+				if settingScroll.VAdjustment().Value() != 0 {
+					t.Error("Devices inherited General's scroll position")
+				}
+				checks["Allow microphone access"].SetActive(false)
+				assertFooter("Save settings")
+				stack.SetVisibleChildName("Advanced")
+			case 3:
+				if !checks["Allow SSH from this computer"].Mapped() || checks["Allow camera access"].Mapped() {
+					t.Error("Advanced page did not isolate its own controls")
+				}
+				assertFooter("Save settings")
+				stack.SetVisibleChildName("General")
+			case 4:
+				if memory.Value() != 8 || cpus.ValueAsInt() != 5 || !checks["Open fullscreen"].Active() {
+					t.Error("switching settings pages lost resource/display edits")
+				}
+				buttons["Save settings"].Emit("clicked")
+				buttons["Save settings"].Emit("clicked")
+				updates <- state{Request: 802, Prompt: "account", Version: "v0.1.0-preview.5"}
+			case 5:
+				if buttons["Continue"] == nil {
+					return true
+				}
+				if !checks["My own username and password (recommended)"].Active() || checks["Quick start (omarchy / omarchy)"].Active() {
+					t.Error("personal account is not the first-use default")
+				}
+				assertFooter("Continue")
+				buttons["Continue"].Emit("clicked")
+				updates <- state{Request: 803, Prompt: "home", Actions: []action{{Label: "Close", Reply: "close"}}}
+			case 6:
+				updates <- state{Request: 804, Prompt: "account"}
+			case 7:
+				if buttons["Continue"] == nil {
+					return true
+				}
+				quick := checks["Quick start (omarchy / omarchy)"]
+				quick.SetActive(true)
+				if checks["My own username and password (recommended)"].Active() {
+					t.Error("account choices are not mutually exclusive")
+				}
+				buttons["Continue"].Emit("clicked")
+				buttons["Continue"].Emit("clicked")
+				close(updates)
+				return false
+			}
+			phase++
+			return true
+		})
+	})
+	var replies []struct {
+		Event   string `json:"event"`
+		Request uint64 `json:"request"`
+		Value   string `json:"value"`
+	}
+	for _, line := range bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n")) {
+		var event struct {
+			Event   string `json:"event"`
+			Request uint64 `json:"request"`
+			Value   string `json:"value"`
+		}
+		if err := json.Unmarshal(line, &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Event == "reply" {
+			replies = append(replies, event)
+		}
+	}
+	if len(replies) != 3 || replies[0].Request != 801 || replies[1].Value != "personal" || replies[2].Value != "instant" {
+		t.Fatalf("unexpected settings/account replies: %+v", replies)
+	}
+	var saved settingsForm
+	if err := json.Unmarshal([]byte(replies[0].Value), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Memory != "8192" || saved.CPUs != "5" || !saved.Fullscreen || saved.Microphone || saved.CameraID != "missing-camera" || saved.AudioOutput != "missing-output" || saved.AudioInput != "missing-input" || saved.Scale != "1.5" || saved.Keyboard != "de" || saved.DiskGiB != "48" || saved.Share != "/tmp/test-share" || !saved.ShareEnabled || saved.SSHKey != "/tmp/test-key.pub" || saved.SSHPort != "2222" || saved.Forwards != "tcp:8080:80" {
+		t.Fatalf("hidden settings/edits were not preserved: %+v", saved)
+	}
 }

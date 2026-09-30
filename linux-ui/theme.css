@@ -23,29 +23,65 @@ window.try-omarchy {
   --border-color: #414868;
   background: var(--window-bg-color);
   color: var(--window-fg-color);
-  font-family: monospace;
+  font-family: sans-serif;
 }
 window.try-omarchy .product-title {
   font-family: monospace;
-  font-size: 1.8em;
+  font-size: 1.7em;
   font-weight: 700;
 }
-window.try-omarchy .product-version { color: #7aa2f7; }
-window.try-omarchy .product-platform { color: #7aa2f7; font-weight: 600; }
+window.try-omarchy .product-platform { color: #7aa2f7; font-weight: 400; }
 window.try-omarchy .dim-label, window.try-omarchy .dimmed { opacity: 1; color: #a9b5de; }
-window.try-omarchy .heading { color: #7dcfff; }
+window.try-omarchy .heading { color: #9ece6a; }
 window.try-omarchy .boxed-list { border: 1px solid #414868; }
 window.try-omarchy .boxed-list .title { font-weight: 600; }
 window.try-omarchy .boxed-list .subtitle { color: #a9b5de; opacity: 1; }
 window.try-omarchy image.success { color: #9ece6a; }
 window.try-omarchy image.error { color: #f7768e; }
-window.try-omarchy button.suggested-action { font-weight: 700; }
 window.try-omarchy button:focus-visible { outline-color: #7dcfff; }
 window.try-omarchy .action-footer { background: #1a1b26; }
 window.try-omarchy .settings-card {
-  padding: 14px;
+  padding: 10px;
   background: #24283b;
   border: 1px solid #414868;
 }
 /* Spacing remains usable when high contrast removes the color overrides. */
-window .settings-card { padding: 14px; }
+window .settings-card { padding: 10px; }
+
+/* Match the compact shared launcher while keeping GTK's control semantics. */
+window.try-omarchy .title-2,
+window.try-omarchy .title-3,
+window.try-omarchy .heading,
+window.try-omarchy .boxed-list .title {
+  font-family: monospace;
+}
+window.try-omarchy button { border-radius: 5px; }
+window.try-omarchy button.suggested-action {
+  background: #9ece6a;
+  color: #1a1b26;
+  border: 1px solid #9ece6a;
+  font-weight: 600;
+}
+window.try-omarchy button.suggested-action:hover { background: #b0dc82; }
+window.try-omarchy button.suggested-action:disabled { opacity: 0.5; }
+window.try-omarchy .settings-tabs button {
+  background: #24283b;
+  border: 1px solid #414868;
+  border-radius: 4px;
+  font-weight: 400;
+  padding: 8px 12px;
+}
+window.try-omarchy .settings-tabs button:checked {
+  color: #9ece6a;
+  border-color: #9ece6a;
+}
+window.try-omarchy .setting-help { font-size: 0.92em; }
+window.try-omarchy .settings-card { border-radius: 6px; }
+window.try-omarchy .boxed-list { border-radius: 6px; }
+window.try-omarchy .boxed-list row { padding-top: 4px; padding-bottom: 4px; }
+window.try-omarchy .integration-icon { color: #7aa2f7; }
+window.try-omarchy .integration-state { font-size: 0.85em; }
+window.try-omarchy label.integration-state.success { color: #9ece6a; }
+window.try-omarchy .action-footer button.suggested-action { min-width: 9em; }
+
+window .setting-field > flowboxchild, window .footer-buttons > flowboxchild { padding: 0; }

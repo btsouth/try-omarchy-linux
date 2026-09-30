@@ -73,6 +73,14 @@ func versionLabel(version string) string {
 	return strings.NewReplacer("-preview.", " preview ", "-", " ").Replace(version)
 }
 
+// platformVersion joins the platform and backend version on one identity line.
+func platformVersion(version string) string {
+	if version == "" {
+		return ""
+	}
+	return " · v" + versionLabel(version)
+}
+
 // homeSectionsForState keeps integration choices visible, like the Mac launcher.
 // The longer first setup explanation is optional; existing VM storage stays visible.
 func homeSectionsForState(s state) (visible, setup []section) {
@@ -112,4 +120,16 @@ func sectionsText(sections []section) string {
 		}
 	}
 	return b.String()
+}
+
+// settingsFooterText keeps operation timing visible without repeating row help.
+func settingsFooterText(running, audioLive bool) string {
+	text := "VM settings apply on the next launch."
+	if running {
+		text = "Shut down Omarchy and launch again to apply VM settings."
+	}
+	if audioLive {
+		text += " Audio device choices apply when saved."
+	}
+	return text
 }

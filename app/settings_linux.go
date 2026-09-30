@@ -29,6 +29,7 @@ type linuxSettingsForm struct {
 	AudioOutputs       []linuxAudioDevice `json:"audioOutputs,omitempty"`
 	AudioInputs        []linuxAudioDevice `json:"audioInputs,omitempty"`
 	AudioLive          bool               `json:"audioLive"`
+	Running            bool               `json:"running"`
 	RefreshAudio       bool               `json:"refreshAudio,omitempty"`
 	DiskGiB            string             `json:"diskGiB"`
 	Scale              string             `json:"scale"`
@@ -106,6 +107,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	form.ResourceProfile = effectiveResourceProfile(resources.Profile, saved.CPUs, saved.MemoryMiB)
 	form.ResourceSummary = linuxAutomaticResourcesSummary(measureHostResources(false))
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
+	form.Running = running
 	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
 		form.Render = "auto"
@@ -135,6 +137,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		cameras := form.Cameras
 		err = json.Unmarshal([]byte(value), form)
 		form.AudioLive = audioLive
+		form.Running = running
 		form.ResourceSummary = resourceSummary
 		form.AudioOutputs, form.AudioInputs = audioOutputs, audioInputs
 		form.Cameras = cameras
@@ -373,7 +376,7 @@ func linuxAutomaticResourcesSummary(host hostResources) string {
 	if high != low {
 		memory = fmt.Sprintf("%.1f–%.1f GiB", float64(min(low, high))/1024, float64(max(low, high))/1024)
 	}
-	return fmt.Sprintf("Automatic estimate now: %d processors, %s memory depending on rendering. Checked again at launch. Choose Manual to override memory or processors.", cpu, memory)
+	return fmt.Sprintf("Current estimate: %d processors · %s RAM (depends on rendering). Checked again at launch.", cpu, memory)
 }
 
 // A desktop launch has no flags. Explicit CLI options keep their historical

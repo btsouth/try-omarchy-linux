@@ -630,11 +630,13 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		}
 		failed, cancelling, determinate := false, false, false
 		var current state
+		var submittedFocus gtk.Widgetter
 		answered := false
 		reply := func(value string) {
 			if current.Request == 0 || answered {
 				return
 			}
+			submittedFocus = window.Window.Focus()
 			answered = true
 			window.SetDefaultWidget(nil)
 			button.SetSensitive(false)
@@ -917,7 +919,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						return
 					}
 					cancelling = false
-					previousFocus := window.Window.Focus()
+					previousFocus := submittedFocus
+					if previousFocus == nil {
+						previousFocus = window.Window.Focus()
+					}
+					submittedFocus = nil
 					preserveManual := current.Prompt == "settings" && next.Prompt == "settings"
 					current = next
 					answered = false

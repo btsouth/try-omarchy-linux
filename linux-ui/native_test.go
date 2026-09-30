@@ -58,6 +58,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var found *gtk.Button
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
+			var refresh *gtk.Button
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
 				if !widget.Visible() && widget.CSSName() != "spinbutton" {
@@ -73,6 +74,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 					autoMemory = check
 				}
 				if b, ok := widget.Object.Cast().(*gtk.Button); ok {
+					if b.Label() == "Refresh devices" {
+						refresh = b
+					}
 					if b.Label() == cases[index].button {
 						found = b
 					}
@@ -99,6 +103,16 @@ func TestNativeFooterAndReply(t *testing.T) {
 					t.Error("automatic memory did not hide numeric tuning")
 				}
 			}
+			if index == 1 && refresh != nil {
+				refresh.GrabFocus()
+				refresh.Emit("clicked")
+			}
+			if index == 2 && refresh != nil {
+				focus := window.Window.Focus()
+				if focus == nil || gtk.BaseWidget(focus).Object.Native() != refresh.Object.Native() {
+					t.Error("device refresh did not restore the focused Refresh button")
+				}
+			}
 			if index == 2 && memory != nil && autoMemory != nil {
 				autoMemory.SetActive(false)
 				if memory.Value() != 8 || !memory.Visible() {
@@ -115,7 +129,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			return true
 		})
 	})
-	if got := strings.Count(output.String(), `"event":"reply"`); got != 1 {
-		t.Fatalf("duplicate activation emitted %d replies: %s", got, output.String())
+	if got := strings.Count(output.String(), `"event":"reply"`); got != 2 {
+		t.Fatalf("home activation and device refresh emitted %d replies: %s", got, output.String())
 	}
 }

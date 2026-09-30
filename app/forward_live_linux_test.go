@@ -181,6 +181,37 @@ func TestLinuxLiveForwardsChangeLocalForwardsAndRetryFailures(t *testing.T) {
 	}
 }
 
+func TestLinuxLiveForwardGuestPortChangeKeepsItsHostPort(t *testing.T) {
+	monitor := startFakeLinuxMonitor(t)
+	resetLinuxLiveForwards(t)
+	// The running VM's QEMU holds the forward's host port.
+	held, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	port := held.Addr().(*net.TCPAddr).Port
+	startLinuxLiveForwards(parsedForwards(t, fmt.Sprintf("tcp:%d:80", port)), true)
+	saved := []string{fmt.Sprintf("tcp:%d:81", port)}
+	plan, err := planLinuxLiveForwards(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checkForwardBindings(plan.add) == nil {
+		t.Fatal("the held port looked free")
+	}
+	if fresh := newForwardPorts(plan); len(fresh) != 0 {
+		t.Fatalf("a guest port change asked for a new host port: %v", fresh)
+	}
+	if _, err := applyLinuxLiveForwards(context.Background(), saved); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{fmt.Sprintf("hostfwd_remove n0 tcp:127.0.0.1:%d", port), fmt.Sprintf("hostfwd_add n0 tcp:127.0.0.1:%d-:81", port)}
+	if got := monitor.take(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("monitor commands:\n got %q\nwant %q", got, want)
+	}
+}
+
 func TestLinuxLiveForwardSettingsHelper(t *testing.T) {
 	dir := os.Getenv("TRY_OMARCHY_LIVE_FORWARD_DIR")
 	if dir == "" {

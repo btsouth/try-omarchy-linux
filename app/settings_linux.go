@@ -187,11 +187,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			}
 		}
 		if err == nil && form.ForwardsLive {
-			// The running VM holds its current ports, so only a forward it
-			// does not have yet needs a free port.
+			// The running VM holds its current ports, so only a forward on a
+			// port it does not have yet needs that port free.
 			var plan forwardPlan
 			if plan, err = planLinuxLiveForwards(next.Forwards); err == nil {
-				err = checkForwardBindings(plan.add)
+				err = checkForwardBindings(newForwardPorts(plan))
 			}
 		}
 		cpuMax := min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs))

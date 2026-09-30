@@ -45,6 +45,26 @@ func planLinuxLiveForwards(saved []string) (forwardPlan, error) {
 	return planLiveForwards(forwardsForBoot(nil), desired), nil
 }
 
+// newForwardPorts lists the added forwards that need a host port the running
+// VM does not hold yet. A forward that changes only its guest port reuses the
+// port its removal frees, since removals run first.
+func newForwardPorts(plan forwardPlan) []portForward {
+	var fresh []portForward
+	for _, add := range plan.add {
+		reused := false
+		for _, remove := range plan.remove {
+			if add.proto == remove.proto && add.address() == remove.address() && add.hostPort == remove.hostPort {
+				reused = true
+				break
+			}
+		}
+		if !reused {
+			fresh = append(fresh, add)
+		}
+	}
+	return fresh
+}
+
 // applyLinuxLiveForwards brings the running VM's forwards to the saved list.
 // What changed stays recorded even when another forward fails, so saving
 // again retries only the rest.

@@ -1,0 +1,110 @@
+sdl2: return host shortcuts when the pointer leaves the VM on Wayland
+
+Like X11 panels, Wayland layer-shell panels can receive the pointer without
+changing keyboard focus. Release the focus keyboard grab on leave and check
+pointer focus before reacquiring it. Keep X11's global-position safeguard.
+For a windowed absolute tablet, capture only the keyboard so leaving the VM
+does not depend on landing exactly on its edge. Relative and fullscreen
+pointer grabs, and runtimes without focus keyboard capture, remain unchanged.
+
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -209,14 +209,17 @@
+  * window they open with their input going to the guest, or get stuck open.
+  * There the grab follows the pointer as well as focus, as in virt-viewer: the
+  * keyboard goes to the guest while the window has focus and the pointer is
+- * over it.  Wayland's keyboard shortcuts inhibitor needs no such care.
++ * over it.  On Wayland the shortcuts inhibitor must also stop when the
++ * pointer enters the host's panels, even if the VM keeps keyboard focus.
+  */
+-static bool sdl_x11_pointer_outside(struct sdl2_console *scon)
++static bool sdl_pointer_outside(struct sdl2_console *scon)
+ {
+     int x, y, win_x, win_y, win_w, win_h;
+ 
+     if (g_strcmp0(SDL_GetCurrentVideoDriver(), "x11") != 0) {
+-        return false;
++        return focus_keyboard_grab &&
++               g_strcmp0(SDL_GetCurrentVideoDriver(), "wayland") == 0 &&
++               SDL_GetMouseFocus() != scon->real_window;
+     }
+     if (SDL_GetMouseFocus() != scon->real_window) {
+         return true;
+@@ -243,7 +246,7 @@
+     } else if (focus_keyboard_grab) {
+         if (!keyboard_released && scon->real_window &&
+             (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS) &&
+-            !sdl_x11_pointer_outside(scon)) {
++            !sdl_pointer_outside(scon)) {
+             status = alt_grab ? " - Press Ctrl+Alt+Shift+G to release the keyboard" :
+                      ctrl_grab ? " - Press Right-Ctrl+G to release the keyboard" :
+                      " - Press Ctrl+Alt+G to release the keyboard";
+@@ -329,7 +332,7 @@
+     if (focus_keyboard_grab && scon->real_window) {
+         SDL_SetWindowKeyboardGrab(scon->real_window,
+                                   grab && !keyboard_released &&
+-                                  !sdl_x11_pointer_outside(scon) ?
++                                  !sdl_pointer_outside(scon) ?
+                                   SDL_TRUE : SDL_FALSE);
+     }
+ #endif
+@@ -350,7 +353,8 @@
+     if (!(SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS)) {
+         return;
+     }
+-    if (focus_keyboard_grab && keyboard_released) {
++    if (focus_keyboard_grab &&
++        (keyboard_released || sdl_pointer_outside(scon))) {
+         return;
+     }
+     if (guest_cursor) {
+@@ -361,7 +365,13 @@
+     } else {
+         sdl_hide_cursor(scon);
+     }
+-    SDL_SetWindowGrab(scon->real_window, SDL_TRUE);
++    if (focus_keyboard_grab && !gui_fullscreen &&
++        (qemu_input_is_absolute(con) || absolute_enabled)) {
++        /* An absolute tablet needs keyboard capture, not pointer confinement. */
++        sdl_focus_keyboard_grab(scon, true);
++    } else {
++        SDL_SetWindowGrab(scon->real_window, SDL_TRUE);
++    }
+     gui_grab = 1;
+     sdl_update_caption(scon);
+ }
+@@ -388,7 +398,7 @@
+      * stale position, such as when focus returns from a dialog, would pull
+      * the pointer into the window from wherever it is.
+      */
+-    if (sdl_x11_pointer_outside(scon)) {
++    if (sdl_pointer_outside(scon)) {
+         return;
+     }
+     SDL_GetMouseState(&mouse_x, &mouse_y);
+@@ -484,6 +494,11 @@
+             sdl_grab_end(scon);
+         }
+         SDL_SetWindowFullscreen(scon->real_window, 0);
++        if (focus_keyboard_grab &&
++            (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled)) {
++            /* Restore the windowed tablet's free host pointer. */
++            SDL_SetWindowMouseGrab(scon->real_window, SDL_FALSE);
++        }
+     }
+     sdl2_redraw(scon);
+ }
+@@ -779,8 +794,11 @@
+         scon->ignore_hotkeys = get_mod_state();
+         break;
+     case SDL_WINDOWEVENT_LEAVE:
+-        /* On X11 the keyboard goes back to the desktop with the pointer. */
+-        if (sdl_x11_pointer_outside(scon)) {
++        /* Host panels need their shortcuts back on both X11 and Wayland. */
++        if (sdl_pointer_outside(scon)) {
++            if (gui_grab && !gui_fullscreen) {
++                sdl_grab_end(scon);
++            }
+             sdl_focus_keyboard_grab(scon, false);
+             sdl_update_caption(scon);
+         }

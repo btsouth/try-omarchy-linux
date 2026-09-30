@@ -325,9 +325,13 @@ func (e *linuxSettingsSaveError) Error() string {
 	if len(e.Saved) > 0 {
 		message += " Already saved: " + strings.Join(e.Saved, ", ") + "."
 	} else {
-		message += " No settings were saved."
+		message += " No settings were saved by this attempt."
 	}
-	return message + " Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again."
+	folder := "VM folder"
+	if e.Group == "clipboard sharing" {
+		folder = "app's configuration folder"
+	}
+	return message + " Your remaining edits are kept here. Check that the " + folder + " is writable and has free space, then Save again."
 }
 
 func (e *linuxSettingsSaveError) Unwrap() error { return e.Err }

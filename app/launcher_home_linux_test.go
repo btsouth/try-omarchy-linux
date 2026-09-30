@@ -552,4 +552,8 @@ func TestLinuxSettingsFailureReportsOnlyCompletedWrites(t *testing.T) {
 	if text := linuxSettingsTiming(true, true); !strings.Contains(text, "Audio device choices apply when you save") || !strings.Contains(text, "next time you open Try Omarchy") || !strings.Contains(text, "a guest reboot does not apply") {
 		t.Fatalf("inaccurate timing: %q", text)
 	}
+	clipboard := (&linuxSettingsSaveError{Group: "clipboard sharing", Err: os.ErrPermission}).Error()
+	if !strings.Contains(clipboard, "app's configuration folder") || strings.Contains(clipboard, "VM folder") || !strings.Contains(clipboard, "by this attempt") {
+		t.Fatalf("clipboard recovery names the wrong location or attempt: %q", clipboard)
+	}
 }

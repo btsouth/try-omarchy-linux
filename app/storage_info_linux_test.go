@@ -185,3 +185,20 @@ func TestLinuxStorageRowsForAnEmptyInstallShowOnlyTheLocation(t *testing.T) {
 		t.Fatalf("reading storage created %s: %v", dir, err)
 	}
 }
+
+func TestLinuxSharedFolderLabelWhenPortalInfoIsDenied(t *testing.T) {
+	old := linuxDocumentHostPath
+	defer func() { linuxDocumentHostPath = old }()
+	linuxDocumentHostPath = func(string) (string, error) { return "", errors.New("Not allowed in sandbox") }
+	grant := "/run/flatpak/doc/opaque-grant/Exchange"
+	if got := linuxSharedFolderDisplayPath(grant); got != "Exchange" {
+		t.Fatalf("sandbox grant needs a readable folder label: %q", got)
+	}
+	if got := linuxHostPath(grant); got != grant {
+		t.Fatalf("display fallback must leave the access grant intact: %q", got)
+	}
+	plain := "/tmp/Exchange"
+	if got := linuxSharedFolderDisplayPath(plain); got != plain {
+		t.Fatalf("ordinary folder path changed: %q", got)
+	}
+}

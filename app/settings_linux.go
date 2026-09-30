@@ -128,7 +128,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	}
 	notice := ""
 	for {
-		form.ShareDisplay = linuxDisplayPath(form.Share)
+		form.ShareDisplay = linuxSharedFolderDisplayPath(form.Share)
 		value, err := w.ask(ctx, linuxSetupState{Prompt: "settings", Status: status, Notice: notice, Settings: form})
 		if err != nil || value == "cancel" {
 			return ""
@@ -487,7 +487,7 @@ func linuxHomeIntegrationRows(dir string) []linuxRow {
 	rows := []linuxRow{{Title: "Resources", Detail: profileName + " · checked at the next launch", State: "pending"}}
 	share := linuxRow{Title: "Shared folder", Detail: "Not shared", State: "disabled"}
 	if prefs.Share != "" && !prefs.ShareDisabled {
-		share.Detail, share.State = "Shared at the next launch: "+linuxDisplayPath(prefs.Share), "enabled"
+		share.Detail, share.State = "Shared at the next launch: "+linuxSharedFolderDisplayPath(prefs.Share), "enabled"
 	}
 	rows = append(rows, share)
 	for _, device := range []struct {
@@ -688,4 +688,16 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 			}
 		}
 	}
+}
+
+// The document portal denies Info inside a sandbox. Keep the selected folder's
+// recognizable name in that case; the exact grant remains in Share for access.
+func linuxSharedFolderDisplayPath(path string) string {
+	display := linuxDisplayPath(path)
+	if display == path {
+		if _, _, ok := linuxDocumentPath(path, os.Getuid()); ok {
+			return filepath.Base(filepath.Clean(path))
+		}
+	}
+	return display
 }

@@ -167,10 +167,12 @@ func fillSections(box *gtk.Box, sections []section) {
 			case strings.Contains(strings.ToLower(r.Title), "disk"), strings.Contains(strings.ToLower(r.Title), "space"):
 				iconName = "drive-harddisk-symbolic"
 			}
-			icon := gtk.NewImageFromIconName(iconName)
-			icon.AddCSSClass("integration-icon")
-			icon.SetPixelSize(20)
-			item.AddPrefix(icon)
+			if gtk.IconThemeGetForDisplay(gdk.DisplayGetDefault()).HasIcon(iconName) {
+				icon := gtk.NewImageFromIconName(iconName)
+				icon.AddCSSClass("integration-icon")
+				icon.SetPixelSize(20)
+				item.AddPrefix(icon)
+			}
 			if r.State != "" {
 				text, style := "Next launch", "dim-label"
 				switch r.State {

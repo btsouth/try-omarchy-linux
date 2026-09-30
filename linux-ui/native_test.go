@@ -49,6 +49,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "delete-default"}, "Keep this VM"},
 		{state{Status: "Downloading Omarchy", Current: 42, Total: 100}, "Cancel"},
 		{state{Status: "Starting Omarchy", Booting: true}, "Stop Omarchy"},
+		{state{Status: "Waiting for the Omarchy desktop", Detail: "Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.", Booting: true}, "Stop Omarchy"},
 		{state{Prompt: "home", Installed: true, CheckAgain: true, Headline: "Saved settings need attention.", Notice: "Saved settings could not be read.", HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#settings", Actions: []action{{Label: "Check again", Reply: "check", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Integrations", Rows: []row{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}}}}, "Check again"},
 		{state{Prompt: "settings", Notice: "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again.", Settings: &settingsForm{Running: true, AudioLive: true, ResourceProfile: "balanced", CPUMax: 8}}, "Save settings"},
 	}
@@ -56,9 +57,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
-		for _, name := range []string{"object-select-symbolic", "action-unavailable-symbolic", "content-loading-symbolic", "dialog-error-symbolic"} {
+		for _, name := range []string{"dialog-error-symbolic"} {
 			if !icons.HasIcon(name) {
-				t.Errorf("integration or failure icon is unavailable: %s", name)
+				t.Errorf("required failure icon is unavailable: %s", name)
 			}
 		}
 		glib.TimeoutAdd(250, func() bool {

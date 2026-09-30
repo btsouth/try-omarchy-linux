@@ -78,6 +78,9 @@ func linuxFriendlyStatus(raw string, updating bool) (string, linuxStage) {
 // linuxProgressDetail is the line under the bar. A download says how much of
 // it is done and that it survives an interruption; other steps let the bar speak.
 func linuxProgressDetail(stage linuxStage, current, total int64) string {
+	if stage == stageDesktop {
+		return "Finish first-time account setup or sign in in the Omarchy window. This window closes when the desktop is ready."
+	}
 	if stage == stageDownload && total > 0 {
 		return fmt.Sprintf("%s of %s. If this stops, it continues where it left off.", linuxGB(current), linuxGB(total))
 	}

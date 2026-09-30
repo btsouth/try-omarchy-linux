@@ -85,7 +85,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 					}
 				case linuxDesktopTimedOut:
 					desktopTimedOut = true
-					getUI().showDesktopTimeout("Omarchy started, but its desktop did not appear within five minutes. Check the VM window and its login screen. You can close this message without stopping the VM; diagnostics are in the data folder.")
+					getUI().showDesktopTimeout("Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.")
 				case linuxDesktopCancelled:
 					confirmation.close()
 					requestLinuxShutdown(qmp, proc, &initialInterrupts)

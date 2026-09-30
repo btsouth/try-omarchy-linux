@@ -91,6 +91,8 @@ type settingsForm struct {
 	StartAutomatically bool          `json:"startAutomatically"`
 	Share              string        `json:"share"`
 	ShareEnabled       bool          `json:"shareEnabled"`
+	ResourceProfile    string        `json:"resourceProfile"`
+	ResourceSummary    string        `json:"resourceSummary"`
 	CPUMax             int           `json:"cpuMax"`
 	ClipboardShare     bool          `json:"clipboardShare"`
 	ClipboardAvailable bool          `json:"clipboardAvailable"`
@@ -152,6 +154,20 @@ func fillSections(box *gtk.Box, sections []section) {
 			item.SetSubtitleLines(0)
 			item.SetSubtitleSelectable(true)
 			item.AddCSSClass("property")
+			if r.State != "" {
+				iconName, style := "content-loading-symbolic", "dim-label"
+				switch r.State {
+				case "enabled":
+					iconName, style = "emblem-ok-symbolic", "success"
+				case "disabled":
+					iconName = "action-unavailable-symbolic"
+				case "unavailable":
+					iconName, style = "dialog-warning-symbolic", "warning"
+				}
+				icon := gtk.NewImageFromIconName(iconName)
+				icon.AddCSSClass(style)
+				item.AddPrefix(icon)
+			}
 			group.Add(item)
 		}
 		box.Append(group)
@@ -304,7 +320,25 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		settingsStatus.SetWrap(true)
 		settingsStatus.SetHAlign(gtk.AlignStart)
 		settingsContent.Append(settingsStatus)
-		form := gtk.NewBox(gtk.OrientationVertical, 8)
+		form := gtk.NewBox(gtk.OrientationVertical, 20)
+		var groupContent *gtk.Box
+		beginGroup := func(title, description string, advanced bool) {
+			group := adw.NewPreferencesGroup()
+			group.SetTitle(title)
+			group.SetDescription(description)
+			groupContent = gtk.NewBox(gtk.OrientationVertical, 8)
+			groupContent.AddCSSClass("card")
+			groupContent.AddCSSClass("settings-card")
+			group.Add(groupContent)
+			if advanced {
+				expander := gtk.NewExpander("Advanced network settings")
+				expander.SetChild(group)
+				form.Append(expander)
+			} else {
+				form.Append(group)
+			}
+		}
+		beginGroup("Resources", "Automatic sizing leaves room for your Linux desktop. Changes apply on the next launch.", false)
 		// Headings stand apart from the controls above them, and help text
 		// reads as secondary, so the long form scans as separate groups.
 		formLabel := func(title string) {
@@ -312,111 +346,152 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			l.SetWrap(true)
 			l.SetXAlign(0)
 			l.AddCSSClass("heading")
-			if form.FirstChild() != nil {
+			if groupContent.FirstChild() != nil {
 				l.SetMarginTop(12)
 			}
-			form.Append(l)
+			groupContent.Append(l)
 		}
 		formHelp := func(text string) *gtk.Label {
 			l := gtk.NewLabel(text)
 			l.SetWrap(true)
 			l.SetXAlign(0)
 			l.AddCSSClass("dim-label")
-			form.Append(l)
+			groupContent.Append(l)
 			return l
 		}
 		entry := func(title string) *gtk.Entry {
 			formLabel(title)
 			input := gtk.NewEntry()
-			form.Append(input)
+			groupContent.Append(input)
 			return input
 		}
+		resourceProfile := gtk.NewDropDownFromStrings([]string{"Balanced (recommended)", "Maximum performance", "Manual"})
+		named(resourceProfile, "Resource profile")
+		groupContent.Append(resourceProfile)
+		resourceSummary := formHelp("")
+		automaticSummary := ""
+		resourceCard := groupContent
+		manualResources := gtk.NewBox(gtk.OrientationVertical, 8)
+		resourceCard.Append(manualResources)
+		updateResources := func() {
+			manualResources.SetVisible(resourceProfile.Selected() == 2)
+			switch resourceProfile.Selected() {
+			case 1:
+				resourceSummary.SetText("Uses available resources at the next launch while leaving room for Linux. The running VM is not resized.")
+			case 2:
+				resourceSummary.SetText("Choose memory and processors below. Saved manual values are retained when you use another profile.")
+			default:
+				resourceSummary.SetText(automaticSummary)
+			}
+		}
+		resourceProfile.NotifyProperty("selected", updateResources)
+		groupContent = manualResources
 		formLabel("Memory for Omarchy (GiB)")
 		autoMemory := gtk.NewCheckButtonWithLabel("Choose memory automatically")
 		memory := gtk.NewSpinButtonWithRange(1, 64, 0.25)
 		memory.SetDigits(2)
 		memory.SetNumeric(true)
 		named(memory, "Memory for Omarchy in GiB")
-		form.Append(autoMemory)
-		form.Append(memory)
-		autoMemory.ConnectToggled(func() { memory.SetSensitive(!autoMemory.Active()) })
+		groupContent.Append(autoMemory)
+		groupContent.Append(memory)
+		autoMemory.ConnectToggled(func() { memory.SetVisible(!autoMemory.Active()) })
 		formLabel("Processors")
 		autoCPUs := gtk.NewCheckButtonWithLabel("Choose processors automatically")
 		cpus := gtk.NewSpinButtonWithRange(1, 64, 1)
 		cpus.SetNumeric(true)
 		named(cpus, "Processors for Omarchy")
-		form.Append(autoCPUs)
-		form.Append(cpus)
-		autoCPUs.ConnectToggled(func() { cpus.SetSensitive(!autoCPUs.Active()) })
+		groupContent.Append(autoCPUs)
+		groupContent.Append(cpus)
+		autoCPUs.ConnectToggled(func() { cpus.SetVisible(!autoCPUs.Active()) })
+		groupContent = resourceCard
 		formLabel("Rendering")
 		render := gtk.NewDropDownFromStrings([]string{"Automatic (recommended)", "Graphics acceleration", "Software rendering"})
 		named(render, "Rendering")
-		form.Append(render)
+		groupContent.Append(render)
 		formHelp("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
 		defaults := gtk.NewButtonWithLabel("Restore resource defaults")
 		defaults.ConnectClicked(func() {
+			resourceProfile.SetSelected(0)
 			autoMemory.SetActive(true)
 			autoCPUs.SetActive(true)
 			render.SetSelected(0)
 		})
-		form.Append(defaults)
+		groupContent.Append(defaults)
+		beginGroup("Storage", "Your installation and shared files.", false)
 		formLabel("Disk capacity (GiB)")
 		standardDisk := gtk.NewCheckButtonWithLabel("Use standard capacity (24 GiB)")
 		diskGiB := gtk.NewSpinButtonWithRange(24, 1024, 1)
 		diskGiB.SetNumeric(true)
 		named(diskGiB, "Disk capacity in GiB")
-		form.Append(standardDisk)
-		form.Append(diskGiB)
+		groupContent.Append(standardDisk)
+		groupContent.Append(diskGiB)
 		standardDisk.ConnectToggled(func() { diskGiB.SetSensitive(!standardDisk.Active()) })
 		formHelp("A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
-		formLabel("Display and audio")
+		share := entry("Shared folder")
+		share.SetEditable(false)
+		named(share, "Shared folder")
+		shareEnabled := gtk.NewCheckButtonWithLabel("Share this folder with Omarchy")
+		groupContent.Append(shareEnabled)
+		clearShare := gtk.NewButtonWithLabel("Stop sharing this folder")
+		clearShare.ConnectClicked(func() { share.SetText(""); shareEnabled.SetActive(false) })
+		groupContent.Append(clearShare)
+		chooseShare := gtk.NewButtonWithLabel("Choose a shared folder...")
+		groupContent.Append(chooseShare)
+		formHelp("Omarchy can read, change and delete files in the folder you share. Access changes apply on the next launch.")
+		beginGroup("Display and keyboard", "Changes apply when Omarchy next starts.", false)
 		fullscreen := gtk.NewCheckButtonWithLabel("Open Omarchy fullscreen")
-		form.Append(fullscreen)
+		groupContent.Append(fullscreen)
 		formLabel("Guest display scale")
 		scaleChoices := []audioDevice{{"keep", "Keep guest choice"}, {"1", "100%"}, {"1.25", "125%"}, {"1.5", "150%"}, {"2", "200%"}, {"3", "300%"}, {"4", "400%"}}
 		scale := gtk.NewDropDownFromStrings([]string{"Follow host display"})
 		named(scale, "Guest display scale")
-		form.Append(scale)
+		groupContent.Append(scale)
 		scaleNames := []string{"auto"}
 		formLabel("Guest keyboard layout")
 		keyboardChoices := []audioDevice{{"keep", "Keep guest choice"}, {"us", "English (US)"}, {"us:intl", "English (US, international)"}, {"de", "German"}, {"fr", "French"}, {"es", "Spanish"}}
 		keyboard := gtk.NewDropDownFromStrings([]string{"Follow host layout"})
 		named(keyboard, "Guest keyboard layout")
-		form.Append(keyboard)
+		groupContent.Append(keyboard)
 		keyboardNames := []string{""}
 		formHelp("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
+		beginGroup("Devices and privacy", "Access is your choice. Opening Settings does not start capture.", false)
 		microphone := gtk.NewCheckButtonWithLabel("Allow microphone access")
-		form.Append(microphone)
+		groupContent.Append(microphone)
 		camera := gtk.NewCheckButtonWithLabel("Allow camera access")
-		form.Append(camera)
+		groupContent.Append(camera)
 		formLabel("Camera")
 		cameraChoice := gtk.NewDropDownFromStrings([]string{"Automatic"})
 		named(cameraChoice, "Camera")
-		form.Append(cameraChoice)
+		groupContent.Append(cameraChoice)
 		cameraNames := []string{""}
 		formHelp("Your desktop asks for camera permission when an app inside Omarchy first opens the camera. Capture stops when that app closes it. Access changes apply after shutting down Omarchy and launching it again.")
 		formLabel("Audio output")
 		audioOutput := gtk.NewDropDownFromStrings([]string{"System default"})
 		named(audioOutput, "Audio output")
-		form.Append(audioOutput)
+		groupContent.Append(audioOutput)
 		formLabel("Audio input")
 		audioInput := gtk.NewDropDownFromStrings([]string{"System default"})
 		named(audioInput, "Audio input")
-		form.Append(audioInput)
+		groupContent.Append(audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
 		audioRefresh := gtk.NewButtonWithLabel("Refresh devices")
-		form.Append(audioRefresh)
+		groupContent.Append(audioRefresh)
 		audioHelp := formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
 		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
-		form.Append(clipboardShare)
+		groupContent.Append(clipboardShare)
 		clipboardHelp := formHelp("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
-		formLabel("Network and SSH")
+		beginGroup("Startup", "Choose what happens when you open Try Omarchy.", false)
+		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
+		groupContent.Append(startAutomatically)
+		formHelp("The launcher stays open for 10 seconds so you can choose Settings or Close.")
+
+		beginGroup("Network and SSH", "Local connections only. Changes apply on the next launch.", true)
 		sshEnabled := gtk.NewCheckButtonWithLabel("Allow SSH from this computer")
-		form.Append(sshEnabled)
+		groupContent.Append(sshEnabled)
 		sshPort := gtk.NewSpinButtonWithRange(1024, 65535, 1)
 		sshPort.SetNumeric(true)
 		named(sshPort, "SSH port on this computer")
-		form.Append(sshPort)
+		groupContent.Append(sshPort)
 		sshEnabled.ConnectToggled(func() { sshPort.SetSensitive(sshEnabled.Active()) })
 		formHelp("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
 		sshKey := entry("SSH public key (optional)")
@@ -445,27 +520,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				sshKey.SetText(file.Path())
 			})
 		})
-		form.Append(chooseSSHKey)
+		groupContent.Append(chooseSSHKey)
 		clearSSHKey := gtk.NewButtonWithLabel("Remove public key choice")
 		clearSSHKey.ConnectClicked(func() { sshKey.SetText("") })
-		form.Append(clearSSHKey)
+		groupContent.Append(clearSSHKey)
 		formLabel("Other local port forwards (one per line, for example tcp:8080:80)")
 		forwards := gtk.NewTextView()
 		forwards.SetSizeRequest(-1, 88)
 		named(forwards, "Other local port forwards, one per line")
-		form.Append(forwards)
-		formLabel("Startup")
-		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
-		form.Append(startAutomatically)
-		formHelp("The launcher stays open for 10 seconds so you can choose Settings or Close.")
-		share := entry("Shared folder")
-		share.SetEditable(false)
-		named(share, "Shared folder")
-		shareEnabled := gtk.NewCheckButtonWithLabel("Share this folder with Omarchy")
-		form.Append(shareEnabled)
-		clearShare := gtk.NewButtonWithLabel("Stop sharing this folder")
-		clearShare.ConnectClicked(func() { share.SetText(""); shareEnabled.SetActive(false) })
-		form.Append(clearShare)
+		groupContent.Append(forwards)
 		settingsContent.Append(form)
 		settingsClamp := adw.NewClamp()
 		settingsClamp.SetMaximumSize(480)
@@ -567,14 +630,17 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		}
 		failed, cancelling, determinate := false, false, false
 		var current state
+		var submittedFocus gtk.Widgetter
 		answered := false
 		reply := func(value string) {
 			if current.Request == 0 || answered {
 				return
 			}
+			submittedFocus = window.Window.Focus()
 			answered = true
 			window.SetDefaultWidget(nil)
 			button.SetSensitive(false)
+			settingsScroll.SetSensitive(false)
 			choices.SetSensitive(false)
 			dynamicActions.SetSensitive(false)
 			menuButton.SetSensitive(false)
@@ -633,7 +699,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
@@ -738,7 +804,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				reply(settingsValue(false))
 			}
 		})
-		secondary.ConnectClicked(func() {
+		chooseFolder := func() {
 			switch current.Prompt {
 			case "account":
 				reply("instant")
@@ -773,13 +839,21 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							ErrorCode() int
 						})
 						if !known || detail.Quark() != uint32(gtk.DialogErrorQuark()) || detail.ErrorCode() != int(gtk.DialogErrorDismissed) {
-							label.SetText("Could not choose that folder: " + err.Error())
+							if current.Prompt == "settings" {
+								settingsStatus.SetText("Could not choose that folder: " + err.Error())
+							} else {
+								label.SetText("Could not choose that folder: " + err.Error())
+							}
 							fmt.Fprintln(os.Stderr, "Folder selection:", err)
 						}
 						return
 					}
 					if folder.Path() == "" {
-						label.SetText("Choose a folder on a local drive.")
+						if current.Prompt == "settings" {
+							settingsStatus.SetText("Choose a folder on a local drive.")
+						} else {
+							label.SetText("Choose a folder on a local drive.")
+						}
 						return
 					}
 					if current.Prompt == "settings" {
@@ -790,7 +864,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 				})
 			}
-		})
+		}
+		secondary.ConnectClicked(chooseFolder)
+		chooseShare.ConnectClicked(chooseFolder)
 		tertiary.ConnectClicked(func() {
 			if current.Prompt == "recovery" {
 				reply("diagnostics")
@@ -843,8 +919,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						return
 					}
 					cancelling = false
+					previousFocus := submittedFocus
+					if previousFocus == nil {
+						previousFocus = window.Window.Focus()
+					}
+					submittedFocus = nil
+					preserveManual := current.Prompt == "settings" && next.Prompt == "settings"
 					current = next
 					answered = false
+					settingsScroll.SetSensitive(true)
 					choices.SetSensitive(true)
 					dynamicActions.SetSensitive(true)
 					menuButton.SetSensitive(true)
@@ -975,9 +1058,32 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							cpuCount, _ := strconv.Atoi(next.Settings.CPUs)
 							autoMemory.SetActive(memoryMiB == 0)
 							autoCPUs.SetActive(cpuCount == 0)
-							memory.SetValue(float64(max(memoryMiB, 1024)) / 1024)
+							if !preserveManual || memoryMiB != 0 {
+								memory.SetValue(float64(max(memoryMiB, 1024)) / 1024)
+							}
+							memory.SetVisible(memoryMiB != 0)
+							switch next.Settings.ResourceProfile {
+							case "maximum-performance":
+								resourceProfile.SetSelected(1)
+							case "manual":
+								resourceProfile.SetSelected(2)
+							default:
+								if next.Settings.ResourceProfile == "" && (memoryMiB != 0 || cpuCount != 0) {
+									resourceProfile.SetSelected(2)
+								} else {
+									resourceProfile.SetSelected(0)
+								}
+							}
+							automaticSummary = next.Settings.ResourceSummary
+							updateResources()
+							if resourceProfile.Selected() == 0 {
+								resourceSummary.SetText(automaticSummary)
+							}
 							cpus.SetRange(1, float64(max(next.Settings.CPUMax, 1)))
-							cpus.SetValue(float64(max(cpuCount, 1)))
+							if !preserveManual || cpuCount != 0 {
+								cpus.SetValue(float64(max(cpuCount, 1)))
+							}
+							cpus.SetVisible(cpuCount != 0)
 							switch next.Settings.Render {
 							case "gpu":
 								render.SetSelected(1)
@@ -1065,7 +1171,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						page.SetTitle(orDefault(next.ErrorTitle, "Omarchy could not start"))
 						page.SetIconName("dialog-error-symbolic")
 					}
-					secondary.SetVisible(!oneButtonPrompt(next.Prompt) && next.Prompt != "error")
+					secondary.SetVisible(next.Prompt != "settings" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
 					// The home's buttons, or an error page's, in the order asked for.
 					dynamicList := next.Actions
 					if next.Prompt == "error" {
@@ -1111,7 +1217,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						dynamicActions.Append(secondaryActions)
 					}
 					window.SetDefaultWidget(nil)
-					if focus != nil {
+					if preserveManual && previousFocus != nil {
+						window.SetDefaultWidget(primary)
+						gtk.BaseWidget(previousFocus).GrabFocus()
+					} else if focus != nil {
 						window.SetDefaultWidget(focus)
 						focus.GrabFocus()
 					} else if next.Prompt == "recovery" {

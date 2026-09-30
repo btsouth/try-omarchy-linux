@@ -26,6 +26,7 @@ import (
 type linuxRow struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail,omitempty"`
+	State  string `json:"state,omitempty"`
 }
 
 type linuxSection struct {

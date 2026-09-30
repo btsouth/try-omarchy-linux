@@ -36,3 +36,10 @@ window.try-omarchy .boxed-list { border: 1px solid #414868; }
 window.try-omarchy button.suggested-action { font-weight: 700; }
 window.try-omarchy button:focus-visible { outline-color: #7dcfff; }
 window.try-omarchy .action-footer { background: #1a1b26; }
+window.try-omarchy .settings-card {
+  padding: 14px;
+  background: #24283b;
+  border: 1px solid #414868;
+}
+/* Spacing remains usable when high contrast removes the color overrides. */
+window .settings-card { padding: 14px; }

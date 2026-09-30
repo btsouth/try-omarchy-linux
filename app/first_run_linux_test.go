@@ -257,3 +257,22 @@ func TestLinuxProvisionCancelledDoesNotSave(t *testing.T) {
 		t.Fatal("cancelled choice was persisted")
 	}
 }
+
+func TestLinuxResourceProfileFollowsFirstStorageChoice(t *testing.T) {
+	root := t.TempDir()
+	original, selected := filepath.Join(root, "default"), filepath.Join(root, "custom")
+	if err := saveSettings(settingsPath(original), settings{MemoryMiB: 2048, CPUs: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveResourcePreferences(original, resourceBalanced); err != nil {
+		t.Fatal(err)
+	}
+	got, proceed, err := resolveLinuxDataDirectory(original, original, false, func(string) (string, bool, error) { return selected, true, nil })
+	if err != nil || !proceed || got != selected {
+		t.Fatalf("storage: %q %v %v", got, proceed, err)
+	}
+	profile, err := loadResourcePreferences(selected)
+	if err != nil || profile.Profile != resourceBalanced {
+		t.Fatalf("profile lost: %+v %v", profile, err)
+	}
+}

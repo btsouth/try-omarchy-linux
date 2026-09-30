@@ -462,20 +462,24 @@ func TestTheHomeLoopSendsTheButtonsItDecided(t *testing.T) {
 // loop to check countdown eligibility, explicit Close and preference preservation.
 func TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		installed   bool
-		free        int64
-		kvm         error
-		countdown   bool
-		badSettings bool
-		badStartup  bool
+		name          string
+		installed     bool
+		free          int64
+		kvm           error
+		countdown     bool
+		badPreference string
 	}{
-		{"ready VM", true, 200 << 30, nil, true, false, false},
-		{"first setup", false, 200 << 30, nil, false, false, false},
-		{"KVM unavailable", true, 200 << 30, errors.New("KVM is unavailable"), false, false, false},
-		{"low space", true, 0, nil, false, false, false},
-		{"unreadable settings", true, 200 << 30, nil, false, true, false},
-		{"unreadable startup settings", true, 200 << 30, nil, false, false, true},
+		{"ready VM", true, 200 << 30, nil, true, ""},
+		{"first setup", false, 200 << 30, nil, false, ""},
+		{"KVM unavailable", true, 200 << 30, errors.New("KVM is unavailable"), false, ""},
+		{"low space", true, 0, nil, false, ""},
+		{"unreadable settings", true, 200 << 30, nil, false, settingsFileName},
+		{"unreadable startup settings", true, 200 << 30, nil, false, launchPreferencesFilename},
+		{"unreadable resource settings", true, 200 << 30, nil, false, resourcePreferencesFilename},
+		{"unreadable device settings", true, 200 << 30, nil, false, desktopPreferencesFilename},
+		{"unreadable audio settings", true, 200 << 30, nil, false, audioPreferencesFilename},
+		{"unreadable storage settings", true, 200 << 30, nil, false, storageSettingsFilename},
+		{"unreadable display and keyboard settings", true, 200 << 30, nil, false, linuxExperiencePreferencesFilename},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubHomeChecks(t, tc.kvm, tc.free)
@@ -492,19 +496,18 @@ func TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if tc.badSettings {
-				if err := os.WriteFile(settingsPath(root), []byte("{"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.badStartup {
-				if err := os.WriteFile(filepath.Join(root, launchPreferencesFilename), []byte("{"), 0o600); err != nil {
+			if tc.badPreference != "" {
+				if err := os.WriteFile(filepath.Join(root, tc.badPreference), []byte("{"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
 			record := filepath.Join(t.TempDir(), "states.jsonl")
 			t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
-			if runLinuxHome(linuxScriptedWindow(t, "close"), root, "", false) {
+			answers := []string{"close"}
+			if tc.badPreference != "" {
+				answers = []string{"settings", "close"}
+			}
+			if runLinuxHome(linuxScriptedWindow(t, answers...), root, "", false) {
 				t.Fatal("Close launched the VM")
 			}
 			data, err := os.ReadFile(record)
@@ -521,18 +524,32 @@ func TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible(t *testing.T) {
 			if tc.kvm != nil && !strings.Contains(sent.Status, "KVM is unavailable") {
 				t.Fatalf("automatic start hid the failure: %+v", sent)
 			}
-			if (tc.badSettings || tc.badStartup) && (!sent.CheckAgain || sent.Headline != "Saved settings need attention.") {
+			if tc.badPreference != "" && (!sent.CheckAgain || sent.Headline != "Saved settings need attention.") {
 				t.Fatalf("unreadable preferences offered a ready VM: %+v", sent)
 			}
-			if tc.badStartup {
-				data, err := os.ReadFile(filepath.Join(root, launchPreferencesFilename))
-				if err != nil || string(data) != "{" {
-					t.Fatalf("unreadable startup settings were changed: %q, %v", data, err)
+			if tc.badPreference != "" {
+				records := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+				var details linuxSetupState
+				if len(records) != 2 || json.Unmarshal(records[1], &details) != nil || !strings.Contains(details.Status, "Could not read") || !details.CheckAgain {
+					t.Fatalf("opening Settings hid the preference error: %s", data)
 				}
-			} else {
+			}
+			if tc.badPreference != "" {
+				data, err := os.ReadFile(filepath.Join(root, tc.badPreference))
+				if err != nil || string(data) != "{" {
+					t.Fatalf("unreadable preferences were changed: %q, %v", data, err)
+				}
+			}
+			if tc.badPreference != launchPreferencesFilename {
 				prefs, err := loadLaunchPreferences(root)
 				if err != nil || !prefs.StartAutomatically {
 					t.Fatalf("automatic-start choice was lost: %+v, %v", prefs, err)
+				}
+			}
+			if tc.installed {
+				data, err := os.ReadFile(filepath.Join(root, "vm", "disk.raw"))
+				if err != nil || string(data) != "known guest file" {
+					t.Fatalf("guest file was changed: %q, %v", data, err)
 				}
 			}
 		})

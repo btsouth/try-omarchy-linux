@@ -471,8 +471,11 @@ func linuxHomeIntegrationRows(dir string) []linuxRow {
 	}
 	resources, resourceErr := loadResourcePreferences(dir)
 	desktop, deviceErr := loadDesktopPreferences(dir)
-	if resourceErr != nil || deviceErr != nil {
-		return []linuxRow{{Title: "Settings", Detail: "Saved device or resource choices could not be read. Open Settings to see the problem.", State: "unavailable"}}
+	_, audioErr := loadAudioPreferences(dir)
+	_, storageErr := loadStorageSettings(dir)
+	_, experienceErr := loadLinuxExperiencePreferences(dir)
+	if resourceErr != nil || deviceErr != nil || audioErr != nil || storageErr != nil || experienceErr != nil {
+		return []linuxRow{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}
 	}
 	profile := effectiveResourceProfile(resources.Profile, prefs.CPUs, prefs.MemoryMiB)
 	profileName := map[string]string{resourceBalanced: "Balanced", resourceMaximum: "Maximum performance", resourceManual: "Manual"}[profile]
@@ -595,7 +598,9 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 				if !state.CheckAgain {
 					state.Notice, state.HelpURL, state.CheckAgain = "Startup settings could not be read.", linuxHelpURL("settings"), true
 					state.Headline = "Saved settings need attention."
-					state.Status = "Open Settings for details. Fix file permissions or recover your saved startup settings from a backup, then choose Check again."
+					if status == "" {
+						state.Status = "Open Settings for details. Fix file permissions or recover your saved startup settings from a backup, then choose Check again."
+					}
 				}
 			} else if launch.StartAutomatically && status == "" && state.Installed && !state.CheckAgain && !state.CanForget && state.Notice == "" {
 				state.Status = "Omarchy starts automatically in 10 seconds. Choose Settings or Close to stop."

@@ -49,6 +49,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "delete-default"}, "Keep this VM"},
 		{state{Status: "Downloading Omarchy", Current: 42, Total: 100}, "Cancel"},
 		{state{Status: "Starting Omarchy", Booting: true}, "Stop Omarchy"},
+		{state{Prompt: "home", Installed: true, CheckAgain: true, Headline: "Saved settings need attention.", Notice: "Saved settings could not be read.", HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#settings", Actions: []action{{Label: "Check again", Reply: "check", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Integrations", Rows: []row{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}}}}, "Check again"},
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {

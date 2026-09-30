@@ -37,6 +37,8 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 			fatal("Cannot prepare private VM controls: %v", err)
 		}
 		cfg.qmpDir = controlDir
+		// A startup fallback relaunch keeps forwards Settings changed live.
+		cfg.forwards = forwardsForBoot(cfg.launchForwards)
 		guestReady.Store(false)
 		desktopReady.Store(false)
 		args := linuxQemuArgs(cfg, buildQemuArgs(cfg, cmdline))

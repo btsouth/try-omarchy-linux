@@ -29,6 +29,7 @@ type linuxSettingsForm struct {
 	AudioOutputs       []linuxAudioDevice `json:"audioOutputs,omitempty"`
 	AudioInputs        []linuxAudioDevice `json:"audioInputs,omitempty"`
 	AudioLive          bool               `json:"audioLive"`
+	ForwardsLive       bool               `json:"forwardsLive"`
 	Running            bool               `json:"running"`
 	RefreshAudio       bool               `json:"refreshAudio,omitempty"`
 	DiskGiB            string             `json:"diskGiB"`
@@ -68,8 +69,9 @@ func showLinuxSettings(parent context.Context, dir string) {
 	showLinuxSettingsInWindow(ctx, w, dir, true)
 }
 
-// The home and running VM use the same form. PipeWire device routes can
-// change live; microphone permission and the other host settings need a launch.
+// The home and running VM use the same form. PipeWire device routes and local
+// port forwards can change live; microphone permission and the other host
+// settings need a launch.
 func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir string, running bool) string {
 	saved, err := loadSettings(settingsPath(dir))
 	if err != nil {
@@ -108,12 +110,13 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	form.ResourceProfile = effectiveResourceProfile(resources.Profile, saved.CPUs, saved.MemoryMiB)
 	form.ResourceSummary = linuxAutomaticResourcesSummary(measureHostResources(false))
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
+	form.ForwardsLive = running && linuxLiveForwards.Load()
 	form.Running = running
 	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
 		form.Render = "auto"
 	}
-	status := linuxSettingsTiming(running, form.AudioLive)
+	status := linuxSettingsTiming(running, form.AudioLive, form.ForwardsLive)
 	if audioListErr != nil {
 		status += " Audio devices could not be listed. System default remains available."
 	}
@@ -133,12 +136,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err != nil || value == "cancel" {
 			return ""
 		}
-		audioLive := form.AudioLive
+		audioLive, forwardsLive := form.AudioLive, form.ForwardsLive
 		resourceSummary := form.ResourceSummary
 		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
 		cameras := form.Cameras
 		err = json.Unmarshal([]byte(value), form)
-		form.AudioLive = audioLive
+		form.AudioLive, form.ForwardsLive = audioLive, forwardsLive
 		form.Running = running
 		form.ResourceSummary = resourceSummary
 		form.AudioOutputs, form.AudioInputs = audioOutputs, audioInputs
@@ -181,6 +184,14 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			}
 			if err == nil {
 				err = checkForwardBindings(forwards)
+			}
+		}
+		if err == nil && form.ForwardsLive {
+			// The running VM holds its current ports, so only a forward it
+			// does not have yet needs a free port.
+			var plan forwardPlan
+			if plan, err = planLinuxLiveForwards(next.Forwards); err == nil {
+				err = checkForwardBindings(plan.add)
 			}
 		}
 		cpuMax := min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs))
@@ -289,7 +300,8 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				}
 			}
 		}
-		liveApplyFailed := false
+		liveApplyFailed, forwardApplyFailed := false, false
+		var forwardChange linuxForwardChange
 		if err == nil && form.AudioLive {
 			// Always retry a live apply, even if an earlier Save already persisted
 			// these names but QMP failed. A failed disk write never changes routes.
@@ -298,21 +310,28 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				err = fmt.Errorf("Audio choices saved, but could not switch devices: %v. Try Save again, or shut down Omarchy and launch it again", routeErr)
 			}
 		}
+		if err == nil && form.ForwardsLive {
+			var forwardErr error
+			if forwardChange, forwardErr = applyLinuxLiveForwards(ctx, saved.Forwards); forwardErr != nil {
+				forwardApplyFailed = true
+				err = fmt.Errorf("Port forwards saved, but the running VM could not change them: %v. Try Save again, or shut down Omarchy and launch it again", forwardErr)
+			}
+		}
 		if err == nil {
 			if running {
-				message := "Settings saved. " + linuxSettingsTiming(running, form.AudioLive)
-				if form.AudioLive {
-					message = "Audio device choices applied. " + linuxSettingsTiming(running, false)
-				}
+				message := linuxSettingsSavedMessage(form.AudioLive, forwardChange)
 				w.ask(ctx, linuxSetupState{Prompt: "settings-saved", Status: message})
 				return message
 			}
-			return "Settings saved. " + linuxSettingsTiming(false, false)
+			return "Settings saved. " + linuxSettingsTiming(false, false, false)
 		}
 		status = err.Error()
 		notice = "Check your settings before saving."
 		if liveApplyFailed {
 			notice = "Audio choices saved; live switch failed."
+		}
+		if forwardApplyFailed {
+			notice = "Port forwards saved; the running VM did not change."
 		}
 		var partial *linuxSettingsSaveError
 		if errors.As(err, &partial) {
@@ -351,15 +370,40 @@ func (e *linuxSettingsSaveError) Error() string {
 
 func (e *linuxSettingsSaveError) Unwrap() error { return e.Err }
 
-func linuxSettingsTiming(running, audioLive bool) string {
+func linuxSettingsTiming(running, audioLive, forwardsLive bool) string {
 	message := "VM settings apply on the next launch. Startup behavior applies the next time you open Try Omarchy."
 	if running {
 		message = "VM settings apply after shutting down Omarchy and launching it again; a guest reboot does not apply them. Startup behavior applies the next time you open Try Omarchy."
 	}
-	if audioLive {
+	switch {
+	case audioLive && forwardsLive:
+		message = "Audio device choices and local port forwards apply when you save. " + message
+	case audioLive:
 		message = "Audio device choices apply when you save. " + message
+	case forwardsLive:
+		message = "Local port forwards apply when you save. " + message
 	}
 	return message
+}
+
+// linuxSettingsSavedMessage says what a save in the running VM changed now
+// and what waits for the next launch.
+func linuxSettingsSavedMessage(audioLive bool, forwards linuxForwardChange) string {
+	var applied []string
+	if audioLive {
+		applied = append(applied, "Audio device choices applied.")
+	}
+	if forwards.changed {
+		applied = append(applied, "Port forwards applied.")
+	}
+	message := "Settings saved."
+	if len(applied) > 0 {
+		message = strings.Join(applied, " ")
+	}
+	if len(forwards.deferred) > 0 {
+		message += " SSH changes apply after shutting down Omarchy and launching it again."
+	}
+	return message + " " + linuxSettingsTiming(true, false, false)
 }
 
 // The shared sizing policy predates the Linux launcher; adapt only its host

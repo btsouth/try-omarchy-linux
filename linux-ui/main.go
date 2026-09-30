@@ -81,6 +81,7 @@ type settingsForm struct {
 	AudioOutputs       []audioDevice `json:"audioOutputs"`
 	AudioInputs        []audioDevice `json:"audioInputs"`
 	AudioLive          bool          `json:"audioLive"`
+	ForwardsLive       bool          `json:"forwardsLive"`
 	Running            bool          `json:"running"`
 	RefreshAudio       bool          `json:"refreshAudio,omitempty"`
 	DiskGiB            string        `json:"diskGiB"`
@@ -647,8 +648,13 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		forwards := gtk.NewTextView()
 		forwards.SetWrapMode(gtk.WrapWordChar)
 		forwards.SetSizeRequest(-1, 88)
+		forwards.SetLeftMargin(8)
+		forwards.SetRightMargin(8)
+		forwards.SetTopMargin(6)
+		forwards.SetBottomMargin(6)
 		named(forwards, "Other local port forwards, one per line")
 		groupContent.Append(forwards)
+		forwardsHelp := formHelp(forwardsHelpText(false))
 		settingsContent.Append(form)
 		settingsClamp := adw.NewClamp()
 		settingsClamp.SetMaximumSize(640)
@@ -1220,7 +1226,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						primary.SetLabel("Save settings")
 						secondary.SetLabel("Choose a shared folder...")
 						if next.Settings != nil {
-							settingsTiming.SetText(settingsFooterText(next.Settings.Running, next.Settings.AudioLive))
+							settingsTiming.SetText(settingsFooterText(next.Settings.Running, next.Settings.AudioLive, next.Settings.ForwardsLive))
 							memoryMiB, _ := strconv.Atoi(next.Settings.Memory)
 							cpuCount, _ := strconv.Atoi(next.Settings.CPUs)
 							autoMemory.SetActive(memoryMiB == 0)
@@ -1289,6 +1295,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							sshPort.SetValue(float64(max(sshPortValue, 1024)))
 							sshKey.SetText(next.Settings.SSHKey)
 							forwards.Buffer().SetText(next.Settings.Forwards)
+							forwardsHelp.SetText(forwardsHelpText(next.Settings.ForwardsLive))
 							startAutomatically.SetActive(next.Settings.StartAutomatically)
 							outputLabels, outputNames, outputIndex := namedChoices("System default", "Unavailable: ", next.Settings.AudioOutputs, next.Settings.AudioOutput)
 							if next.Settings.AudioLive {

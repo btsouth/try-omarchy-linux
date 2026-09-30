@@ -127,7 +127,7 @@ func TestLinuxLiveAudioSaveRetryHelper(t *testing.T) {
 			fail(os.Rename(path, path+".backup"))
 			fail(os.Mkdir(path, 0700))
 		case 2:
-			if !strings.Contains(state.Status, audioPreferencesFilename) {
+			if !strings.Contains(state.Status, "Could not save audio devices") || !strings.Contains(state.Status, "Audio devices have not been switched") {
 				panic("save failure was hidden")
 			}
 			fail(os.Remove(path))

@@ -61,7 +61,7 @@ func TestLinuxSetupFailuresSayWhatHappenedAndWhatToDo(t *testing.T) {
 
 func TestLinuxUnknownFailureKeepsTheReasonForPeopleWhoReportIt(t *testing.T) {
 	f := classifyLinuxSetupFailure(errors.New("something odd broke"), "/x")
-	if f.Title != "Setting up Omarchy failed" || !strings.HasSuffix(f.Message, "something odd broke") || !f.Retry {
+	if f.Title != "Setting up Omarchy failed" || !strings.HasSuffix(f.Message, "something odd broke") || !f.Retry || strings.Contains(f.Message, "Nothing you had was changed") || !strings.Contains(f.Message, "Backup and recovery") {
 		t.Fatalf("%+v", f)
 	}
 }

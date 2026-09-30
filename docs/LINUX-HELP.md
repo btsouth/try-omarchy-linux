@@ -142,6 +142,28 @@ it never moves your pointer or types for you. In GNOME's dialog, turn on
 works and file drops still work, and Try Omarchy does not ask again. Turn
 sharing back on in **Settings**, **Share the clipboard with Omarchy**.
 
+## Settings
+
+Settings groups resources, storage and shared files, display and keyboard,
+devices and privacy, and startup. Network and SSH expands separately. Save and
+Cancel stay at the bottom while you scroll.
+
+**Balanced** sizes the VM automatically while leaving room for your Linux
+desktop. **Maximum performance** uses more available resources. **Manual** shows
+memory and processor controls; switching profiles retains their values. The
+resource estimate is checked again at launch, so it can change as other apps
+use memory. **Restore resource defaults** returns to Balanced.
+
+VM settings apply on the next launch. If Omarchy is running, shut it down and
+launch it again; rebooting inside the guest does not restart the VM. Audio
+device choices can apply during a running session, as described below. The
+startup choice applies the next time you open Try Omarchy.
+
+If a save fails, Settings names the failed group and any groups already saved.
+Your remaining edits stay in the form. Fix the folder's permissions or free
+space, then Save again. Cancel closes the form without saving further changes;
+it does not undo groups that were already saved.
+
 ## Audio devices
 
 Settings lets you choose separate playback and microphone devices. System
@@ -149,7 +171,7 @@ default follows the device selected by your Linux desktop. Microphone access
 changes require shutting down Omarchy and launching it again.
 
 Preview 5 applies device choices when you save while Omarchy is running.
-Use **Refresh audio devices** after connecting a headset; refreshing keeps your
+Use **Refresh devices** after connecting a headset; refreshing keeps your
 edits without saving them. If a live switch fails, Settings shows the error and
 keeps the saved choices for the next launch. You can retry Save.
 

@@ -44,7 +44,7 @@ func TestLinuxMicrophoneRetryHelper(t *testing.T) {
 			fail(os.Rename(path, path+".backup"))
 			fail(os.Mkdir(path, 0o700))
 		case 2:
-			if !strings.Contains(state.Status, desktopPreferencesFilename) {
+			if !strings.Contains(state.Status, "Could not save camera and microphone access") || !strings.Contains(state.Status, "Already saved: VM configuration") {
 				panic("first Save error was not shown")
 			}
 			fail(os.WriteFile(filepath.Join(dir, "first-save-error"), []byte(state.Status), 0o600))

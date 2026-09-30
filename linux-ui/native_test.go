@@ -43,6 +43,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		glib.TimeoutAdd(250, func() bool {
 			if index == len(cases) {
 				close(updates)

@@ -85,3 +85,9 @@ format; switching profiles retains manual CPU/memory values. Numeric tuning is
 shown for Manual. The Balanced summary is an estimate checked again at launch,
 not a reservation or the running VM's allocation. Device refresh preserves
 unsaved edits and the hidden manual values.
+
+Save feedback distinguishes independently persisted groups and live audio
+acknowledgement. Failed persistence leaves the form open with its edits and
+identifies earlier successful writes. Startup follows the next app open; VM
+configuration follows the next VM launch. A guest reboot does not restart the
+host VM process.

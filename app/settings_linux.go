@@ -110,13 +110,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	if form.Render == "" {
 		form.Render = "auto"
 	}
-	status := "Changes apply when the VM starts."
-	if running {
-		status = "Changes require shutting down Omarchy and launching it again. A guest reboot does not apply host settings."
-		if form.AudioLive {
-			status = "Audio device choices apply when you save. Microphone access, camera settings and other changes need a shutdown and launch."
-		}
-	}
+	status := linuxSettingsTiming(running, form.AudioLive)
 	if audioListErr != nil {
 		status += " Audio devices could not be listed. System default remains available."
 	}
@@ -217,16 +211,29 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err == nil {
 			err = nextExperience.validate()
 		}
-		if err == nil {
-			// Preserve fields absent from this Linux form.
-			saved.MemoryMiB, saved.CPUs, saved.Render, saved.Fullscreen = next.MemoryMiB, next.CPUs, next.Render, next.Fullscreen
-			if form.Share != saved.Share || form.ShareEnabled != (saved.Share != "" && !saved.ShareDisabled) {
-				saved.Share, saved.ShareDisabled, saved.SharedFolderPrompted = next.Share, next.ShareDisabled, true
+		var savedGroups []string
+		savePart := func(group string, write func() error) error {
+			if writeErr := write(); writeErr != nil {
+				return &linuxSettingsSaveError{Group: group, Saved: append([]string(nil), savedGroups...), Err: writeErr}
 			}
-			saved.Forwards, saved.SSHKey = next.Forwards, next.SSHKey
-			err = saveSettings(settingsPath(dir), saved)
+			savedGroups = append(savedGroups, group)
+			return nil
+		}
+		if err == nil {
+			// Preserve fields absent from this Linux form. Update our last-saved
+			// copy only after the atomic write succeeds.
+			nextSaved := saved
+			nextSaved.MemoryMiB, nextSaved.CPUs, nextSaved.Render, nextSaved.Fullscreen = next.MemoryMiB, next.CPUs, next.Render, next.Fullscreen
+			if form.Share != saved.Share || form.ShareEnabled != (saved.Share != "" && !saved.ShareDisabled) {
+				nextSaved.Share, nextSaved.ShareDisabled, nextSaved.SharedFolderPrompted = next.Share, next.ShareDisabled, true
+			}
+			nextSaved.Forwards, nextSaved.SSHKey = next.Forwards, next.SSHKey
+			err = savePart("VM configuration", func() error { return saveSettings(settingsPath(dir), nextSaved) })
+			if err == nil {
+				saved = nextSaved
+			}
 			if err == nil && form.ResourceProfile != resources.Profile {
-				err = saveResourcePreferences(dir, form.ResourceProfile)
+				err = savePart("resource profile", func() error { return saveResourcePreferences(dir, form.ResourceProfile) })
 				if err == nil {
 					resources.Profile = form.ResourceProfile
 				}
@@ -236,31 +243,31 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				nextDesktop.MicrophoneDisabled = !form.Microphone
 				nextDesktop.CameraDisabled = !form.Camera
 				nextDesktop.CameraID = form.CameraID
-				err = saveDesktopPreferences(dir, nextDesktop)
+				err = savePart("camera and microphone access", func() error { return saveDesktopPreferences(dir, nextDesktop) })
 				if err == nil {
 					desktop = nextDesktop
 				}
 			}
 			if err == nil && (nextAudio.Output != audio.Output || nextAudio.Input != audio.Input) {
-				err = saveAudioPreferences(dir, nextAudio)
+				err = savePart("audio devices", func() error { return saveAudioPreferences(dir, nextAudio) })
 				if err == nil {
 					audio = nextAudio
 				}
 			}
 			if err == nil && nextDiskGiB != storage.DiskGiB {
-				err = saveStorageSettings(dir, nextDiskGiB)
+				err = savePart("disk capacity", func() error { return saveStorageSettings(dir, nextDiskGiB) })
 				if err == nil {
 					storage.DiskGiB = nextDiskGiB
 				}
 			}
 			if err == nil && (nextExperience.Scale != experience.Scale || nextExperience.Keyboard != experience.Keyboard) {
-				err = saveLinuxExperiencePreferences(dir, nextExperience)
+				err = savePart("display and keyboard", func() error { return saveLinuxExperiencePreferences(dir, nextExperience) })
 				if err == nil {
 					experience = nextExperience
 				}
 			}
 			if err == nil && form.ClipboardAvailable && form.ClipboardShare != clipboardShared {
-				err = setLinuxClipboardSharing(form.ClipboardShare)
+				err = savePart("clipboard sharing", func() error { return setLinuxClipboardSharing(form.ClipboardShare) })
 				if err == nil {
 					clipboardShared = form.ClipboardShare
 				}
@@ -268,7 +275,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			if err == nil && form.StartAutomatically != launch.StartAutomatically {
 				nextLaunch := launch
 				nextLaunch.StartAutomatically = form.StartAutomatically
-				err = saveLaunchPreferences(dir, nextLaunch)
+				err = savePart("startup", func() error { return saveLaunchPreferences(dir, nextLaunch) })
 				if err == nil {
 					launch = nextLaunch
 				}
@@ -283,17 +290,57 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		}
 		if err == nil {
 			if running {
-				message := "Settings saved. Shut down Omarchy and launch it again to apply them. A guest reboot does not restart the VM."
+				message := "Settings saved. " + linuxSettingsTiming(running, form.AudioLive)
 				if form.AudioLive {
-					message = "Audio device choices applied. Microphone access, camera settings and other settings apply after shutting down Omarchy and launching it again."
+					message = "Audio device choices applied. " + linuxSettingsTiming(running, false)
 				}
 				w.ask(ctx, linuxSetupState{Prompt: "settings-saved", Status: message})
 				return message
 			}
-			return "Settings saved. They will apply when you launch Omarchy."
+			return "Settings saved. " + linuxSettingsTiming(false, false)
 		}
 		status = err.Error()
+		var partial *linuxSettingsSaveError
+		if errors.As(err, &partial) {
+			logf("settings save (%s): %v", partial.Group, partial.Err)
+			if form.AudioLive {
+				status += " Audio devices have not been switched in the running VM."
+			}
+		} else {
+			logf("settings save: %v", err)
+		}
 	}
+}
+
+// Settings live in independent, atomically replaced files. Earlier writes
+// remain saved if a later group fails; the form stays open with every edit.
+type linuxSettingsSaveError struct {
+	Group string
+	Saved []string
+	Err   error
+}
+
+func (e *linuxSettingsSaveError) Error() string {
+	message := "Could not save " + e.Group + "."
+	if len(e.Saved) > 0 {
+		message += " Already saved: " + strings.Join(e.Saved, ", ") + "."
+	} else {
+		message += " No settings were saved."
+	}
+	return message + " Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again."
+}
+
+func (e *linuxSettingsSaveError) Unwrap() error { return e.Err }
+
+func linuxSettingsTiming(running, audioLive bool) string {
+	message := "VM settings apply on the next launch. Startup behavior applies the next time you open Try Omarchy."
+	if running {
+		message = "VM settings apply after shutting down Omarchy and launching it again; a guest reboot does not apply them. Startup behavior applies the next time you open Try Omarchy."
+	}
+	if audioLive {
+		message = "Audio device choices apply when you save. " + message
+	}
+	return message
 }
 
 // The shared sizing policy predates the Linux launcher; adapt only its host

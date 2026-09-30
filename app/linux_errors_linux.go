@@ -65,7 +65,7 @@ func classifyLinuxSetupFailure(err error, dir string) linuxFailure {
 			Message: "Check your internet connection, then try again. What has been downloaded is kept, so it continues where it stopped."}
 	}
 	return linuxFailure{Title: "Setting up Omarchy failed", Retry: true,
-		Message: "Something went wrong. Nothing you had was changed. Try again. If it keeps happening, see the help page.\n\n" + err.Error()}
+		Message: "Something went wrong while setting up Omarchy in " + where + ". Try again. If it keeps happening, open Backup and recovery or see the help page.\n\n" + err.Error()}
 }
 
 // The launcher's own last words on the terminal and in the log, for people who

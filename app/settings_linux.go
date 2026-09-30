@@ -487,7 +487,7 @@ func linuxHomeIntegrationRows(dir string) []linuxRow {
 	rows := []linuxRow{{Title: "Resources", Detail: profileName + " · checked at the next launch", State: "pending"}}
 	share := linuxRow{Title: "Shared folder", Detail: "Not shared", State: "disabled"}
 	if prefs.Share != "" && !prefs.ShareDisabled {
-		share.Detail, share.State = "Shared at the next launch: "+prefs.Share, "enabled"
+		share.Detail, share.State = "Shared at the next launch: "+linuxDisplayPath(prefs.Share), "enabled"
 	}
 	rows = append(rows, share)
 	for _, device := range []struct {

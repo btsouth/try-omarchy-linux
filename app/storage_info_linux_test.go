@@ -43,6 +43,8 @@ func TestLinuxDocumentPathSplitsGrantAndRemainder(t *testing.T) {
 		{"/run/user/1000/doc/4f1a2b9c/MovedVM", "4f1a2b9c", "", true},
 		{"/run/user/1000/doc/4f1a2b9c/MovedVM/try-omarchy/vm/disk.raw", "4f1a2b9c", "try-omarchy/vm/disk.raw", true},
 		{"/run/user/1000/omabox/box/private-runtime/doc/aa11/Fixtures/x", "aa11", "x", true},
+		{"/run/flatpak/doc/stable/Omarchy/try-omarchy", "stable", "try-omarchy", true},
+		{"/run/flatpak/doc/by-app/com.tryomarchy.TryOmarchy", "", "", false},
 		{"/run/user/1000/doc/by-app/com.tryomarchy.TryOmarchy", "", "", false},
 		{"/run/user/1000/doc/4f1a2b9c", "", "", false},
 		{"/run/user/1001/doc/4f1a2b9c/MovedVM", "", "", false},
@@ -71,6 +73,9 @@ func TestLinuxHostPathAsksThePortalAndKeepsTheRemainder(t *testing.T) {
 	if got := linuxHostPath(filepath.Join(docRoot, "abc123", "Omarchy", "try-omarchy")); got != "/home/ana/Drives/Omarchy/try-omarchy" {
 		t.Fatalf("resolved portal path: %q", got)
 	}
+	if got := linuxHostPath("/run/flatpak/doc/stable/Omarchy/try-omarchy"); got != "/home/ana/Drives/Omarchy/try-omarchy" {
+		t.Fatalf("resolved stable portal path: %q", got)
+	}
 	plain := "/home/ana/.var/app/com.tryomarchy.TryOmarchy/data/try-omarchy"
 	if got := linuxHostPath(plain); got != plain {
 		t.Fatalf("ordinary path changed: %q", got)
@@ -79,7 +84,7 @@ func TestLinuxHostPathAsksThePortalAndKeepsTheRemainder(t *testing.T) {
 	if got := linuxHostPath(unresolved); got != unresolved {
 		t.Fatalf("an unknown grant must keep the path it was given: %q", got)
 	}
-	if len(asked) != 2 || asked[0] != "abc123" {
+	if len(asked) != 3 || asked[0] != "abc123" || asked[1] != "stable" {
 		t.Fatalf("portal queries: %v", asked)
 	}
 }

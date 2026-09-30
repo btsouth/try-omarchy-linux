@@ -429,7 +429,7 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 			var settingScroll *gtk.ScrolledWindow
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
-				if entry, ok := widget.Object.Cast().(*gtk.Entry); ok && !entry.Editable() {
+				if entry, ok := widget.Object.Cast().(*gtk.Entry); ok && entry.Mapped() && !entry.Editable() {
 					shareDisplay = entry
 				}
 				if box, ok := widget.Object.Cast().(*gtk.Box); ok && box.HasCSSClass("product-header") {

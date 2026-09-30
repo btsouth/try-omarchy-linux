@@ -1,0 +1,38 @@
+/* Shared Try Omarchy identity, from the Mac launcher's Tokyo Night palette.
+   Relative sizes preserve desktop font scaling. All controls remain native. */
+window.try-omarchy {
+  --window-bg-color: #1a1b26;
+  --window-fg-color: #c0caf5;
+  --view-bg-color: #24283b;
+  --view-fg-color: #c0caf5;
+  --headerbar-bg-color: #1a1b26;
+  --headerbar-fg-color: #c0caf5;
+  --card-bg-color: #24283b;
+  --card-fg-color: #c0caf5;
+  --popover-bg-color: #24283b;
+  --popover-fg-color: #c0caf5;
+  --dialog-bg-color: #24283b;
+  --dialog-fg-color: #c0caf5;
+  --accent-bg-color: #7aa2f7;
+  --accent-fg-color: #1a1b26;
+  --accent-color: #7dcfff;
+  --destructive-bg-color: #f7768e;
+  --destructive-fg-color: #1a1b26;
+  --destructive-color: #f7768e;
+  --success-color: #9ece6a;
+  --border-color: #414868;
+  background: var(--window-bg-color);
+  color: var(--window-fg-color);
+}
+window.try-omarchy .product-title {
+  font-family: monospace;
+  font-size: 1.8em;
+  font-weight: 700;
+}
+window.try-omarchy .product-version { color: #7aa2f7; }
+window.try-omarchy .dim-label { opacity: 1; color: #a9b5de; }
+window.try-omarchy .heading { color: #7dcfff; }
+window.try-omarchy .boxed-list { border: 1px solid #414868; }
+window.try-omarchy button.suggested-action { font-weight: 700; }
+window.try-omarchy button:focus-visible { outline-color: #7dcfff; }
+window.try-omarchy .action-footer { background: #1a1b26; }

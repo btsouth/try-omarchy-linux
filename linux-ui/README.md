@@ -61,3 +61,19 @@ interrupt remains the explicit force-stop action.
 
 Run GUI checks in an isolated session or VM. Do not connect a test to the host
 audio or session bus.
+
+The branded windows share the Mac launcher's Tokyo Night palette and official
+mark. GTK controls, folder pickers and keyboard navigation remain native. High
+contrast removes the branded color overrides, including when changed live.
+The launcher shows its Linux version and secondary actions wrap beneath its
+primary action. Recovery actions scroll above the fixed Back button.
+
+Native layout checks inspect the real window and are opt-in:
+
+```sh
+TRYOMARCHY_UI_TEST=1 go test -tags 'gtk_4_18,adw_1_7' -run Native -v .
+```
+
+Run these inside an isolated desktop on a test machine. Check smaller windows,
+larger desktop fonts and high contrast as well as the default size. Ordinary
+headless tests explicitly skip native layout checks.

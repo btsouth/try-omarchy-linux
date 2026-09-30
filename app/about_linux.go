@@ -28,6 +28,11 @@ func linuxAboutState() linuxSetupState {
 				{Title: "Copy, paste and drop", Detail: "Text, images and files move both ways through the clipboard, and dropping files on the window sends them to Omarchy. On GNOME, clipboard sharing asks your permission once."},
 				{Title: "A shared folder", Detail: "Settings can share one folder with Omarchy, where it appears as /mnt/host. Omarchy can change what is in it. Nothing else on your computer is visible to Omarchy."},
 			}},
+			{Heading: "Settings and devices", Rows: []linuxRow{
+				{Title: "Resources", Detail: "Balanced leaves room for your Linux desktop. Maximum performance uses more available resources. Manual lets you tune memory and processors. Changes apply on the next VM launch."},
+				{Title: "When changes apply", Detail: "Audio devices can switch when you save during a running session. Camera and microphone access, shared folders, disk, display, keyboard and network settings need a shutdown and launch. A guest reboot does not apply them. Startup behavior applies the next time you open Try Omarchy."},
+				{Title: "If Save fails", Detail: "Settings identifies any groups already saved and keeps your remaining edits. Fix the folder's permissions or free space, then Save again. If a live audio switch fails, the saved choices remain available for the next launch."},
+			}},
 			{Heading: "Removing the app and your VM", Rows: []linuxRow{
 				{Title: "Uninstalling the app", Detail: "Your VM stays if you keep the app's data: choose Keep under App Settings & Data in Software, or use flatpak uninstall without --delete-data. Choosing Delete also removes a VM stored in the app's own storage. A VM in a folder you chose is never touched."},
 				{Title: "Deleting a VM", Detail: "Delete this VM, in the menu on the home screen, removes only the VM in the app's own storage. To delete a folder you chose, remove it in your file manager. Backups are ordinary .zip files; delete them yourself when you no longer need them."},

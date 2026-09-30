@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +101,22 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 		case "settings-profile":
 			form := *state.Settings
 			form.ResourceProfile = os.Getenv("TRY_OMARCHY_PROFILE")
+			data, _ := json.Marshal(form)
+			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: string(data)})
+		case "settings-partial-retry":
+			form := *state.Settings
+			blocked := filepath.Join(os.Getenv("TRY_OMARCHY_SETTINGS_DIR"), resourcePreferencesFilename)
+			if strings.Contains(state.Status, "Could not save") {
+				if state.Notice != "Could not save resource profile." || !strings.Contains(state.Status, "Could not save resource profile") || !strings.Contains(state.Status, "Already saved: VM configuration") || form.Memory != "4096" || form.ResourceProfile != "manual" || form.Microphone {
+					os.Exit(3)
+				}
+				if err := os.Remove(blocked); err != nil {
+					os.Exit(4)
+				}
+			} else if err := os.Mkdir(blocked, 0o700); err != nil {
+				os.Exit(5)
+			}
+			form.Memory, form.ResourceProfile, form.Microphone = "4096", "manual", false
 			data, _ := json.Marshal(form)
 			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: string(data)})
 		case "settings-share-save":

@@ -85,3 +85,19 @@ format; switching profiles retains manual CPU/memory values. Numeric tuning is
 shown for Manual. The Balanced summary is an estimate checked again at launch,
 not a reservation or the running VM's allocation. Device refresh preserves
 unsaved edits and the hidden manual values.
+
+Save feedback distinguishes independently persisted groups and live audio
+acknowledgement. Failed persistence leaves the form open with its edits and
+identifies earlier successful writes. Startup follows the next app open; VM
+configuration follows the next VM launch. A guest reboot does not restart the
+host VM process.
+
+Use the desktop's text-scaling setting for 150%/200% checks and confirm the
+resulting rendered text, not only the requested window size. Native bounds
+checks include horizontal overflow as well as the fixed action footer.
+
+`TestNativeMultilineEnter` also accepts `TRYOMARCHY_UI_KEYBOARD_READY` naming a
+private temporary marker file. It focuses the real network text field and
+writes the marker; send Return through the isolated compositor. The test checks
+that a newline is inserted without submitting Settings. Without external key
+automation, this check is explicitly skipped.

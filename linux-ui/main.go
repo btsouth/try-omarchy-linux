@@ -179,6 +179,19 @@ func main() {
 	os.Exit(runUI(os.Stdin, os.Stdout, nil))
 }
 
+// Native controls may contain single-line labels whose minimum width grows
+// with the desktop's text scale or a long device name. Let their text wrap
+// instead of widening the scroll viewport past a small window.
+func wrapWindowLabels(widget *gtk.Widget) {
+	if label, ok := widget.Object.Cast().(*gtk.Label); ok {
+		label.SetWrap(true)
+		label.SetWrapMode(pango.WrapWordChar)
+	}
+	for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+		wrapWindowLabels(gtk.BaseWidget(child))
+	}
+}
+
 // onWindow lets native layout tests inspect the same widgets the launcher uses.
 func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWindow)) int {
 	runtime.LockOSThread()
@@ -305,6 +318,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		homeClamp.SetMaximumSize(480)
 		homeClamp.SetChild(homeContent)
 		homeScroll := gtk.NewScrolledWindow()
+		homeScroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
 		homeScroll.SetVExpand(true)
 		homeScroll.SetChild(homeClamp)
 		homeScroll.SetVisible(false)
@@ -526,6 +540,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		groupContent.Append(clearSSHKey)
 		formLabel("Other local port forwards (one per line, for example tcp:8080:80)")
 		forwards := gtk.NewTextView()
+		forwards.SetWrapMode(gtk.WrapWordChar)
 		forwards.SetSizeRequest(-1, 88)
 		named(forwards, "Other local port forwards, one per line")
 		groupContent.Append(forwards)
@@ -534,6 +549,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		settingsClamp.SetMaximumSize(480)
 		settingsClamp.SetChild(settingsContent)
 		settingsScroll := gtk.NewScrolledWindow()
+		settingsScroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
 		settingsScroll.SetVExpand(true)
 		settingsScroll.SetChild(settingsClamp)
 		settingsScroll.SetVisible(false)
@@ -576,6 +592,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		clamp.SetChild(content)
 		page.SetChild(clamp)
 		scroll := gtk.NewScrolledWindow()
+		scroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
 		scroll.SetVExpand(true)
 		scroll.SetChild(page)
 		layout.Append(scroll)
@@ -1252,12 +1269,14 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						page.SetIconName("dialog-error-symbolic")
 						button.SetLabel("Close")
 					}
+					wrapWindowLabels(&window.Window.Widget)
 					page.QueueResize()
 				})
 			}
 			// EOF also closes the window when the launcher exits or crashes.
 			glib.IdleAdd(app.Quit)
 		}()
+		wrapWindowLabels(&window.Window.Widget)
 		window.Present()
 		emit("ready")
 		if onWindow != nil {

@@ -36,13 +36,15 @@ func TestNativeFooterAndReply(t *testing.T) {
 	}{
 		{state{Prompt: "home", Actions: []action{{Label: "Launch Omarchy", Reply: "launch", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Storage", Rows: []row{{Title: "Location", Detail: strings.Repeat("Long folder/", 30)}}}}, Installed: true}, "Launch Omarchy"},
 		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3"}}, "Save settings"},
-		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "0", CPUs: "0"}}, "Save settings"},
+		{state{Prompt: "settings", Notice: "Could not save resource profile.", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "0", CPUs: "0"}}, "Save settings"},
 		{state{Prompt: "account"}, "Set up my own account"},
 		{state{Prompt: "error", CanRetry: true}, "Try again"},
 		{state{Prompt: "recovery", CanMove: true, CanReset: true, CanCleanMove: true, CanCleanReset: true, CanCleanLeftovers: true}, "Back"},
+		{state{Prompt: "about", Sections: []section{{Heading: "Settings and devices", Rows: []row{{Title: "When changes apply", Detail: strings.Repeat("Long help text ", 40)}}}}}, "Back"},
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		glib.TimeoutAdd(250, func() bool {
 			if index == len(cases) {
 				close(updates)
@@ -59,6 +61,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
 			var refresh *gtk.Button
+			noticeVisible := false
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
 				if !widget.Visible() && widget.CSSName() != "spinbutton" {
@@ -66,6 +69,16 @@ func TestNativeFooterAndReply(t *testing.T) {
 				}
 				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
+				}
+				if notice, ok := widget.Object.Cast().(*gtk.Label); ok && cases[index].state.Notice != "" && notice.Text() == cases[index].state.Notice {
+					bounds, ok := notice.ComputeBounds(&window.Window)
+					noticeVisible = ok && bounds.X() >= 0 && bounds.Y() >= 0 && bounds.X()+bounds.Width() <= float32(window.Width())+1 && bounds.Y()+bounds.Height() <= float32(window.Height())+1
+				}
+				if scroller, ok := widget.Object.Cast().(*gtk.ScrolledWindow); ok {
+					adjustment := scroller.HAdjustment()
+					if adjustment.Upper()-adjustment.PageSize() > 1 {
+						t.Errorf("%s: content requires horizontal scrolling (%.0f > %.0f)", cases[index].state.Prompt, adjustment.Upper(), adjustment.PageSize())
+					}
 				}
 				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok && spin.Digits() == 2 {
 					memory = spin
@@ -86,6 +99,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 				}
 			}
 			walk(&window.Window.Widget)
+			if cases[index].state.Notice != "" && !noticeVisible {
+				t.Error("Settings failure notice is not visible inside the window")
+			}
 			if found == nil {
 				t.Errorf("%s: no %q button", cases[index].state.Prompt, cases[index].button)
 			} else if bounds, ok := found.ComputeBounds(&window.Window); !ok || bounds.Y() < 0 || bounds.Y()+bounds.Height() > float32(window.Height())+1 || bounds.X() < 0 || bounds.X()+bounds.Width() > float32(window.Width())+1 {
@@ -132,4 +148,66 @@ func TestNativeFooterAndReply(t *testing.T) {
 	if got := strings.Count(output.String(), `"event":"reply"`); got != 2 {
 		t.Fatalf("home activation and device refresh emitted %d replies: %s", got, output.String())
 	}
+}
+
+// A compositor sends Return after the ready marker appears. This checks the
+// native multiline control against the real window default action.
+func TestNativeMultilineEnter(t *testing.T) {
+	marker := os.Getenv("TRYOMARCHY_UI_KEYBOARD_READY")
+	if os.Getenv("TRYOMARCHY_UI_TEST") != "1" || marker == "" {
+		t.Skip("requires external keys in an isolated desktop")
+	}
+	r, w := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer w.Close()
+		json.NewEncoder(w).Encode(state{Request: 1, Prompt: "settings", Settings: &settingsForm{ResourceProfile: "balanced", CPUMax: 4}})
+		<-done
+	}()
+	var output bytes.Buffer
+	ready, ticks := false, 0
+	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		glib.TimeoutAdd(100, func() bool {
+			ticks++
+			var text *gtk.TextView
+			var walk func(*gtk.Widget)
+			walk = func(widget *gtk.Widget) {
+				if expander, ok := widget.Object.Cast().(*gtk.Expander); ok && expander.Label() == "Advanced network settings" {
+					expander.SetExpanded(true)
+				}
+				if view, ok := widget.Object.Cast().(*gtk.TextView); ok {
+					text = view
+				}
+				for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+					walk(gtk.BaseWidget(child))
+				}
+			}
+			walk(&window.Window.Widget)
+			if text != nil && text.Mapped() && !ready {
+				if !text.GrabFocus() {
+					return true
+				}
+				if err := os.WriteFile(marker, []byte("ready\n"), 0600); err != nil {
+					t.Error(err)
+				}
+				ready = true
+			}
+			entered := false
+			if text != nil {
+				start, end := text.Buffer().Bounds()
+				entered = text.Buffer().Text(start, end, true) == "\n"
+			}
+			if entered || ticks == 200 {
+				if !entered {
+					t.Error("Return did not insert a newline in the focused multiline field")
+				}
+				if strings.Contains(output.String(), `"event":"reply"`) {
+					t.Error("Return in a multiline field submitted Settings")
+				}
+				close(done)
+				return false
+			}
+			return true
+		})
+	})
 }

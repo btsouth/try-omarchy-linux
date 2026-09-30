@@ -498,3 +498,62 @@ func TestLinuxMaximumResourceFailureNamesLinux(t *testing.T) {
 		t.Fatalf("wrong host guidance: %s", text)
 	}
 }
+
+func TestLinuxPartialSettingsSaveKeepsEditsAndRetriesFailedGroup(t *testing.T) {
+	dir := t.TempDir()
+	if err := saveSettings(settingsPath(dir), settings{MemoryMiB: 2048}); err != nil {
+		t.Fatal(err)
+	}
+	known := filepath.Join(dir, "personal-file.txt")
+	if err := os.WriteFile(known, []byte("keep this file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(t.TempDir(), "states.jsonl")
+	t.Setenv("TRY_OMARCHY_SETTINGS_DIR", dir)
+	t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
+	w := setupWindowFixture(t, "settings-partial-retry")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	feedback := showLinuxSettingsInWindow(ctx, w, dir, false)
+	if !strings.HasPrefix(feedback, "Settings saved.") {
+		t.Fatalf("retry failed: %q", feedback)
+	}
+	states, err := os.ReadFile(record)
+	if err != nil || !bytes.Contains(states, []byte("Already saved: VM configuration")) {
+		t.Fatalf("partial result missing: %s %v", states, err)
+	}
+	prefs, err := loadSettings(settingsPath(dir))
+	if err != nil || prefs.MemoryMiB != 4096 {
+		t.Fatalf("configuration not retained: %+v %v", prefs, err)
+	}
+	resources, err := loadResourcePreferences(dir)
+	if err != nil || resources.Profile != resourceManual {
+		t.Fatalf("profile not retried: %+v %v", resources, err)
+	}
+	desktop, err := loadDesktopPreferences(dir)
+	if err != nil || !desktop.MicrophoneDisabled {
+		t.Fatalf("later group not saved: %+v %v", desktop, err)
+	}
+	if contents, err := os.ReadFile(known); err != nil || string(contents) != "keep this file" {
+		t.Fatalf("unrelated file changed: %q %v", contents, err)
+	}
+}
+
+func TestLinuxSettingsFailureReportsOnlyCompletedWrites(t *testing.T) {
+	for _, groups := range [][]string{nil, {"VM configuration", "audio devices"}} {
+		err := &linuxSettingsSaveError{Group: "startup", Saved: groups, Err: os.ErrPermission}
+		if !errors.Is(err, os.ErrPermission) || !strings.Contains(err.Error(), "Could not save startup") {
+			t.Fatalf("failure lost its cause or group: %v", err)
+		}
+		if strings.Contains(err.Error(), "Already saved:") != (len(groups) != 0) {
+			t.Fatalf("inaccurate partial result: %v", err)
+		}
+	}
+	if text := linuxSettingsTiming(true, true); !strings.Contains(text, "Audio device choices apply when you save") || !strings.Contains(text, "next time you open Try Omarchy") || !strings.Contains(text, "a guest reboot does not apply") {
+		t.Fatalf("inaccurate timing: %q", text)
+	}
+	clipboard := (&linuxSettingsSaveError{Group: "clipboard sharing", Err: os.ErrPermission}).Error()
+	if !strings.Contains(clipboard, "app's configuration folder") || strings.Contains(clipboard, "VM folder") || !strings.Contains(clipboard, "by this attempt") {
+		t.Fatalf("clipboard recovery names the wrong location or attempt: %q", clipboard)
+	}
+}

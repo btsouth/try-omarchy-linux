@@ -1,8 +1,7 @@
 # Linux hardware testing
 
-Use the [0.1.0 preview 4 bundle](https://github.com/btsouth/try-omarchy-linux/releases/tag/linux-app-v0.1.0-preview.4),
-and include its SHA256 with the report. Physical results are still
-pending; desktop VM tests do not establish hardware support.
+Use the [latest release](https://github.com/btsouth/try-omarchy-linux/releases/latest)
+and include its version with the report.
 
 Use a disposable VM inside Try Omarchy. Keep an independent backup before
 trying recovery operations on personal files.
@@ -19,8 +18,8 @@ private files or unreviewed diagnostic bundles.
    confirm its contents inside Omarchy.
 3. Play audio, disable the microphone and restart the VM, then enable it and
    restart again. Confirm the disabled guest cannot record. Try unplugging and
-   reconnecting the selected audio device. Audio route changes require a full
-   VM stop/start, not a guest reboot.
+   reconnecting the selected audio device. Microphone access changes require a
+   full VM stop/start, not a guest reboot.
 4. Try fullscreen, resize, fractional scale and moving the window between
    monitors. Check for black surfaces, clipped controls and stuck input.
 5. On a laptop, check battery reporting and suspend/resume while the guest is
@@ -34,14 +33,12 @@ private files or unreviewed diagnostic bundles.
    unavailable-location message, then reconnect and reattach it.
 
 Report each step as passed, failed or not tested, with the exact trigger for a
-failure and a screenshot where useful. Never report camera, gesture, USB,
-bridged networking, host-app launching or host authentication as supported:
-those are outside the first Linux release.
+failure and a screenshot where useful. Gestures, USB, bridged networking,
+host-app launching and host authentication are not in the Linux app yet.
 
-## Live audio in development builds
+## Live audio
 
-This is not in published preview 4. Record the candidate bundle hash when
-checking it. With a USB headset and the built-in speakers and microphone:
+With a USB headset and the built-in speakers and microphone:
 
 1. Start playback and recording inside Omarchy. Open Settings while it runs,
    switch each direction independently, and save. Confirm sound and recording
@@ -56,10 +53,9 @@ checking it. With a USB headset and the built-in speakers and microphone:
 Virtual PipeWire nodes can check routing and disconnection behavior, but do not
 establish physical playback or recording acceptance.
 
-## Cameras in development builds
+## Cameras
 
-Camera capture is not in published preview 4. Use a disposable guest and record
-the candidate bundle hash. Your desktop must expose the camera through PipeWire
+Use a disposable guest. Your desktop must expose the camera through PipeWire
 and provide the camera permission portal.
 
 1. In Settings, enable camera access and choose Automatic or a specific camera.
@@ -76,7 +72,7 @@ and provide the camera permission portal.
    selected camera and reopen the guest camera app.
 
 The current guest image labels its virtual camera **Windows Camera** at
-`/dev/video42`; development Linux capture uses that existing camera bridge.
+`/dev/video42`; Linux capture uses that existing camera bridge.
 Virtual video sources check the capture pipeline but do not establish physical
 webcam acceptance.
 

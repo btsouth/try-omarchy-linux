@@ -164,8 +164,8 @@ use memory. **Restore resource defaults** returns to Balanced.
 
 VM settings apply on the next launch. If Omarchy is running, shut it down and
 launch it again; rebooting inside the guest does not restart the VM. Audio
-device choices can apply during a running session, as described below. The
-startup choice applies the next time you open Try Omarchy.
+device choices and local port forwards can apply during a running session, as
+described below. The startup choice applies the next time you open Try Omarchy.
 
 **Start Omarchy when I open Try Omarchy** waits 10 seconds before launching
 an existing VM. Choose Settings or Close to stop it. First setup and startup
@@ -183,10 +183,23 @@ Settings lets you choose separate playback and microphone devices. System
 default follows the device selected by your Linux desktop. Microphone access
 changes require shutting down Omarchy and launching it again.
 
-Preview 5 applies device choices when you save while Omarchy is running.
+Device choices apply when you save while Omarchy is running.
 Use **Refresh devices** after connecting a headset; refreshing keeps your
 edits without saving them. If a live switch fails, Settings shows the error and
 keeps the saved choices for the next launch. You can retry Save.
+
+## SSH and port forwards
+
+**Allow SSH from this computer** on the Advanced page forwards a port on
+127.0.0.1 to Omarchy's SSH server. Other computers cannot connect. SSH changes
+apply after shutting down Omarchy and launching it again, because Omarchy starts
+its SSH server at boot.
+
+**Other local port forwards** takes one forward per line, such as `tcp:8080:80`
+to reach port 80 inside Omarchy at `127.0.0.1:8080`. While Omarchy runs, Save
+adds and removes these forwards right away. If a port is already in use on this
+computer, Settings says so and saves nothing. If the running VM cannot change a
+forward, the new list is still saved for the next launch and you can retry Save.
 
 ## Camera
 

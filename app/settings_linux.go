@@ -296,6 +296,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	}
 }
 
+// The shared sizing policy predates the Linux launcher; adapt only its host
+// wording here, without changing Windows diagnostics or allocation behavior.
+func linuxResourceErrorText(err error) string {
+	return strings.NewReplacer("Windows headroom", "Linux headroom", "Windows apps", "Linux apps", "memory for Windows", "memory for Linux").Replace(err.Error())
+}
+
 // This is an estimate, not a reservation or the running VM's allocation.
 // Automatic graphics selection can change memory sizing at launch.
 func linuxAutomaticResourcesSummary(host hostResources) string {
@@ -306,7 +312,7 @@ func linuxAutomaticResourcesSummary(host hostResources) string {
 	if high != low {
 		memory = fmt.Sprintf("%.1f–%.1f GiB", float64(min(low, high))/1024, float64(max(low, high))/1024)
 	}
-	return fmt.Sprintf("Automatic estimate now: %d processors, %s memory depending on rendering. Checked again at launch. Manual choices below override each resource.", cpu, memory)
+	return fmt.Sprintf("Automatic estimate now: %d processors, %s memory depending on rendering. Checked again at launch. Choose Manual to override memory or processors.", cpu, memory)
 }
 
 // A desktop launch has no flags. Explicit CLI options keep their historical

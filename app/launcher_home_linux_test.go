@@ -487,3 +487,14 @@ func TestLinuxProfilesRetainManualValues(t *testing.T) {
 		}
 	}
 }
+
+func TestLinuxMaximumResourceFailureNamesLinux(t *testing.T) {
+	_, err := planGuestResources(resourceMaximum, hostResources{LogicalCPUs: 4, TotalMiB: 8192, AvailableMiB: 1024}, false, 0, 0, false, false)
+	if err == nil {
+		t.Fatal("expected insufficient memory")
+	}
+	text := linuxResourceErrorText(err)
+	if strings.Contains(text, "Windows") || !strings.Contains(text, "close some Linux apps or choose Balanced") {
+		t.Fatalf("wrong host guidance: %s", text)
+	}
+}

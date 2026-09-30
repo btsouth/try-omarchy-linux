@@ -211,6 +211,13 @@ func wrapWindowLabels(widget *gtk.Widget) {
 		} else {
 			label.SetWrap(true)
 			label.SetWrapMode(pango.WrapWordChar)
+			// Actions may wrap between words, but must keep each word readable.
+			for parent := widget.Parent(); parent != nil; parent = gtk.BaseWidget(parent).Parent() {
+				if _, ok := gtk.BaseWidget(parent).Object.Cast().(*gtk.Button); ok {
+					label.SetWrapMode(pango.WrapWord)
+					break
+				}
+			}
 		}
 	}
 	for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
@@ -387,6 +394,14 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		settingsContent.SetMarginBottom(20)
 		settingsContent.SetMarginStart(24)
 		settingsContent.SetMarginEnd(24)
+		settingsProblem := gtk.NewLabel("")
+		settingsProblem.SetWrap(true)
+		settingsProblem.SetXAlign(0)
+		settingsProblem.SetSelectable(true)
+		settingsProblem.AddCSSClass("settings-problem")
+		settingsProblem.AddCSSClass("settings-card")
+		settingsProblem.SetVisible(false)
+		settingsContent.Append(settingsProblem)
 		settingsStatus := gtk.NewLabel("")
 		settingsStatus.SetWrap(true)
 		settingsStatus.SetXAlign(0)
@@ -1106,7 +1121,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					productVersion.SetText("LINUX" + platformVersion(next.Version))
 					settingsTabs.SetVisible(next.Prompt == "settings")
 					settingsTiming.SetVisible(next.Prompt == "settings")
-					settingsStatus.SetVisible(next.Status != "")
+					showSettingsFailure := next.Prompt == "settings" && next.Notice != "" && next.Status != ""
+					settingsProblem.SetText(next.Status)
+					settingsProblem.SetVisible(showSettingsFailure)
+					settingsStatus.SetVisible(next.Status != "" && !showSettingsFailure)
 					accountOptions.SetVisible(next.Prompt == "account")
 					if pageChanged {
 						form.SetVisibleChildName("General")
@@ -1402,7 +1420,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					pageTitle.SetVisible(pageTitle.Text() != "")
 					label.SetVisible(next.Status != "")
-					if pageChanged {
+					if pageChanged || showSettingsFailure {
 						for _, pane := range []*gtk.ScrolledWindow{scroll, homeScroll, settingsScroll} {
 							pane.VAdjustment().SetValue(0)
 							pane.HAdjustment().SetValue(0)

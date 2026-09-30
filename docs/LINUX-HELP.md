@@ -166,6 +166,7 @@ an existing VM. Choose Settings or Close to stop it. First setup and startup
 warnings keep the launcher open so you can review the explanation and actions.
 
 If a save fails, Settings names the failed group and any groups already saved.
+The full explanation appears above the current page's controls, ready to read.
 Your remaining edits stay in the form. Fix the folder's permissions or free
 space, then Save again. Cancel closes the form without saving further changes;
 it does not undo groups that were already saved.

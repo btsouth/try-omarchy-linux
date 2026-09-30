@@ -101,13 +101,17 @@ unsaved edits and the hidden manual values.
 
 Save feedback distinguishes independently persisted groups and live audio
 acknowledgement. Failed persistence leaves the form open with its edits and
-identifies earlier successful writes. Startup follows the next app open; VM
+identifies earlier successful writes. Detailed failure guidance appears above
+the current page's controls, with the viewport returned to that explanation.
+Startup follows the next app open; VM
 configuration follows the next VM launch. A guest reboot does not restart the
 host VM process.
 
 Use the desktop's text-scaling setting for 150%/200% checks and confirm the
 resulting rendered text, not only the requested window size. Native bounds
-checks include horizontal overflow as well as the fixed action footer.
+checks include horizontal overflow, readable action labels and the fixed action
+footer. `TestNativeSettingsFailureAcrossPages` checks detailed validation and
+partial-save feedback after saving from General and Advanced.
 
 `TestNativeMultilineEnter` also accepts `TRYOMARCHY_UI_KEYBOARD_READY` naming a
 private temporary marker file. It focuses the real network text field and

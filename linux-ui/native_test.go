@@ -89,6 +89,16 @@ func TestNativeFooterAndReply(t *testing.T) {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
 				}
 				if l, ok := widget.Object.Cast().(*gtk.Label); ok {
+					if l.Mapped() && l.Text() != "" {
+						for parent := widget.Parent(); parent != nil; parent = gtk.BaseWidget(parent).Parent() {
+							if b, ok := gtk.BaseWidget(parent).Object.Cast().(*gtk.Button); ok {
+								if l.Layout().LineCount() > len(strings.Fields(l.Text())) {
+									t.Errorf("%s: action %q breaks words into character lines", cases[index].state.Prompt, b.Label())
+								}
+								break
+							}
+						}
+					}
 					if strings.HasPrefix(l.Text(), "LINUX") && l.Mapped() {
 						brandVisible = true
 					}
@@ -193,6 +203,123 @@ func TestNativeFooterAndReply(t *testing.T) {
 	})
 	if got := strings.Count(output.String(), `"event":"reply"`); got != 2 {
 		t.Fatalf("home activation and device refresh emitted %d replies: %s", got, output.String())
+	}
+}
+
+// A failed save must reveal its full reason and recovery guidance on the page
+// that submitted it, while retaining edits and the fixed Save action.
+func TestNativeSettingsFailureAcrossPages(t *testing.T) {
+	if os.Getenv("TRYOMARCHY_UI_TEST") != "1" {
+		t.Skip("requires an isolated native GTK desktop")
+	}
+	r, w := io.Pipe()
+	updates := make(chan state, 1)
+	go func() {
+		defer w.Close()
+		for s := range updates {
+			if json.NewEncoder(w).Encode(s) != nil {
+				return
+			}
+		}
+	}()
+	form := &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "8192", CPUs: "5", SSHPort: "2222", Forwards: "tcp:8080:80"}
+	partial := "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again."
+	validation := "SSH host port must be between 1024 and 65535."
+	updates <- state{Request: 901, Prompt: "settings", Settings: form}
+	var output bytes.Buffer
+	phase, ticks := 0, 0
+	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		glib.TimeoutAdd(250, func() bool {
+			ticks++
+			if ticks > 60 {
+				t.Error("Settings failure inspection timed out")
+				close(updates)
+				return false
+			}
+			var stack *gtk.Stack
+			var scroller *gtk.ScrolledWindow
+			var save *gtk.Button
+			var problem *gtk.Label
+			var walk func(*gtk.Widget)
+			walk = func(widget *gtk.Widget) {
+				switch control := widget.Object.Cast().(type) {
+				case *gtk.Stack:
+					if control.HasCSSClass("settings-pages") {
+						stack = control
+					}
+				case *gtk.ScrolledWindow:
+					if control.Mapped() {
+						scroller = control
+					}
+				case *gtk.Button:
+					if control.Label() == "Save settings" && control.Mapped() {
+						save = control
+					}
+				case *gtk.Label:
+					if control.HasCSSClass("settings-problem") {
+						problem = control
+					}
+				}
+				for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+					walk(gtk.BaseWidget(child))
+				}
+			}
+			walk(&window.Window.Widget)
+			if stack == nil || scroller == nil || save == nil || problem == nil {
+				return true
+			}
+			checkFailure := func(page, message string) {
+				if stack.VisibleChildName() != page || !problem.Mapped() || !problem.Selectable() || problem.Text() != message {
+					t.Errorf("%s: detailed save failure is unavailable on the submitting page", page)
+				}
+				bounds, ok := problem.ComputeBounds(scroller)
+				if !ok || bounds.Y() < 0 || bounds.Y() >= float32(scroller.Height()) || bounds.X() < 0 || bounds.X()+bounds.Width() > float32(scroller.Width())+1 || scroller.VAdjustment().Value() != 0 {
+					t.Errorf("%s: save failure was left below the visible scroll viewport", page)
+				}
+				if !save.Sensitive() {
+					t.Error("failed save cannot be retried")
+				}
+			}
+			switch phase {
+			case 0, 3:
+				scroller.VAdjustment().SetValue(scroller.VAdjustment().Upper())
+			case 1:
+				save.Emit("clicked")
+				updates <- state{Request: 902, Prompt: "settings", Notice: "Could not save startup.", Status: partial, Settings: form}
+			case 2:
+				checkFailure("General", partial)
+				stack.SetVisibleChildName("Advanced")
+			case 4:
+				save.Emit("clicked")
+				updates <- state{Request: 903, Prompt: "settings", Notice: "Check your settings before saving.", Status: validation, Settings: form}
+			case 5:
+				checkFailure("Advanced", validation)
+				close(updates)
+				return false
+			}
+			phase++
+			return true
+		})
+	})
+	var replies int
+	for _, line := range bytes.Split(output.Bytes(), []byte("\n")) {
+		var event struct {
+			Event string `json:"event"`
+			Value string `json:"value"`
+		}
+		if json.Unmarshal(line, &event) == nil && event.Event == "reply" {
+			replies++
+			var saved settingsForm
+			if err := json.Unmarshal([]byte(event.Value), &saved); err != nil {
+				t.Fatal(err)
+			}
+			if saved.Memory != "8192" || saved.CPUs != "5" || saved.SSHPort != "2222" || saved.Forwards != "tcp:8080:80" {
+				t.Errorf("failed save lost edits: %+v", saved)
+			}
+		}
+	}
+	if replies != 2 {
+		t.Errorf("expected two save attempts, got %d", replies)
 	}
 }
 

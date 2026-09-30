@@ -419,15 +419,20 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 		state.Status = "Your files are saved in this VM. Launch to open your desktop."
 		state.Sections = []linuxSection{{Heading: "Storage", Rows: linuxStorageRows(dir, defaultDir, false)}}
 	} else if os.IsNotExist(err) {
-		state.Headline = "Omarchy is not set up yet."
-		state.Status = "Set up Omarchy asks how you want to sign in, then downloads Omarchy and starts it. You can move or delete it later."
-		state.Detail = "About " + linuxGB(linuxGuestDownloadBytes) + " to download and " + linuxGB(linuxGuestSpaceBytes) + " of free space needed.\nCustomize lets you choose another folder first."
+		state.Headline = "Welcome to Try Omarchy"
+		state.Status = "A separate Omarchy desktop on your Linux computer. Choose your account, then download and start Omarchy."
+		state.Detail = "About " + linuxGB(linuxGuestDownloadBytes) + " to download and " + linuxGB(linuxGuestSpaceBytes) + " of free space needed.\nUse the default location, or choose another folder."
 		state.Sections = []linuxSection{{Heading: "What setup does", Rows: linuxSetupRows(dir, defaultDir, free)}}
 	} else {
 		state.Headline = "Omarchy's storage cannot be read."
 		state.Status = "Cannot read virtual machine storage: " + err.Error()
 	}
-	state.Sections = append(state.Sections, linuxSection{Heading: "Integrations", Rows: linuxHomeIntegrationRows(dir)})
+	integrations := linuxHomeIntegrationRows(dir)
+	state.Sections = append(state.Sections, linuxSection{Heading: "Integrations", Rows: integrations})
+	settingsUnavailable := false
+	for _, row := range integrations {
+		settingsUnavailable = settingsUnavailable || row.State == "unavailable"
+	}
 	if err := linuxKVMCheck(); err != nil {
 		state.Notice, state.HelpURL, state.CheckAgain = "KVM is not available.", linuxHelpURL("kvm"), true
 		var kvm *kvmError
@@ -435,6 +440,10 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 			state.Notice = kvm.Short
 		}
 		state.Headline, state.Status = "Omarchy cannot start yet.", capitalizeFirst(err.Error())+"."
+	} else if settingsUnavailable {
+		state.Notice, state.HelpURL, state.CheckAgain = "Saved settings could not be read.", linuxHelpURL("settings"), true
+		state.Headline = "Saved settings need attention."
+		state.Status = "Open Settings for details. You may need to fix file permissions or recover your saved settings from a backup. Then choose Check again."
 	} else if free >= 0 && state.Installed && free < linuxLowSpaceBytes {
 		state.Notice, state.HelpURL = "Only "+linuxGB(free)+" is free on this drive.", linuxHelpURL("space")
 		state.Status = "Omarchy can stop working if the drive fills up. Free some space, then launch."
@@ -523,7 +532,7 @@ func linuxHomeActions(state linuxSetupState) (actions, menu []linuxAction) {
 	case !state.Installed && state.Setup == "customize":
 		actions = append(actions, linuxAction{Label: "Choose another folder...", Reply: "customize", Suggested: true})
 	case !state.Installed:
-		actions = append(actions, linuxAction{Label: "Set up Omarchy", Reply: "setup", Suggested: true}, linuxAction{Label: "Customize...", Reply: "customize"})
+		actions = append(actions, linuxAction{Label: "Set up Omarchy", Reply: "setup", Suggested: true}, linuxAction{Label: "Choose location...", Reply: "customize"})
 	default:
 		actions = append(actions, linuxAction{Label: "Launch Omarchy", Reply: "launch", Suggested: true})
 	}
@@ -581,8 +590,12 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 		if dir != "" {
 			launch, err := loadLaunchPreferences(dir)
 			if err != nil {
-				state.Status = "Could not read startup preferences: " + err.Error()
-			} else if launch.StartAutomatically && status == "" {
+				if !state.CheckAgain {
+					state.Notice, state.HelpURL, state.CheckAgain = "Startup settings could not be read.", linuxHelpURL("settings"), true
+					state.Headline = "Saved settings need attention."
+					state.Status = "Open Settings for details. Fix file permissions or recover your saved startup settings from a backup, then choose Check again."
+				}
+			} else if launch.StartAutomatically && status == "" && state.Installed && !state.CheckAgain && !state.CanForget && state.Notice == "" {
 				state.Status = "Omarchy starts automatically in 10 seconds. Choose Settings or Close to stop."
 				ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
 			}

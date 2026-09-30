@@ -54,7 +54,7 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	stubHomeChecks(t, nil, 200<<30)
 	root := filepath.Join(t.TempDir(), "try-omarchy")
 	state, _ := linuxHomeState(root)
-	if state.Headline != "Omarchy is not set up yet." || state.Notice != "" || state.CheckAgain || state.Installed {
+	if state.Headline != "Welcome to Try Omarchy" || state.Notice != "" || state.CheckAgain || state.Installed {
 		t.Fatalf("first-run home: %+v", state)
 	}
 	if len(state.Sections) != 2 || state.Sections[0].Heading != "What setup does" {
@@ -103,7 +103,7 @@ func TestLinuxHomeActionsFollowTheStateOfThings(t *testing.T) {
 		suggested string
 	}{
 		{"first setup", linuxSetupState{CanAttach: true},
-			[]string{"Set up Omarchy=setup", "Customize...=customize", "Settings=settings", "Close=close"},
+			[]string{"Set up Omarchy=setup", "Choose location...=customize", "Settings=settings", "Close=close"},
 			[]string{"About and help=about", "Use existing data folder=attach"}, "setup"},
 		{"first setup without room", linuxSetupState{Setup: "customize"},
 			[]string{"Choose another folder...=customize", "Settings=settings", "Close=close"},
@@ -451,6 +451,85 @@ func TestTheHomeLoopSendsTheButtonsItDecided(t *testing.T) {
 	actions, menu := linuxHomeActions(bare)
 	if !reflect.DeepEqual(sent.Actions, actions) || !reflect.DeepEqual(sent.Menu, menu) {
 		t.Fatalf("sent %+v / %+v, decided %+v / %+v", sent.Actions, sent.Menu, actions, menu)
+	}
+}
+
+func TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		installed   bool
+		free        int64
+		kvm         error
+		countdown   bool
+		badSettings bool
+		badStartup  bool
+	}{
+		{"ready VM", true, 200 << 30, nil, true, false, false},
+		{"first setup", false, 200 << 30, nil, false, false, false},
+		{"KVM unavailable", true, 200 << 30, errors.New("KVM is unavailable"), false, false, false},
+		{"low space", true, 0, nil, false, false, false},
+		{"unreadable settings", true, 200 << 30, nil, false, true, false},
+		{"unreadable startup settings", true, 200 << 30, nil, false, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubHomeChecks(t, tc.kvm, tc.free)
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			root := filepath.Join(t.TempDir(), "try-omarchy")
+			if err := saveLaunchPreferences(root, launchPreferences{StartAutomatically: true}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.installed {
+				if err := os.MkdirAll(filepath.Join(root, "vm"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "vm", "disk.raw"), []byte("known guest file"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.badSettings {
+				if err := os.WriteFile(settingsPath(root), []byte("{"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.badStartup {
+				if err := os.WriteFile(filepath.Join(root, launchPreferencesFilename), []byte("{"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			record := filepath.Join(t.TempDir(), "states.jsonl")
+			t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
+			if runLinuxHome(linuxScriptedWindow(t, "close"), root, "", false) {
+				t.Fatal("Close launched the VM")
+			}
+			data, err := os.ReadFile(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var sent linuxSetupState
+			if err := json.Unmarshal(bytes.SplitN(data, []byte("\n"), 2)[0], &sent); err != nil {
+				t.Fatal(err)
+			}
+			if countdown := strings.Contains(sent.Status, "automatically in 10 seconds"); countdown != tc.countdown {
+				t.Fatalf("countdown %t, want %t: %+v", countdown, tc.countdown, sent)
+			}
+			if tc.kvm != nil && !strings.Contains(sent.Status, "KVM is unavailable") {
+				t.Fatalf("automatic start hid the failure: %+v", sent)
+			}
+			if (tc.badSettings || tc.badStartup) && (!sent.CheckAgain || sent.Headline != "Saved settings need attention.") {
+				t.Fatalf("unreadable preferences offered a ready VM: %+v", sent)
+			}
+			if tc.badStartup {
+				data, err := os.ReadFile(filepath.Join(root, launchPreferencesFilename))
+				if err != nil || string(data) != "{" {
+					t.Fatalf("unreadable startup settings were changed: %q, %v", data, err)
+				}
+			} else {
+				prefs, err := loadLaunchPreferences(root)
+				if err != nil || !prefs.StartAutomatically {
+					t.Fatalf("automatic-start choice was lost: %+v, %v", prefs, err)
+				}
+			}
+		})
 	}
 }
 

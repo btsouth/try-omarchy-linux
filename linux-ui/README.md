@@ -68,6 +68,13 @@ contrast removes the branded color overrides, including when changed live.
 The launcher shows its Linux version and secondary actions wrap beneath its
 primary action. Recovery actions scroll above the fixed Back button.
 
+Launcher, account setup, progress, Settings, About and recovery use the same
+mark, horizontal product heading and monospaced type hierarchy. Saved resource
+and integration cards stay visible on the home screen; the longer first-use
+explanation expands under What setup does. Automatic start only counts down
+for an existing VM with no startup notice, so first setup and host problems
+keep their explanation and actions visible.
+
 Native layout checks inspect the real window and are opt-in:
 
 ```sh

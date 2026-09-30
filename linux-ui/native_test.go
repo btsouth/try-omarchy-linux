@@ -41,10 +41,24 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "error", CanRetry: true}, "Try again"},
 		{state{Prompt: "recovery", CanMove: true, CanReset: true, CanCleanMove: true, CanCleanReset: true, CanCleanLeftovers: true}, "Back"},
 		{state{Prompt: "about", Sections: []section{{Heading: "Settings and devices", Rows: []row{{Title: "When changes apply", Detail: strings.Repeat("Long help text ", 40)}}}}}, "Back"},
+		{state{Prompt: "home", Version: "v0.1.0-preview.5", Headline: "Welcome to Try Omarchy", Sections: []section{{Heading: "What setup does", Rows: []row{{Title: "Account", Detail: "Choose your own account or quick start."}}}, {Heading: "Integrations", Rows: []row{{Title: "Resources", Detail: "Balanced · checked at the next launch", State: "pending"}}}}, Actions: []action{{Label: "Set up Omarchy", Reply: "setup", Suggested: true}, {Label: "Choose location...", Reply: "customize"}, {Label: "Settings", Reply: "settings"}, {Label: "Close", Reply: "close"}}}, "Set up Omarchy"},
+		{state{Prompt: "location", Sections: []section{{Rows: []row{{Title: "Default location", Detail: strings.Repeat("Long folder/", 30)}}}}}, "Use default location"},
+		{state{Prompt: "share"}, "Not now"},
+		{state{Prompt: "choice", Title: "Reset Omarchy?", Primary: "Keep this VM", Secondary: "Reset", Destructive: true}, "Keep this VM"},
+		{state{Prompt: "close"}, "Keep running"},
+		{state{Prompt: "delete-default"}, "Keep this VM"},
+		{state{Status: "Downloading Omarchy", Current: 42, Total: 100}, "Cancel"},
+		{state{Status: "Starting Omarchy", Booting: true}, "Stop Omarchy"},
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
+		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
+		for _, name := range []string{"object-select-symbolic", "action-unavailable-symbolic", "content-loading-symbolic", "dialog-error-symbolic"} {
+			if !icons.HasIcon(name) {
+				t.Errorf("integration or failure icon is unavailable: %s", name)
+			}
+		}
 		glib.TimeoutAdd(250, func() bool {
 			if index == len(cases) {
 				close(updates)
@@ -61,6 +75,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
 			var refresh *gtk.Button
+			brandVisible, integrationsVisible := false, false
 			noticeVisible := false
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
@@ -70,6 +85,20 @@ func TestNativeFooterAndReply(t *testing.T) {
 				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
 				}
+				if l, ok := widget.Object.Cast().(*gtk.Label); ok {
+					if l.Text() == "OMARCHY · LINUX" {
+						brandVisible = true
+					}
+					if l.Text() == "Resources" && cases[index].state.Prompt == "home" {
+						integrationsVisible = true
+						for parent := widget.Parent(); parent != nil; parent = gtk.BaseWidget(parent).Parent() {
+							if gtk.BaseWidget(parent).CSSName() == "expander" {
+								integrationsVisible = false
+								break
+							}
+						}
+					}
+				}
 				if notice, ok := widget.Object.Cast().(*gtk.Label); ok && cases[index].state.Notice != "" && notice.Text() == cases[index].state.Notice {
 					bounds, ok := notice.ComputeBounds(&window.Window)
 					noticeVisible = ok && bounds.X() >= 0 && bounds.Y() >= 0 && bounds.X()+bounds.Width() <= float32(window.Width())+1 && bounds.Y()+bounds.Height() <= float32(window.Height())+1
@@ -78,6 +107,13 @@ func TestNativeFooterAndReply(t *testing.T) {
 					adjustment := scroller.HAdjustment()
 					if adjustment.Upper()-adjustment.PageSize() > 1 {
 						t.Errorf("%s: content requires horizontal scrolling (%.0f > %.0f)", cases[index].state.Prompt, adjustment.Upper(), adjustment.PageSize())
+					}
+					if index != 2 && scroller.VAdjustment().Value() > 1 {
+						t.Errorf("%s: a new page inherited the preceding page's scroll position", cases[index].state.Prompt)
+					}
+					if index == 6 {
+						// Read About to the end before opening another surface.
+						scroller.VAdjustment().SetValue(scroller.VAdjustment().Upper())
 					}
 				}
 				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok && spin.Digits() == 2 {
@@ -99,6 +135,12 @@ func TestNativeFooterAndReply(t *testing.T) {
 				}
 			}
 			walk(&window.Window.Widget)
+			if !brandVisible {
+				t.Errorf("%s: shared product header is missing", cases[index].state.Prompt)
+			}
+			if cases[index].state.Headline == "Welcome to Try Omarchy" && !integrationsVisible {
+				t.Error("first-use integration choices are hidden inside the setup expander")
+			}
 			if cases[index].state.Notice != "" && !noticeVisible {
 				t.Error("Settings failure notice is not visible inside the window")
 			}

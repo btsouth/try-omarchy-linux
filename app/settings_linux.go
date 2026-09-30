@@ -40,6 +40,7 @@ type linuxSettingsForm struct {
 	Forwards           string             `json:"forwards"`
 	StartAutomatically bool               `json:"startAutomatically"`
 	Share              string             `json:"share"`
+	ShareDisplay       string             `json:"shareDisplay,omitempty"`
 	ShareEnabled       bool               `json:"shareEnabled"`
 	ResourceProfile    string             `json:"resourceProfile"`
 	ResourceSummary    string             `json:"resourceSummary"`
@@ -127,6 +128,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	}
 	notice := ""
 	for {
+		form.ShareDisplay = linuxDisplayPath(form.Share)
 		value, err := w.ask(ctx, linuxSetupState{Prompt: "settings", Status: status, Notice: notice, Settings: form})
 		if err != nil || value == "cancel" {
 			return ""

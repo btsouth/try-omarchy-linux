@@ -50,6 +50,8 @@ func stubHomeChecks(t *testing.T, kvm error, free int64) {
 	diskFreeBytes = func(string) (int64, error) { return free, nil }
 }
 
+// TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded checks the size,
+// location and account guidance presented before setup can change any files.
 func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	stubHomeChecks(t, nil, 200<<30)
 	root := filepath.Join(t.TempDir(), "try-omarchy")
@@ -79,6 +81,8 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	}
 }
 
+// TestLinuxHomeActionsFollowTheStateOfThings checks safe actions and default focus
+// for fresh, installed and unavailable VMs.
 func TestLinuxHomeActionsFollowTheStateOfThings(t *testing.T) {
 	labels := func(actions []linuxAction) []string {
 		var out []string
@@ -454,6 +458,8 @@ func TestTheHomeLoopSendsTheButtonsItDecided(t *testing.T) {
 	}
 }
 
+// TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible drives the real home
+// loop to check countdown eligibility, explicit Close and preference preservation.
 func TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

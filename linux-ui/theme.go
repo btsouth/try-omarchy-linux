@@ -12,7 +12,7 @@ import (
 //go:embed theme.css
 var brandCSS string
 
-// The same mark and type hierarchy follow the user from the launcher through
+// newBrandHeader carries the same mark and type hierarchy from the launcher through
 // setup, Settings and recovery. Each page scrolls its header with its content.
 func newBrandHeader() (*gtk.Box, *gtk.Label) {
 	header := gtk.NewBox(gtk.OrientationHorizontal, 14)

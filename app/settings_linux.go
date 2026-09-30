@@ -410,6 +410,8 @@ func linuxHomeState(defaultDir string) (linuxSetupState, string) {
 	return linuxHomeStateForDir(dir, defaultDir)
 }
 
+// linuxHomeStateForDir reads storage, saved integrations and host readiness for
+// the selected installation without creating files or activating devices.
 func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 	state := linuxSetupState{Prompt: "home", Path: dir, Version: linuxAppVersion}
 	free := linuxFreeBytes(dir)

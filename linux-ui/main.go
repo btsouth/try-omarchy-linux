@@ -190,7 +190,8 @@ func wrapWindowLabels(widget *gtk.Widget) {
 	}
 }
 
-// onWindow lets native layout tests inspect the same widgets the launcher uses.
+// runUI presents complete backend snapshots with native controls and writes
+// request-scoped replies. onWindow lets isolated tests inspect the real window.
 func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWindow)) int {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

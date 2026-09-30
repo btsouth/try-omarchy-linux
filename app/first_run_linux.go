@@ -36,6 +36,7 @@ func linuxLocationState(defaultDir, notice string) linuxSetupState {
 		Sections: []linuxSection{{Rows: rows}}}
 }
 
+// linuxAccountState explains both sign-in choices and how to return host shortcuts.
 func linuxAccountState() linuxSetupState {
 	return linuxSetupState{Prompt: "account", Status: "How do you want to start?",
 		Sections: []linuxSection{{Rows: []linuxRow{

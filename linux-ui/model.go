@@ -67,13 +67,14 @@ func percentText(current, total int64) string {
 	return fmt.Sprintf("%.0f%%", fraction*100)
 }
 
+// versionLabel displays the backend version using the shared product typography.
 func versionLabel(version string) string {
 	version = strings.TrimPrefix(version, "v")
 	return strings.NewReplacer("-preview.", " preview ", "-", " ").Replace(version)
 }
 
-// Integration choices stay visible, like the Mac launcher. The longer first
-// setup explanation is optional; an existing VM's storage remains visible.
+// homeSectionsForState keeps integration choices visible, like the Mac launcher.
+// The longer first setup explanation is optional; existing VM storage stays visible.
 func homeSectionsForState(s state) (visible, setup []section) {
 	if s.Prompt != "home" {
 		return nil, nil

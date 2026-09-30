@@ -123,8 +123,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			status += "\n\nClipboard: " + clipboardStatus
 		}
 	}
+	notice := ""
 	for {
-		value, err := w.ask(ctx, linuxSetupState{Prompt: "settings", Status: status, Settings: form})
+		value, err := w.ask(ctx, linuxSetupState{Prompt: "settings", Status: status, Notice: notice, Settings: form})
 		if err != nil || value == "cancel" {
 			return ""
 		}
@@ -139,9 +140,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		form.Cameras = cameras
 		if err != nil {
 			status = "Could not read the settings."
+			notice = status
 			continue
 		}
 		if form.RefreshAudio {
+			notice = ""
 			form.RefreshAudio = false
 			form.AudioOutputs, form.AudioInputs, err = listLinuxAudioDevices()
 			var cameraErr error
@@ -281,10 +284,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				}
 			}
 		}
+		liveApplyFailed := false
 		if err == nil && form.AudioLive {
 			// Always retry a live apply, even if an earlier Save already persisted
 			// these names but QMP failed. A failed disk write never changes routes.
 			if routeErr := applyLinuxAudioRoutes(ctx, audio); routeErr != nil {
+				liveApplyFailed = true
 				err = fmt.Errorf("Audio choices saved, but could not switch devices: %v. Try Save again, or shut down Omarchy and launch it again", routeErr)
 			}
 		}
@@ -300,8 +305,13 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			return "Settings saved. " + linuxSettingsTiming(false, false)
 		}
 		status = err.Error()
+		notice = "Check your settings before saving."
+		if liveApplyFailed {
+			notice = "Audio choices saved; live switch failed."
+		}
 		var partial *linuxSettingsSaveError
 		if errors.As(err, &partial) {
+			notice = "Could not save " + partial.Group + "."
 			logf("settings save (%s): %v", partial.Group, partial.Err)
 			if form.AudioLive {
 				status += " Audio devices have not been switched in the running VM."

@@ -107,7 +107,7 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 			form := *state.Settings
 			blocked := filepath.Join(os.Getenv("TRY_OMARCHY_SETTINGS_DIR"), resourcePreferencesFilename)
 			if strings.Contains(state.Status, "Could not save") {
-				if !strings.Contains(state.Status, "Could not save resource profile") || !strings.Contains(state.Status, "Already saved: VM configuration") || form.Memory != "4096" || form.ResourceProfile != "manual" || form.Microphone {
+				if state.Notice != "Could not save resource profile." || !strings.Contains(state.Status, "Could not save resource profile") || !strings.Contains(state.Status, "Already saved: VM configuration") || form.Memory != "4096" || form.ResourceProfile != "manual" || form.Microphone {
 					os.Exit(3)
 				}
 				if err := os.Remove(blocked); err != nil {

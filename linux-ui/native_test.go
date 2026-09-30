@@ -36,10 +36,11 @@ func TestNativeFooterAndReply(t *testing.T) {
 	}{
 		{state{Prompt: "home", Actions: []action{{Label: "Launch Omarchy", Reply: "launch", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Storage", Rows: []row{{Title: "Location", Detail: strings.Repeat("Long folder/", 30)}}}}, Installed: true}, "Launch Omarchy"},
 		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3"}}, "Save settings"},
-		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "0", CPUs: "0"}}, "Save settings"},
+		{state{Prompt: "settings", Notice: "Could not save resource profile.", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "0", CPUs: "0"}}, "Save settings"},
 		{state{Prompt: "account"}, "Set up my own account"},
 		{state{Prompt: "error", CanRetry: true}, "Try again"},
 		{state{Prompt: "recovery", CanMove: true, CanReset: true, CanCleanMove: true, CanCleanReset: true, CanCleanLeftovers: true}, "Back"},
+		{state{Prompt: "about", Sections: []section{{Heading: "Settings and devices", Rows: []row{{Title: "When changes apply", Detail: strings.Repeat("Long help text ", 40)}}}}}, "Back"},
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
@@ -60,6 +61,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
 			var refresh *gtk.Button
+			noticeVisible := false
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
 				if !widget.Visible() && widget.CSSName() != "spinbutton" {
@@ -67,6 +69,10 @@ func TestNativeFooterAndReply(t *testing.T) {
 				}
 				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
+				}
+				if notice, ok := widget.Object.Cast().(*gtk.Label); ok && cases[index].state.Notice != "" && notice.Text() == cases[index].state.Notice {
+					bounds, ok := notice.ComputeBounds(&window.Window)
+					noticeVisible = ok && bounds.X() >= 0 && bounds.Y() >= 0 && bounds.X()+bounds.Width() <= float32(window.Width())+1 && bounds.Y()+bounds.Height() <= float32(window.Height())+1
 				}
 				if scroller, ok := widget.Object.Cast().(*gtk.ScrolledWindow); ok {
 					adjustment := scroller.HAdjustment()
@@ -93,6 +99,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 				}
 			}
 			walk(&window.Window.Widget)
+			if cases[index].state.Notice != "" && !noticeVisible {
+				t.Error("Settings failure notice is not visible inside the window")
+			}
 			if found == nil {
 				t.Errorf("%s: no %q button", cases[index].state.Prompt, cases[index].button)
 			} else if bounds, ok := found.ComputeBounds(&window.Window); !ok || bounds.Y() < 0 || bounds.Y()+bounds.Height() > float32(window.Height())+1 || bounds.X() < 0 || bounds.X()+bounds.Width() > float32(window.Width())+1 {

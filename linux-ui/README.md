@@ -65,11 +65,12 @@ audio or session bus.
 The branded windows share the Mac launcher's Tokyo Night palette and official
 mark. GTK controls, folder pickers and keyboard navigation remain native. High
 contrast removes the branded color overrides, including when changed live.
-The launcher shows its Linux version and secondary actions wrap beneath its
-primary action. Recovery actions scroll above the fixed Back button.
+The launcher shows its Linux version beside the platform name. Primary actions
+use the shared green treatment; secondary actions wrap beneath the home action. Recovery actions scroll above the fixed Back button.
 
 Launcher, account setup, progress, Settings, About and recovery use the same
-mark, horizontal product heading and monospaced type hierarchy. Saved resource
+mark and fixed horizontal product heading. Product and card headings use
+monospaced type, with native body text for readability. Saved resource
 and integration cards stay visible on the home screen; the longer first-use
 explanation expands under What setup does. Automatic start only counts down
 for an existing VM with no startup notice, so first setup and host problems
@@ -85,8 +86,13 @@ Run these inside an isolated desktop on a test machine. Check smaller windows,
 larger desktop fonts and high contrast as well as the default size. Ordinary
 headless tests explicitly skip native layout checks.
 
-Settings groups resources, storage/shared files, display/keyboard, devices and
-startup into cards. Advanced network settings expand separately. Balanced,
+Settings has native General, Devices and Advanced pages above its scrolling
+viewport. General groups display/startup, resources and storage/sharing; Devices
+groups access and audio; Advanced groups guest display/keyboard, rendering and
+local networking. Native wrapping rows stack compact fields and actions
+when there is less room. GTK derives the minimum height from visible controls
+and banners so larger text keeps actions within the window. Changing pages resets the viewport to its heading
+without resetting edits; device refresh retains the page and focused control. Balanced,
 Maximum performance and Manual use the launcher's existing resource preference
 format; switching profiles retains manual CPU/memory values. Numeric tuning is
 shown for Manual. The Balanced summary is an estimate checked again at launch,
@@ -95,16 +101,30 @@ unsaved edits and the hidden manual values.
 
 Save feedback distinguishes independently persisted groups and live audio
 acknowledgement. Failed persistence leaves the form open with its edits and
-identifies earlier successful writes. Startup follows the next app open; VM
+identifies earlier successful writes. Detailed failure guidance appears above
+the current page's controls, with the viewport returned to that explanation.
+Startup follows the next app open; VM
 configuration follows the next VM launch. A guest reboot does not restart the
 host VM process.
 
 Use the desktop's text-scaling setting for 150%/200% checks and confirm the
 resulting rendered text, not only the requested window size. Native bounds
-checks include horizontal overflow as well as the fixed action footer.
+checks include horizontal overflow, readable action labels and the fixed action
+footer. `TestNativeSettingsFailureAcrossPages` checks detailed validation and
+partial-save feedback after saving from General and Advanced.
 
 `TestNativeMultilineEnter` also accepts `TRYOMARCHY_UI_KEYBOARD_READY` naming a
 private temporary marker file. It focuses the real network text field and
 writes the marker; send Return through the isolated compositor. The test checks
 that a newline is inserted without submitting Settings. Without external key
 automation, this check is explicitly skipped.
+
+First account setup uses grouped native radio choices and Continue. Personal
+account setup is the default; choosing Quick start only sends `instant` when
+Continue is activated. Pending replies disable choices and prevent duplicate
+submission. The underlying account and preference formats are unchanged.
+
+Enter on either account radio continues with the selected choice; arrows and
+Space change the selection. `TestNativeAccountEnter` uses the same external
+keyboard marker as the multiline test; set `TRYOMARCHY_UI_ACCOUNT_QUICK=1`
+to check Quick start, or leave it unset for the personal-account default.

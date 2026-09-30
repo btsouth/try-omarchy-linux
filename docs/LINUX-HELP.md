@@ -59,12 +59,11 @@ adds it for the app's GNOME runtime. `/dev/kvm` is usable by every user on
 NixOS, so no group change is needed.
 
 **Set up Omarchy** asks how you want to sign in, then downloads Omarchy
-(about 2 GB), sets it up and starts it. **Set up my own account** runs
-Omarchy's normal setup, so you choose your own username and password. **Quick
-start as omarchy** skips that and signs you in as `omarchy` with the password
-`omarchy`. Sudo does not ask that account for a password, and SSH accepts only
+(about 2 GB), sets it up and starts it. **My own username and password** is selected by default. Choose it and press
+**Continue** to use Omarchy's normal account setup. **Quick start** skips that
+and signs you in as `omarchy` with the password `omarchy`. Sudo does not ask that account for a password, and SSH accepts only
 keys for it, since its password is public. It is meant for a first look; run
-`passwd` in Omarchy to change the password. **Customize** asks where to store
+`passwd` in Omarchy to change the password. **Choose location** asks where to store
 Omarchy first, then asks the same question. The choice is made once, at first
 setup. To switch later, back up anything you want to keep, choose **Delete this
 VM**, and set it up again.
@@ -144,9 +143,12 @@ sharing back on in **Settings**, **Share the clipboard with Omarchy**.
 
 ## Settings
 
-Settings groups resources, storage and shared files, display and keyboard,
-devices and privacy, and startup. Network and SSH expands separately. Save and
-Cancel stay at the bottom while you scroll.
+Settings uses **General**, **Devices** and **Advanced** pages. General includes
+display and startup, resources, disk capacity and shared files. Devices contains
+microphone/camera access, audio choices and clipboard permission where available.
+Advanced contains display scale, keyboard layout, rendering, network and SSH.
+Switching pages keeps your edits. The product header, page navigation, Save and
+Cancel stay visible while you scroll; narrow windows stack fields and actions.
 
 **Balanced** sizes the VM automatically while leaving room for your Linux
 desktop. **Maximum performance** uses more available resources. **Manual** shows
@@ -164,6 +166,7 @@ an existing VM. Choose Settings or Close to stop it. First setup and startup
 warnings keep the launcher open so you can review the explanation and actions.
 
 If a save fails, Settings names the failed group and any groups already saved.
+The full explanation appears above the current page's controls, ready to read.
 Your remaining edits stay in the form. Fix the folder's permissions or free
 space, then Save again. Cancel closes the form without saving further changes;
 it does not undo groups that were already saved.

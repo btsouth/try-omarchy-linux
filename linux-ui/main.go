@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
@@ -80,6 +81,7 @@ type settingsForm struct {
 	AudioOutputs       []audioDevice `json:"audioOutputs"`
 	AudioInputs        []audioDevice `json:"audioInputs"`
 	AudioLive          bool          `json:"audioLive"`
+	Running            bool          `json:"running"`
 	RefreshAudio       bool          `json:"refreshAudio,omitempty"`
 	DiskGiB            string        `json:"diskGiB"`
 	Scale              string        `json:"scale"`
@@ -152,20 +154,42 @@ func fillSections(box *gtk.Box, sections []section) {
 			item.SetTitleLines(0)
 			item.SetSubtitleLines(0)
 			item.SetSubtitleSelectable(true)
+			iconName := "dialog-information-symbolic"
+			switch {
+			case strings.Contains(strings.ToLower(r.Title), "resource"):
+				iconName = "preferences-system-symbolic"
+			case strings.Contains(strings.ToLower(r.Title), "microphone"):
+				iconName = "audio-input-microphone-symbolic"
+			case strings.Contains(strings.ToLower(r.Title), "camera"):
+				iconName = "camera-photo-symbolic"
+			case strings.Contains(strings.ToLower(r.Title), "folder"), strings.Contains(strings.ToLower(r.Title), "location"):
+				iconName = "folder-symbolic"
+			case strings.Contains(strings.ToLower(r.Title), "disk"), strings.Contains(strings.ToLower(r.Title), "space"):
+				iconName = "drive-harddisk-symbolic"
+			}
+			icon := gtk.NewImageFromIconName(iconName)
+			icon.AddCSSClass("integration-icon")
+			icon.SetPixelSize(20)
+			item.AddPrefix(icon)
 			if r.State != "" {
-				iconName, style := "content-loading-symbolic", "dim-label"
+				text, style := "Next launch", "dim-label"
 				switch r.State {
 				case "enabled":
-					iconName, style = "object-select-symbolic", "success"
+					text, style = "On", "success"
+					if r.Title == "Microphone" || r.Title == "Camera" {
+						text = "Allowed"
+					}
 				case "disabled":
-					iconName = "action-unavailable-symbolic"
+					text = "Off"
 				case "unavailable":
-					iconName, style = "dialog-warning-symbolic", "warning"
+					text, style = "Unavailable", "warning"
 				}
-				icon := gtk.NewImageFromIconName(iconName)
-				icon.AddCSSClass(style)
-				item.AddPrefix(icon)
+				status := gtk.NewLabel(text)
+				status.AddCSSClass(style)
+				status.AddCSSClass("integration-state")
+				item.AddSuffix(status)
 			}
+
 			group.Add(item)
 		}
 		box.Append(group)
@@ -182,8 +206,19 @@ func main() {
 // instead of widening the scroll viewport past a small window.
 func wrapWindowLabels(widget *gtk.Widget) {
 	if label, ok := widget.Object.Cast().(*gtk.Label); ok {
-		label.SetWrap(true)
-		label.SetWrapMode(pango.WrapWordChar)
+		if label.HasCSSClass("integration-state") {
+			label.SetWrap(false)
+		} else {
+			label.SetWrap(true)
+			label.SetWrapMode(pango.WrapWordChar)
+			// Actions may wrap between words, but must keep each word readable.
+			for parent := widget.Parent(); parent != nil; parent = gtk.BaseWidget(parent).Parent() {
+				if _, ok := gtk.BaseWidget(parent).Object.Cast().(*gtk.Button); ok {
+					label.SetWrapMode(pango.WrapWord)
+					break
+				}
+			}
+		}
 	}
 	for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
 		wrapWindowLabels(gtk.BaseWidget(child))
@@ -200,8 +235,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 	app := adw.NewApplication("com.tryomarchy.TryOmarchy", gio.ApplicationNonUnique)
 	app.ConnectActivate(func() {
 		window := adw.NewApplicationWindow(&app.Application)
+		var current state
+		answered := false
 		window.SetTitle("Try Omarchy")
-		window.SetDefaultSize(540, 620)
+		window.SetDefaultSize(640, 700)
 		window.SetResizable(true)
 		applyBrand(window)
 		layout := gtk.NewBox(gtk.OrientationVertical, 0)
@@ -224,6 +261,16 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		menuButton.SetPopover(menuPopover)
 		header.PackEnd(menuButton)
 		layout.Append(header)
+		productHeader, productVersion := newBrandHeader()
+		productHeader.SetMarginTop(12)
+		productHeader.SetMarginBottom(20)
+		productHeader.SetMarginStart(24)
+		productHeader.SetMarginEnd(24)
+		productClamp := adw.NewClamp()
+		productClamp.SetMaximumSize(640)
+		productClamp.SetTighteningThreshold(640)
+		productClamp.SetChild(productHeader)
+		layout.Append(productClamp)
 		// A problem the user can fix, with a link to how.
 		banner := adw.NewBanner("")
 		banner.SetUseMarkup(false)
@@ -242,17 +289,22 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			})
 		}
 		banner.ConnectButtonClicked(func() { openHelp(bannerURL) })
+		showSettingsProblem := func(message string) {
+			bannerURL = ""
+			banner.SetButtonLabel("")
+			banner.SetTitle(message)
+			banner.SetRevealed(true)
+		}
 		page := gtk.NewBox(gtk.OrientationVertical, 0)
 		page.SetVExpand(true)
-		content := gtk.NewBox(gtk.OrientationVertical, 20)
-		content.SetMarginTop(24)
+		content := gtk.NewBox(gtk.OrientationVertical, 16)
+		content.SetMarginTop(4)
 		content.SetMarginStart(24)
 		content.SetMarginEnd(24)
 		content.SetMarginBottom(16)
-		pageHeader, pageVersion := newBrandHeader()
-		content.Append(pageHeader)
 		pageTitle := gtk.NewLabel("")
 		pageTitle.AddCSSClass("title-2")
+		pageTitle.AddCSSClass("heading")
 		pageTitle.SetXAlign(0)
 		content.Append(pageTitle)
 		pageIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
@@ -271,6 +323,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		pageSections := gtk.NewBox(gtk.OrientationVertical, 12)
 		pageSections.SetVisible(false)
 		content.Append(pageSections)
+		accountOptions := gtk.NewBox(gtk.OrientationVertical, 16)
+		personalAccount := gtk.NewCheckButtonWithLabel("My own username and password (recommended)")
+		quickAccount := gtk.NewCheckButtonWithLabel("Quick start (omarchy / omarchy)")
+		quickAccount.SetGroup(personalAccount)
+		personalAccount.SetActive(true)
+		accountOptions.Append(personalAccount)
+		accountOptions.Append(quickAccount)
+		accountOptions.SetVisible(false)
+		content.Append(accountOptions)
 		progress := gtk.NewProgressBar()
 		named(progress, "Progress")
 		content.Append(progress)
@@ -287,12 +348,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		helpLink.SetVisible(false)
 		content.Append(helpLink)
 		homeContent := gtk.NewBox(gtk.OrientationVertical, 12)
-		homeContent.SetMarginTop(16)
+		homeContent.SetMarginTop(4)
 		homeContent.SetMarginBottom(24)
 		homeContent.SetMarginStart(24)
 		homeContent.SetMarginEnd(24)
-		homeHeader, homeVersion := newBrandHeader()
-		homeContent.Append(homeHeader)
 		homeHeadline := gtk.NewLabel("")
 		homeHeadline.AddCSSClass("title-3")
 		homeHeadline.SetWrap(true)
@@ -322,57 +381,68 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		homeDetails.SetChild(homeSetup)
 		homeContent.Append(homeDetails)
 		homeClamp := adw.NewClamp()
-		homeClamp.SetMaximumSize(480)
+		homeClamp.SetMaximumSize(640)
+		homeClamp.SetTighteningThreshold(640)
 		homeClamp.SetChild(homeContent)
 		homeScroll := gtk.NewScrolledWindow()
 		homeScroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
 		homeScroll.SetVExpand(true)
 		homeScroll.SetChild(homeClamp)
 		homeScroll.SetVisible(false)
-		settingsContent := gtk.NewBox(gtk.OrientationVertical, 12)
-		settingsContent.SetMarginTop(24)
-		settingsContent.SetMarginBottom(24)
+		settingsContent := gtk.NewBox(gtk.OrientationVertical, 16)
+		settingsContent.SetMarginTop(4)
+		settingsContent.SetMarginBottom(20)
 		settingsContent.SetMarginStart(24)
 		settingsContent.SetMarginEnd(24)
-		settingsHeader, settingsVersion := newBrandHeader()
-		settingsContent.Append(settingsHeader)
-		settingsTitle := gtk.NewLabel("Settings")
-		settingsTitle.AddCSSClass("title-2")
-		settingsTitle.SetXAlign(0)
-		settingsContent.Append(settingsTitle)
+		settingsProblem := gtk.NewLabel("")
+		settingsProblem.SetWrap(true)
+		settingsProblem.SetXAlign(0)
+		settingsProblem.SetSelectable(true)
+		settingsProblem.AddCSSClass("settings-problem")
+		settingsProblem.AddCSSClass("settings-card")
+		settingsProblem.SetVisible(false)
+		settingsContent.Append(settingsProblem)
 		settingsStatus := gtk.NewLabel("")
 		settingsStatus.SetWrap(true)
-		settingsStatus.SetHAlign(gtk.AlignStart)
-		settingsContent.Append(settingsStatus)
-		form := gtk.NewBox(gtk.OrientationVertical, 20)
+		settingsStatus.SetXAlign(0)
+		settingsStatus.AddCSSClass("dim-label")
+		form := gtk.NewStack()
+		form.SetHhomogeneous(false)
+		form.SetVhomogeneous(false)
+		form.AddCSSClass("settings-pages")
+		named(form, "Settings pages")
+		settingsTabs := gtk.NewStackSwitcher()
+		settingsTabs.SetStack(form)
+		settingsTabs.SetHAlign(gtk.AlignFill)
+		settingsTabs.AddCSSClass("settings-tabs")
+		settingsTabs.SetMarginStart(24)
+		settingsTabs.SetMarginEnd(24)
+		settingsTabs.SetMarginBottom(16)
+		settingsTabs.SetVisible(false)
+		layout.Append(settingsTabs)
+		settingsPages := map[string]*gtk.Box{}
+		for _, title := range []string{"General", "Devices", "Advanced"} {
+			body := gtk.NewBox(gtk.OrientationVertical, 20)
+			settingsPages[title] = body
+			form.AddTitled(body, title, title)
+		}
+		settingsPages["Devices"].Append(settingsStatus)
 		var groupContent *gtk.Box
-		beginGroup := func(title, description string, advanced bool) {
+		beginGroup := func(title, page string) *adw.PreferencesGroup {
 			group := adw.NewPreferencesGroup()
 			group.SetTitle(title)
-			group.SetDescription(description)
-			groupContent = gtk.NewBox(gtk.OrientationVertical, 8)
+			groupContent = gtk.NewBox(gtk.OrientationVertical, 10)
 			groupContent.AddCSSClass("card")
 			groupContent.AddCSSClass("settings-card")
 			group.Add(groupContent)
-			if advanced {
-				expander := gtk.NewExpander("Advanced network settings")
-				expander.SetChild(group)
-				form.Append(expander)
-			} else {
-				form.Append(group)
-			}
+			settingsPages[page].Append(group)
+			return group
 		}
-		beginGroup("Resources", "Automatic sizing leaves room for your Linux desktop. Changes apply on the next launch.", false)
-		// Headings stand apart from the controls above them, and help text
-		// reads as secondary, so the long form scans as separate groups.
 		formLabel := func(title string) {
 			l := gtk.NewLabel(title)
 			l.SetWrap(true)
 			l.SetXAlign(0)
 			l.AddCSSClass("heading")
-			if groupContent.FirstChild() != nil {
-				l.SetMarginTop(12)
-			}
 			groupContent.Append(l)
 		}
 		formHelp := func(text string) *gtk.Label {
@@ -380,18 +450,39 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			l.SetWrap(true)
 			l.SetXAlign(0)
 			l.AddCSSClass("dim-label")
+			l.AddCSSClass("setting-help")
 			groupContent.Append(l)
 			return l
 		}
+		formField := func(title string, control gtk.Widgetter) *gtk.FlowBox {
+			l := gtk.NewLabel(title)
+			l.SetWrap(true)
+			l.SetWrapMode(pango.WrapWordChar)
+			l.SetXAlign(0)
+			l.SetSizeRequest(160, -1)
+			l.SetMnemonicWidget(control)
+			gtk.BaseWidget(control).SetHExpand(true)
+			row := newResponsiveRow(l, control)
+			row.AddCSSClass("setting-field")
+			groupContent.Append(row)
+			return row
+		}
 		entry := func(title string) *gtk.Entry {
-			formLabel(title)
 			input := gtk.NewEntry()
-			groupContent.Append(input)
+			formField(title, input)
 			return input
 		}
+		beginGroup("Display and startup", "General")
+		fullscreen := gtk.NewCheckButtonWithLabel("Open fullscreen")
+		groupContent.Append(fullscreen)
+		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
+		groupContent.Append(startAutomatically)
+		formHelp("Automatic start waits 10 seconds; Settings or Close stops it.")
+		fullscreen.SetTooltipText("Ctrl+Alt+F toggles fullscreen. Ctrl+Alt+G releases the keyboard.")
+		beginGroup("Resources", "General")
 		resourceProfile := gtk.NewDropDownFromStrings([]string{"Balanced (recommended)", "Maximum performance", "Manual"})
 		named(resourceProfile, "Resource profile")
-		groupContent.Append(resourceProfile)
+		formField("Resource profile", resourceProfile)
 		resourceSummary := formHelp("")
 		automaticSummary := ""
 		resourceCard := groupContent
@@ -428,11 +519,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		groupContent.Append(cpus)
 		autoCPUs.ConnectToggled(func() { cpus.SetVisible(!autoCPUs.Active()) })
 		groupContent = resourceCard
-		formLabel("Rendering")
 		render := gtk.NewDropDownFromStrings([]string{"Automatic (recommended)", "Graphics acceleration", "Software rendering"})
 		named(render, "Rendering")
-		groupContent.Append(render)
-		formHelp("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
 		defaults := gtk.NewButtonWithLabel("Restore resource defaults")
 		defaults.ConnectClicked(func() {
 			resourceProfile.SetSelected(0)
@@ -440,16 +528,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			autoCPUs.SetActive(true)
 			render.SetSelected(0)
 		})
-		groupContent.Append(defaults)
-		beginGroup("Storage", "Your installation and shared files.", false)
-		formLabel("Disk capacity (GiB)")
+		defaults.SetHAlign(gtk.AlignStart)
+		beginGroup("Storage and sharing", "General")
 		standardDisk := gtk.NewCheckButtonWithLabel("Keep current capacity")
 		diskGiB := gtk.NewSpinButtonWithRange(24, 1024, 1)
 		diskGiB.SetNumeric(true)
 		named(diskGiB, "Disk capacity in GiB")
 		groupContent.Append(standardDisk)
-		groupContent.Append(diskGiB)
-		standardDisk.ConnectToggled(func() { diskGiB.SetSensitive(!standardDisk.Active()) })
+		diskField := formField("Disk capacity (GiB)", diskGiB)
+		standardDisk.ConnectToggled(func() { diskField.SetVisible(!standardDisk.Active()) })
 		formHelp("New VMs start at 24 GiB. A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
 		share := entry("Shared folder")
 		share.SetEditable(false)
@@ -462,60 +549,54 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		chooseShare := gtk.NewButtonWithLabel("Choose a shared folder...")
 		groupContent.Append(chooseShare)
 		formHelp("Omarchy can read, change and delete files in the folder you share. Access changes apply on the next launch.")
-		beginGroup("Display and keyboard", "Changes apply when Omarchy next starts.", false)
-		fullscreen := gtk.NewCheckButtonWithLabel("Open Omarchy fullscreen")
-		groupContent.Append(fullscreen)
-		formLabel("Guest display scale")
+		beginGroup("Display and keyboard", "Advanced")
 		scaleChoices := []audioDevice{{"keep", "Keep guest choice"}, {"1", "100%"}, {"1.25", "125%"}, {"1.5", "150%"}, {"2", "200%"}, {"3", "300%"}, {"4", "400%"}}
 		scale := gtk.NewDropDownFromStrings([]string{"Follow host display"})
 		named(scale, "Guest display scale")
-		groupContent.Append(scale)
+		formField("Guest display scale", scale)
 		scaleNames := []string{"auto"}
-		formLabel("Guest keyboard layout")
 		keyboardChoices := []audioDevice{{"keep", "Keep guest choice"}, {"us", "English (US)"}, {"us:intl", "English (US, international)"}, {"de", "German"}, {"fr", "French"}, {"es", "Spanish"}}
 		keyboard := gtk.NewDropDownFromStrings([]string{"Follow host layout"})
 		named(keyboard, "Guest keyboard layout")
-		groupContent.Append(keyboard)
+		formField("Guest keyboard layout", keyboard)
 		keyboardNames := []string{""}
 		formHelp("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
-		beginGroup("Devices and privacy", "Access is your choice. Opening Settings does not start capture.", false)
+		beginGroup("Microphone and camera", "Devices")
 		microphone := gtk.NewCheckButtonWithLabel("Allow microphone access")
 		groupContent.Append(microphone)
 		camera := gtk.NewCheckButtonWithLabel("Allow camera access")
 		groupContent.Append(camera)
-		formLabel("Camera")
 		cameraChoice := gtk.NewDropDownFromStrings([]string{"Automatic"})
 		named(cameraChoice, "Camera")
-		groupContent.Append(cameraChoice)
+		formField("Camera", cameraChoice)
 		cameraNames := []string{""}
 		formHelp("Your desktop asks for camera permission when an app inside Omarchy first opens the camera. Capture stops when that app closes it. Access changes apply after shutting down Omarchy and launching it again.")
-		formLabel("Audio output")
+		beginGroup("Audio", "Devices")
 		audioOutput := gtk.NewDropDownFromStrings([]string{"System default"})
 		named(audioOutput, "Audio output")
-		groupContent.Append(audioOutput)
-		formLabel("Audio input")
+		formField("Audio output", audioOutput)
 		audioInput := gtk.NewDropDownFromStrings([]string{"System default"})
 		named(audioInput, "Audio input")
-		groupContent.Append(audioInput)
+		formField("Audio input", audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
 		audioRefresh := gtk.NewButtonWithLabel("Refresh devices")
 		groupContent.Append(audioRefresh)
 		audioHelp := formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
+		clipboardGroup := beginGroup("Clipboard", "Devices")
 		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
 		groupContent.Append(clipboardShare)
 		clipboardHelp := formHelp("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
-		beginGroup("Startup", "Choose what happens when you open Try Omarchy.", false)
-		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
-		groupContent.Append(startAutomatically)
-		formHelp("After setup, Omarchy starts after 10 seconds. Choose Settings or Close to stop. Setup and problems keep the launcher open.")
-
-		beginGroup("Network and SSH", "Local connections only. Changes apply on the next launch.", true)
+		beginGroup("Graphics", "Advanced")
+		formField("Rendering", render)
+		groupContent.Append(defaults)
+		formHelp("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
+		beginGroup("Network and SSH", "Advanced")
 		sshEnabled := gtk.NewCheckButtonWithLabel("Allow SSH from this computer")
 		groupContent.Append(sshEnabled)
 		sshPort := gtk.NewSpinButtonWithRange(1024, 65535, 1)
 		sshPort.SetNumeric(true)
 		named(sshPort, "SSH port on this computer")
-		groupContent.Append(sshPort)
+		formField("SSH port", sshPort)
 		sshEnabled.ConnectToggled(func() { sshPort.SetSensitive(sshEnabled.Active()) })
 		formHelp("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
 		sshKey := entry("SSH public key (optional)")
@@ -523,22 +604,26 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		named(sshKey, "SSH public key file")
 		chooseSSHKey := gtk.NewButtonWithLabel("Choose a public key...")
 		chooseSSHKey.ConnectClicked(func() {
+			id := current.Request
 			dialog := gtk.NewFileDialog()
 			dialog.SetTitle("Choose an SSH public key")
 			dialog.Open(context.Background(), &window.Window, func(result gio.AsyncResulter) {
 				file, err := dialog.OpenFinish(result)
+				if answered || current.Prompt != "settings" || id != current.Request {
+					return
+				}
 				if err != nil {
 					detail, known := err.(interface {
 						Quark() uint32
 						ErrorCode() int
 					})
 					if !known || detail.Quark() != uint32(gtk.DialogErrorQuark()) || detail.ErrorCode() != int(gtk.DialogErrorDismissed) {
-						settingsStatus.SetText("Could not choose that public key: " + err.Error())
+						showSettingsProblem("Could not choose that public key: " + err.Error())
 					}
 					return
 				}
 				if file.Path() == "" {
-					settingsStatus.SetText("Choose a public key file on a local drive.")
+					showSettingsProblem("Choose a public key file on a local drive.")
 					return
 				}
 				sshKey.SetText(file.Path())
@@ -556,16 +641,21 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		groupContent.Append(forwards)
 		settingsContent.Append(form)
 		settingsClamp := adw.NewClamp()
-		settingsClamp.SetMaximumSize(480)
+		settingsClamp.SetMaximumSize(640)
+		settingsClamp.SetTighteningThreshold(640)
 		settingsClamp.SetChild(settingsContent)
 		settingsScroll := gtk.NewScrolledWindow()
 		settingsScroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
 		settingsScroll.SetVExpand(true)
 		settingsScroll.SetChild(settingsClamp)
 		settingsScroll.SetVisible(false)
+		form.NotifyProperty("visible-child-name", func() {
+			settingsScroll.VAdjustment().SetValue(0)
+			settingsScroll.HAdjustment().SetValue(0)
+		})
 		button := gtk.NewButtonWithLabel("Cancel")
-		button.SetHAlign(gtk.AlignCenter)
-		choices := gtk.NewBox(gtk.OrientationVertical, 8)
+		button.SetHAlign(gtk.AlignStart)
+		button.SetVAlign(gtk.AlignEnd)
 		primary := gtk.NewButton()
 		primary.AddCSSClass("suggested-action")
 		secondary := gtk.NewButton()
@@ -576,14 +666,14 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
 		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
 		cleanLeftoversButton := gtk.NewButtonWithLabel("Remove unfinished files...")
-		choices.Append(primary)
-		choices.Append(secondary)
-		choices.Append(tertiary)
-		choices.Append(moveButton)
-		choices.Append(resetButton)
-		choices.Append(cleanMoveButton)
-		choices.Append(cleanResetButton)
-		choices.Append(cleanLeftoversButton)
+		primary.SetHExpand(true)
+		secondary.SetHExpand(true)
+		choices := gtk.NewBox(gtk.OrientationVertical, 8)
+		choices.SetHExpand(true)
+		for _, action := range []*gtk.Button{primary, secondary, tertiary, moveButton, resetButton, cleanMoveButton, cleanResetButton, cleanLeftoversButton} {
+			choices.Append(action)
+		}
+		choices.SetHAlign(gtk.AlignEnd)
 		choices.SetVisible(false)
 		// The home and error pages get exactly the buttons the launcher asked for.
 		dynamicActions := gtk.NewBox(gtk.OrientationVertical, 8)
@@ -595,11 +685,19 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		actions.SetMarginEnd(24)
 		actions.SetMarginBottom(16)
 		actions.Append(dynamicActions)
-		actions.Append(choices)
-		actions.Append(button)
+		settingsTiming := gtk.NewLabel("")
+		settingsTiming.SetWrap(true)
+		settingsTiming.SetXAlign(0)
+		settingsTiming.AddCSSClass("dim-label")
+		settingsTiming.AddCSSClass("setting-help")
+		settingsTiming.SetVisible(false)
+		actions.Append(settingsTiming)
+		footerButtons := newResponsiveRow(button, choices)
+		footerButtons.AddCSSClass("footer-buttons")
+		actions.Append(footerButtons)
 		clamp := adw.NewClamp()
-		clamp.SetMaximumSize(480)
-		clamp.SetTighteningThreshold(480)
+		clamp.SetMaximumSize(640)
+		clamp.SetTighteningThreshold(640)
 		clamp.SetChild(content)
 		page.Append(clamp)
 		scroll := gtk.NewScrolledWindow()
@@ -635,7 +733,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			pane.NotifyProperty("visible", updateFooterRule)
 		}
 		actionClamp := adw.NewClamp()
-		actionClamp.SetMaximumSize(480)
+		actionClamp.SetMaximumSize(640)
+		actionClamp.SetTighteningThreshold(640)
 		actionClamp.SetChild(actions)
 		layout.Append(actionClamp)
 		window.SetContent(layout)
@@ -643,23 +742,26 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		// small window, so there they scroll with the page instead of staying
 		// pinned above Back.
 		choicesInPage := false
+		// Move the action group with its wrapper; hidden footer actions must not
+		// reserve columns after a different prompt uses them.
+		choicesCell := gtk.BaseWidget(choices.Parent()).Object.Cast().(*gtk.FlowBoxChild)
 		placeChoices := func(inPage bool) {
 			if inPage == choicesInPage {
 				return
 			}
 			if inPage {
-				actions.Remove(choices)
-				content.Append(choices)
+				footerButtons.Remove(choicesCell)
+				choices.SetHAlign(gtk.AlignFill)
+				content.Append(choicesCell)
 			} else {
-				content.Remove(choices)
-				actions.InsertChildAfter(choices, dynamicActions)
+				content.Remove(choicesCell)
+				choices.SetHAlign(gtk.AlignEnd)
+				footerButtons.Append(choicesCell)
 			}
 			choicesInPage = inPage
 		}
 		failed, cancelling, determinate := false, false, false
-		var current state
 		var submittedFocus gtk.Widgetter
-		answered := false
 		reply := func(value string) {
 			if current.Request == 0 || answered {
 				return
@@ -669,6 +771,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			window.SetDefaultWidget(nil)
 			button.SetSensitive(false)
 			settingsScroll.SetSensitive(false)
+			settingsTabs.SetSensitive(false)
+			accountOptions.SetSensitive(false)
 			choices.SetSensitive(false)
 			dynamicActions.SetSensitive(false)
 			menuButton.SetSensitive(false)
@@ -712,6 +816,22 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			return false
 		})
 		window.AddController(keys)
+		// Radio controls consume Return before GTK reaches the default button.
+		// Within account choices, Enter means Continue; Space/arrows stay native.
+		accountKeys := gtk.NewEventControllerKey()
+		accountKeys.SetPropagationPhase(gtk.PhaseCapture)
+		accountKeys.ConnectKeyPressed(func(keyval, keycode uint, mods gdk.ModifierType) bool {
+			if current.Prompt != "account" || (keyval != gdk.KEY_Return && keyval != gdk.KEY_KP_Enter) || mods&(gdk.ControlMask|gdk.AltMask|gdk.SuperMask|gdk.MetaMask) != 0 {
+				return false
+			}
+			focus := window.Window.Focus()
+			if focus == nil || !gtk.BaseWidget(focus).IsAncestor(accountOptions) {
+				return false
+			}
+			primary.Emit("clicked")
+			return true
+		})
+		window.AddController(accountKeys)
 		settingsValue := func(refresh bool) string {
 			memoryValue, cpuValue := "0", "0"
 			if !autoMemory.Active() {
@@ -742,7 +862,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			case "location":
 				reply("default")
 			case "account":
-				reply("personal")
+				if quickAccount.Active() {
+					reply("instant")
+				} else {
+					reply("personal")
+				}
 			case "close":
 				reply("keep")
 			case "forget-location":
@@ -868,7 +992,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						})
 						if !known || detail.Quark() != uint32(gtk.DialogErrorQuark()) || detail.ErrorCode() != int(gtk.DialogErrorDismissed) {
 							if current.Prompt == "settings" {
-								settingsStatus.SetText("Could not choose that folder: " + err.Error())
+								showSettingsProblem("Could not choose that folder: " + err.Error())
 							} else {
 								label.SetText("Could not choose that folder: " + err.Error())
 							}
@@ -878,7 +1002,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					if folder.Path() == "" {
 						if current.Prompt == "settings" {
-							settingsStatus.SetText("Choose a folder on a local drive.")
+							showSettingsProblem("Choose a folder on a local drive.")
 						} else {
 							label.SetText("Choose a folder on a local drive.")
 						}
@@ -957,6 +1081,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					current = next
 					answered = false
 					settingsScroll.SetSensitive(true)
+					settingsTabs.SetSensitive(true)
+					accountOptions.SetSensitive(true)
 					choices.SetSensitive(true)
 					dynamicActions.SetSensitive(true)
 					menuButton.SetSensitive(true)
@@ -993,9 +1119,17 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
-					for _, version := range []*gtk.Label{homeVersion, pageVersion, settingsVersion} {
-						version.SetText(versionLabel(next.Version))
-						version.SetVisible(next.Version != "")
+					productVersion.SetText("LINUX" + platformVersion(next.Version))
+					settingsTabs.SetVisible(next.Prompt == "settings")
+					settingsTiming.SetVisible(next.Prompt == "settings")
+					showSettingsFailure := next.Prompt == "settings" && next.Notice != "" && next.Status != ""
+					settingsProblem.SetText(next.Status)
+					settingsProblem.SetVisible(showSettingsFailure)
+					settingsStatus.SetVisible(next.Status != "" && !showSettingsFailure)
+					accountOptions.SetVisible(next.Prompt == "account")
+					if pageChanged {
+						form.SetVisibleChildName("General")
+						personalAccount.SetActive(true)
 					}
 					homeHeadline.SetText(next.Headline)
 					homeHeadline.SetVisible(next.Headline != "")
@@ -1076,6 +1210,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						primary.SetLabel("Save settings")
 						secondary.SetLabel("Choose a shared folder...")
 						if next.Settings != nil {
+							settingsTiming.SetText(settingsFooterText(next.Settings.Running, next.Settings.AudioLive))
 							memoryMiB, _ := strconv.Atoi(next.Settings.Memory)
 							cpuCount, _ := strconv.Atoi(next.Settings.CPUs)
 							autoMemory.SetActive(memoryMiB == 0)
@@ -1123,7 +1258,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							cameraChoice.SetSelected(index)
 							diskCapacity, _ := strconv.Atoi(next.Settings.DiskGiB)
 							standardDisk.SetActive(diskCapacity == 0)
-							diskGiB.SetValue(float64(max(diskCapacity, 24)))
+							if !preserveManual || diskCapacity != 0 {
+								diskGiB.SetValue(float64(max(diskCapacity, 24)))
+							}
 							selectedScale := next.Settings.Scale
 							if selectedScale == "auto" {
 								selectedScale = ""
@@ -1157,6 +1294,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							audioInput.SetModel(gtk.NewStringList(inputLabels))
 							audioInput.SetSelected(inputIndex)
 							clipboardShare.SetActive(next.Settings.ClipboardShare)
+							clipboardGroup.SetVisible(next.Settings.ClipboardAvailable)
 							clipboardShare.SetVisible(next.Settings.ClipboardAvailable)
 							clipboardHelp.SetVisible(next.Settings.ClipboardAvailable)
 							share.SetText(next.Settings.Share)
@@ -1167,9 +1305,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						primary.SetLabel("Use default location")
 						secondary.SetLabel("Choose another folder...")
 					case "account":
-						pageTitle.SetText("Make yourself at home")
-						primary.SetLabel("Set up my own account")
-						secondary.SetLabel("Quick start as omarchy")
+						pageTitle.SetText("Choose your first launch")
+						primary.SetLabel("Continue")
 					case "share":
 						pageTitle.SetText("Share a folder with Omarchy?")
 						primary.SetLabel("Not now")
@@ -1192,7 +1329,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					case "error":
 						pageTitle.SetText(orDefault(next.ErrorTitle, "Omarchy could not start"))
 					}
-					secondary.SetVisible(next.Prompt != "settings" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
+					secondary.SetVisible(next.Prompt != "account" && next.Prompt != "settings" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
+					choicesCell.SetVisible(choices.Visible())
+					gtk.BaseWidget(button.Parent()).SetVisible(button.Visible())
+					footerButtons.SetVisible(!dynamic)
 					// The home's buttons, or an error page's, in the order asked for.
 					dynamicList := next.Actions
 					if next.Prompt == "error" {
@@ -1212,7 +1352,6 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						b := gtk.NewButtonWithLabel(item.Label)
 						if item.Suggested {
 							b.AddCSSClass("suggested-action")
-							b.AddCSSClass("pill")
 						}
 						if item.Destructive {
 							b.AddCSSClass("destructive-action")
@@ -1244,6 +1383,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					} else if focus != nil {
 						window.SetDefaultWidget(focus)
 						focus.GrabFocus()
+					} else if next.Prompt == "account" {
+						window.SetDefaultWidget(primary)
+						personalAccount.GrabFocus()
 					} else if next.Prompt == "recovery" {
 						button.GrabFocus()
 					} else if next.Prompt != "" {
@@ -1278,7 +1420,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						button.SetLabel("Close")
 					}
 					pageTitle.SetVisible(pageTitle.Text() != "")
-					if pageChanged {
+					label.SetVisible(next.Status != "")
+					if pageChanged || showSettingsFailure {
 						for _, pane := range []*gtk.ScrolledWindow{scroll, homeScroll, settingsScroll} {
 							pane.VAdjustment().SetValue(0)
 							pane.HAdjustment().SetValue(0)

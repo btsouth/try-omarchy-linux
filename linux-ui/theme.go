@@ -12,13 +12,34 @@ import (
 //go:embed theme.css
 var brandCSS string
 
+// newResponsiveRow wraps native controls as space or text scaling requires.
+// The layout wrappers add no keyboard stops; only the controls receive focus.
+func newResponsiveRow(children ...gtk.Widgetter) *gtk.FlowBox {
+	row := gtk.NewFlowBox()
+	row.SetSelectionMode(gtk.SelectionNone)
+	row.SetFocusable(false)
+	row.SetActivateOnSingleClick(false)
+	row.SetMinChildrenPerLine(1)
+	row.SetMaxChildrenPerLine(uint(len(children)))
+	row.SetColumnSpacing(8)
+	row.SetRowSpacing(8)
+	row.SetHExpand(true)
+	for _, widget := range children {
+		child := gtk.NewFlowBoxChild()
+		child.SetFocusable(false)
+		child.SetChild(widget)
+		row.Append(child)
+	}
+	return row
+}
+
 // newBrandHeader carries the same mark and type hierarchy from the launcher through
-// setup, Settings and recovery. Each page scrolls its header with its content.
+// setup, Settings and recovery. The identity remains above the scroll viewport.
 func newBrandHeader() (*gtk.Box, *gtk.Label) {
 	header := gtk.NewBox(gtk.OrientationHorizontal, 14)
 	header.AddCSSClass("product-header")
 	icon := gtk.NewImageFromIconName("com.tryomarchy.TryOmarchy")
-	icon.SetPixelSize(56)
+	icon.SetPixelSize(48)
 	icon.SetVAlign(gtk.AlignCenter)
 	named(icon, "Try Omarchy")
 	header.Append(icon)
@@ -30,15 +51,10 @@ func newBrandHeader() (*gtk.Box, *gtk.Label) {
 	title.AddCSSClass("title-1")
 	title.AddCSSClass("product-title")
 	identity.Append(title)
-	platform := gtk.NewLabel("OMARCHY · LINUX")
-	platform.SetXAlign(0)
-	platform.AddCSSClass("caption")
-	platform.AddCSSClass("product-platform")
-	identity.Append(platform)
-	version := gtk.NewLabel("")
+	version := gtk.NewLabel("LINUX")
 	version.SetXAlign(0)
 	version.AddCSSClass("caption")
-	version.AddCSSClass("product-version")
+	version.AddCSSClass("product-platform")
 	identity.Append(version)
 	header.Append(identity)
 	return header, version

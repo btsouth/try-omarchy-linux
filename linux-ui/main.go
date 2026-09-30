@@ -1098,7 +1098,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							dynamicActions.Append(b)
 						} else {
 							b.SetHExpand(true)
-							secondaryActions.Append(b)
+							child := gtk.NewFlowBoxChild()
+							child.SetFocusable(false)
+							child.SetChild(b)
+							secondaryActions.Append(child)
 						}
 						if i == homeSuggested(dynamicList) {
 							focus = b

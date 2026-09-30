@@ -60,6 +60,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 				if !widget.Visible() {
 					return
 				}
+				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
+					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
+				}
 				if b, ok := widget.Object.Cast().(*gtk.Button); ok {
 					if b.Label() == cases[index].button {
 						found = b

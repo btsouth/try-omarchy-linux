@@ -215,7 +215,14 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		if desktopTimedOut && desktopReady.Load() {
 			logf("guest desktop appeared after startup timeout")
 			getUI().finish()
-			if linuxGUIEnabled {
+			// finish waits for the helper to exit, consuming any Stop reply
+			// sent just before desktop readiness closed the waiting window.
+			if setupCancelled() {
+				confirmation.close()
+				if interrupts == 0 {
+					requestLinuxShutdown(qmp, proc, &interrupts)
+				}
+			} else if linuxGUIEnabled {
 				go showLinuxSessionTips(cfg.instant)
 			}
 			desktopTimedOut = false

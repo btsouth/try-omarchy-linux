@@ -268,13 +268,22 @@ func TestLinuxDesktopWaitConfirmsEarlyWindowClose(t *testing.T) {
 }
 
 func TestLinuxStopAfterDesktopTimeoutRequestsShutdown(t *testing.T) {
+	testLinuxLateStop(t, false)
+}
+
+func TestLinuxStopQueuedAsLateDesktopBecomesReady(t *testing.T) {
+	testLinuxLateStop(t, true)
+}
+
+func testLinuxLateStop(t *testing.T, ready bool) {
+	t.Helper()
 	configureSetupCancellation(false)
 	defer configureSetupCancellation(false)
 	oldGUI := linuxGUIEnabled
 	linuxGUIEnabled = false
 	defer func() { linuxGUIEnabled = oldGUI }()
 	oldDesktop := desktopReady.Load()
-	desktopReady.Store(false)
+	desktopReady.Store(ready)
 	defer desktopReady.Store(oldDesktop)
 	oldUI := linuxUI
 	linuxUI = newLinuxProgressUI()
@@ -289,12 +298,12 @@ func TestLinuxStopAfterDesktopTimeoutRequestsShutdown(t *testing.T) {
 	}()
 	exited := make(chan error, 1)
 	done := make(chan struct{})
+	requestSetupCancel()
 	go func() {
 		watchLinux(&config{}, qmp, &exec.Cmd{}, exited, make(chan os.Signal), nil,
 			&linuxVisibility{}, 0, newLinuxShutdownConfirmation(nil), true)
 		close(done)
 	}()
-	requestSetupCancel()
 	select {
 	case command := <-commands:
 		if !strings.Contains(command, "system_powerdown") || strings.Contains(command, "quit") {

@@ -78,7 +78,7 @@ window.try-omarchy .settings-tabs button:checked {
 window.try-omarchy .setting-help { font-size: 0.92em; }
 window.try-omarchy .settings-card { border-radius: 6px; }
 window.try-omarchy .boxed-list { border-radius: 6px; }
-window.try-omarchy .boxed-list row { padding-top: 4px; padding-bottom: 4px; }
+window.try-omarchy .boxed-list row { padding-top: 2px; padding-bottom: 2px; }
 window.try-omarchy .integration-icon { color: #7aa2f7; }
 window.try-omarchy .integration-state { font-size: 0.85em; }
 window.try-omarchy label.integration-state.success { color: #9ece6a; }

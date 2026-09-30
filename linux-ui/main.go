@@ -655,6 +655,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		})
 		button := gtk.NewButtonWithLabel("Cancel")
 		button.SetHAlign(gtk.AlignStart)
+		button.SetVAlign(gtk.AlignEnd)
 		primary := gtk.NewButton()
 		primary.AddCSSClass("suggested-action")
 		secondary := gtk.NewButton()

@@ -67,6 +67,12 @@ keys for it, since its password is public. It is meant for a first look; run
 Omarchy first, then asks the same question. The choice is made once, at first
 setup. To switch later, back up anything you want to keep, choose **Delete this
 VM**, and set it up again.
+The launcher waits until Omarchy confirms that its desktop is ready. Finish
+account setup or sign in inside the Omarchy window while it waits. If this takes
+more than five minutes, the launcher keeps waiting and leaves **Stop Omarchy**
+available. If the guest is stuck, stop it and try again; diagnostics stay in the
+data folder.
+
 Memory, processors and the rest are in **Settings**. If the download stops,
 **Try again** or the next launch continues where it left off.
 

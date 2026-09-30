@@ -44,7 +44,7 @@ func (u *progressUI) setStatus(format string, a ...any) {
 	u.lastPercent = -1
 	text, stage := linuxFriendlyStatus(msg, u.updating)
 	u.stage = stage
-	u.state = linuxSetupState{Status: text, Booting: u.booting}
+	u.state = linuxSetupState{Status: text, Detail: linuxProgressDetail(stage, 0, 0), Booting: u.booting}
 	if u.window != nil {
 		u.window.update(u.state)
 	}
@@ -152,14 +152,13 @@ func (u *progressUI) showFailure(f linuxFailure) (retry bool) {
 	return err == nil && answer == "retry"
 }
 
-// A slow desktop is a visible problem, but QEMU may still be usable. Keep the
-// supervisor running while the user reads or dismisses this nonfatal message.
+// Account setup or login can take as long as the person needs. Keep the
+// supervisor and stop action available without reporting a running VM as failed.
 func (u *progressUI) showDesktopTimeout(message string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.state = linuxSetupState{Status: message, Error: true}
+	u.state = linuxSetupState{Status: "Waiting for the Omarchy desktop", Detail: message, Booting: true}
 	if u.window != nil {
-		u.window.expected.Store(true)
 		u.window.update(u.state)
 	}
 	logf("%s", message)

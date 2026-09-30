@@ -61,7 +61,7 @@ func TestLinuxProgressDetailReportsTheDownloadOnly(t *testing.T) {
 	if got != "1.2 GB of 1.7 GB. If this stops, it continues where it left off." {
 		t.Fatalf("download detail: %q", got)
 	}
-	for _, stage := range []linuxStage{stagePrepare, stageCheck, stageUnpack, stageDisk, stageStart, stageDesktop, stageOther} {
+	for _, stage := range []linuxStage{stagePrepare, stageCheck, stageUnpack, stageDisk, stageStart, stageOther} {
 		if linuxProgressDetail(stage, 5, 10) != "" {
 			t.Fatalf("stage %d should not add detail", stage)
 		}
@@ -87,5 +87,17 @@ func TestPreparationStepsShowNoBarButRealStagesDo(t *testing.T) {
 	ui.setStatus("Downloading Omarchy (5 of 5)...")
 	if ui.state.Status != "Downloading the Omarchy update" {
 		t.Fatalf("update wording: %+v", ui.state)
+	}
+}
+
+func TestLinuxDesktopWaitExplainsAccountSetup(t *testing.T) {
+	ui := &progressUI{lastPercent: -1}
+	ui.setStatus("Omarchy is starting its desktop...")
+	if !strings.Contains(ui.state.Detail, "account setup or sign in") || ui.state.Total != 0 || ui.state.Error {
+		t.Fatalf("desktop wait must explain the guest input without claiming failure or measurable progress: %+v", ui.state)
+	}
+	ui.showDesktopTimeout("Finish account setup in the Omarchy window.")
+	if ui.state.Error || !ui.state.Booting || !strings.Contains(ui.state.Detail, "account setup") {
+		t.Fatalf("an unconfirmed desktop must remain a stoppable waiting state: %+v", ui.state)
 	}
 }

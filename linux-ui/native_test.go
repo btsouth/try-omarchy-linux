@@ -49,6 +49,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "delete-default"}, "Keep this VM"},
 		{state{Status: "Downloading Omarchy", Current: 42, Total: 100}, "Cancel"},
 		{state{Status: "Starting Omarchy", Booting: true}, "Stop Omarchy"},
+		{state{Status: "Waiting for the Omarchy desktop", Detail: "Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.", Booting: true}, "Stop Omarchy"},
 		{state{Prompt: "home", Installed: true, CheckAgain: true, Headline: "Saved settings need attention.", Notice: "Saved settings could not be read.", HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#settings", Actions: []action{{Label: "Check again", Reply: "check", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Integrations", Rows: []row{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}}}}, "Check again"},
 		{state{Prompt: "settings", Notice: "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again.", Settings: &settingsForm{Running: true, AudioLive: true, ResourceProfile: "balanced", CPUMax: 8}}, "Save settings"},
 	}
@@ -56,9 +57,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
-		for _, name := range []string{"object-select-symbolic", "action-unavailable-symbolic", "content-loading-symbolic", "dialog-error-symbolic"} {
+		for _, name := range []string{"dialog-error-symbolic"} {
 			if !icons.HasIcon(name) {
-				t.Errorf("integration or failure icon is unavailable: %s", name)
+				t.Errorf("required failure icon is unavailable: %s", name)
 			}
 		}
 		glib.TimeoutAdd(250, func() bool {
@@ -406,7 +407,7 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 		ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3", Microphone: true,
 		Camera: true, CameraID: "missing-camera", AudioOutput: "missing-output", AudioInput: "missing-input",
 		Scale: "1.5", Keyboard: "de", SSHEnabled: true, SSHPort: "2222", SSHKey: "/tmp/test-key.pub",
-		Forwards: "tcp:8080:80", DiskGiB: "48", Share: "/tmp/test-share", ShareEnabled: true,
+		Forwards: "tcp:8080:80", DiskGiB: "48", Share: "/run/user/1000/doc/test-grant/test-share", ShareDisplay: "~/test-share", ShareEnabled: true,
 	}}
 	phase, ticks := 0, 0
 	var headerY float32
@@ -424,9 +425,13 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 			checks := map[string]*gtk.CheckButton{}
 			var memory *gtk.SpinButton
 			var cpus *gtk.SpinButton
+			var shareDisplay *gtk.Entry
 			var settingScroll *gtk.ScrolledWindow
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
+				if entry, ok := widget.Object.Cast().(*gtk.Entry); ok && entry.Mapped() && !entry.Editable() {
+					shareDisplay = entry
+				}
 				if box, ok := widget.Object.Cast().(*gtk.Box); ok && box.HasCSSClass("product-header") {
 					header = box
 				}
@@ -482,6 +487,9 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 			case 0:
 				if buttons["Save settings"] == nil {
 					return true
+				}
+				if shareDisplay == nil || shareDisplay.Text() != "~/test-share" {
+					t.Error("Shared folder did not show its readable name")
 				}
 				headerY = bounds.Y()
 				if stack.VisibleChildName() != "General" || checks["Allow camera access"].Mapped() {
@@ -573,7 +581,7 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 	if err := json.Unmarshal([]byte(replies[0].Value), &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.Memory != "8192" || saved.CPUs != "5" || !saved.Fullscreen || saved.Microphone || saved.CameraID != "missing-camera" || saved.AudioOutput != "missing-output" || saved.AudioInput != "missing-input" || saved.Scale != "1.5" || saved.Keyboard != "de" || saved.DiskGiB != "48" || saved.Share != "/tmp/test-share" || !saved.ShareEnabled || saved.SSHKey != "/tmp/test-key.pub" || saved.SSHPort != "2222" || saved.Forwards != "tcp:8080:80" {
+	if saved.Memory != "8192" || saved.CPUs != "5" || !saved.Fullscreen || saved.Microphone || saved.CameraID != "missing-camera" || saved.AudioOutput != "missing-output" || saved.AudioInput != "missing-input" || saved.Scale != "1.5" || saved.Keyboard != "de" || saved.DiskGiB != "48" || saved.Share != "/run/user/1000/doc/test-grant/test-share" || !saved.ShareEnabled || saved.SSHKey != "/tmp/test-key.pub" || saved.SSHPort != "2222" || saved.Forwards != "tcp:8080:80" {
 		t.Fatalf("hidden settings/edits were not preserved: %+v", saved)
 	}
 }

@@ -80,7 +80,13 @@ func documentPortalHostPath(id string) (string, error) {
 // session, so it is found by its doc/ID/NAME shape inside the user's runtime tree.
 func linuxDocumentPath(path string, uid int) (id, rest string, ok bool) {
 	runtimeRoot := fmt.Sprintf("/run/user/%d", uid)
-	rel, err := filepath.Rel(runtimeRoot, filepath.Clean(path))
+	clean := filepath.Clean(path)
+	// Flatpak resolves the user runtime's doc symlink to this stable mount
+	// when validating a saved folder. Resolve its display name as well.
+	if strings.HasPrefix(clean, "/run/flatpak/doc/") {
+		runtimeRoot = "/run/flatpak"
+	}
+	rel, err := filepath.Rel(runtimeRoot, clean)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", "", false
 	}

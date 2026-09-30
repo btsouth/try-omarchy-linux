@@ -92,6 +92,7 @@ type settingsForm struct {
 	Forwards           string        `json:"forwards"`
 	StartAutomatically bool          `json:"startAutomatically"`
 	Share              string        `json:"share"`
+	ShareDisplay       string        `json:"shareDisplay,omitempty"`
 	ShareEnabled       bool          `json:"shareEnabled"`
 	ResourceProfile    string        `json:"resourceProfile"`
 	ResourceSummary    string        `json:"resourceSummary"`
@@ -167,10 +168,12 @@ func fillSections(box *gtk.Box, sections []section) {
 			case strings.Contains(strings.ToLower(r.Title), "disk"), strings.Contains(strings.ToLower(r.Title), "space"):
 				iconName = "drive-harddisk-symbolic"
 			}
-			icon := gtk.NewImageFromIconName(iconName)
-			icon.AddCSSClass("integration-icon")
-			icon.SetPixelSize(20)
-			item.AddPrefix(icon)
+			if gtk.IconThemeGetForDisplay(gdk.DisplayGetDefault()).HasIcon(iconName) {
+				icon := gtk.NewImageFromIconName(iconName)
+				icon.AddCSSClass("integration-icon")
+				icon.SetPixelSize(20)
+				item.AddPrefix(icon)
+			}
 			if r.State != "" {
 				text, style := "Next launch", "dim-label"
 				switch r.State {
@@ -544,7 +547,14 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		shareEnabled := gtk.NewCheckButtonWithLabel("Share this folder with Omarchy")
 		groupContent.Append(shareEnabled)
 		clearShare := gtk.NewButtonWithLabel("Stop sharing this folder")
-		clearShare.ConnectClicked(func() { share.SetText(""); shareEnabled.SetActive(false) })
+		var sharePath string
+		setSharedFolder := func(path, display string) {
+			sharePath = path
+			share.SetText(orDefault(display, path))
+			clearShare.SetSensitive(path != "")
+			shareEnabled.SetSensitive(path != "")
+		}
+		clearShare.ConnectClicked(func() { setSharedFolder("", ""); shareEnabled.SetActive(false) })
 		groupContent.Append(clearShare)
 		chooseShare := gtk.NewButtonWithLabel("Choose a shared folder...")
 		groupContent.Append(chooseShare)
@@ -847,7 +857,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
@@ -1009,7 +1019,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						return
 					}
 					if current.Prompt == "settings" {
-						share.SetText(folder.Path())
+						setSharedFolder(folder.Path(), folder.Basename())
 						shareEnabled.SetActive(true)
 					} else {
 						reply(folder.Path())
@@ -1297,7 +1307,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							clipboardGroup.SetVisible(next.Settings.ClipboardAvailable)
 							clipboardShare.SetVisible(next.Settings.ClipboardAvailable)
 							clipboardHelp.SetVisible(next.Settings.ClipboardAvailable)
-							share.SetText(next.Settings.Share)
+							setSharedFolder(next.Settings.Share, next.Settings.ShareDisplay)
 							shareEnabled.SetActive(next.Settings.ShareEnabled)
 						}
 					case "location":

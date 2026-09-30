@@ -85,7 +85,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 					}
 				case linuxDesktopTimedOut:
 					desktopTimedOut = true
-					getUI().showDesktopTimeout("Omarchy started, but its desktop did not appear within five minutes. Check the VM window and its login screen. You can close this message without stopping the VM; diagnostics are in the data folder.")
+					getUI().showDesktopTimeout("Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.")
 				case linuxDesktopCancelled:
 					confirmation.close()
 					requestLinuxShutdown(qmp, proc, &initialInterrupts)
@@ -199,6 +199,10 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 	defer leaseTicker.Stop()
 	shutdownRetry := time.NewTicker(linuxShutdownRetryInterval)
 	defer shutdownRetry.Stop()
+	var startupStop <-chan struct{}
+	if desktopTimedOut {
+		startupStop = setupCancelWake
+	}
 	graphicsWarningShown := false
 	imageConfirmed := false
 	defer func() { visibility.visible = false; sendLinuxVisibility(visibility) }()
@@ -211,10 +215,18 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		if desktopTimedOut && desktopReady.Load() {
 			logf("guest desktop appeared after startup timeout")
 			getUI().finish()
-			if linuxGUIEnabled {
+			// finish waits for the helper to exit, consuming any Stop reply
+			// sent just before desktop readiness closed the waiting window.
+			if setupCancelled() {
+				confirmation.close()
+				if interrupts == 0 {
+					requestLinuxShutdown(qmp, proc, &interrupts)
+				}
+			} else if linuxGUIEnabled {
 				go showLinuxSessionTips(cfg.instant)
 			}
 			desktopTimedOut = false
+			startupStop = nil
 		}
 		select {
 		case <-exited:
@@ -288,6 +300,13 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			if confirmed && interrupts == 0 {
 				requestLinuxShutdown(qmp, proc, &interrupts)
 			}
+		case <-startupStop:
+			startupStop = nil
+			confirmation.close()
+			if interrupts == 0 {
+				requestLinuxShutdown(qmp, proc, &interrupts)
+			}
+			getUI().finish()
 		case <-stop:
 			logf("interrupt")
 			requestLinuxShutdown(qmp, proc, &interrupts)

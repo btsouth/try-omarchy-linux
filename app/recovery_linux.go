@@ -13,14 +13,33 @@ import (
 )
 
 func linuxRecoveryProgress(w *linuxSetupWindow, label string) backupProgress {
+	return linuxRecoveryProgressUpdates(w.update, label, time.Now)
+}
+
+// Recovery can write hundreds of thousands of chunks. Sending each one makes
+// the frontend queue GTK callbacks faster than it can render them. Keep file
+// transitions and completion immediate, and limit ordinary updates to 10 Hz.
+func linuxRecoveryProgressUpdates(update func(linuxSetupState), label string, now func() time.Time) backupProgress {
+	var last time.Time
+	var lastName string
 	return func(current, total int64, name string) {
-		w.update(linuxSetupState{Status: label + ": " + filepath.Base(name), Current: current, Total: total})
+		at := now()
+		complete := total > 0 && current >= total
+		if name == lastName && !last.IsZero() && !complete && at.Sub(last) < 100*time.Millisecond {
+			return
+		}
+		last, lastName = at, name
+		update(linuxSetupState{Status: label + ": " + filepath.Base(name), Current: current, Total: total})
 	}
 }
 
 func linuxRecoveryResult(err error, success string) string {
 	if errors.Is(err, errSetupCancelled) {
 		return "Operation cancelled. The original VM was kept."
+	}
+	var space *insufficientSpaceError
+	if errors.As(err, &space) {
+		return fmt.Sprintf("The chosen folder needs %s free; %s is available. Choose a folder with more space and try again. Your original VM was kept.", formatGiB(space.need), formatGiB(space.have))
 	}
 	if err != nil {
 		return "Recovery operation failed: " + err.Error()

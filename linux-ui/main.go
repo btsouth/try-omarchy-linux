@@ -1361,9 +1361,18 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					secondaryActions.SetSelectionMode(gtk.SelectionNone)
 					secondaryActions.SetHomogeneous(true)
 					secondaryActions.SetMinChildrenPerLine(1)
-					secondaryActions.SetMaxChildrenPerLine(3)
+					// As many columns as buttons, up to three, so a short row
+					// fills the width instead of leaving an empty column.
+					var gridActions uint
+					for _, item := range dynamicList {
+						if !item.Suggested && item.Reply != "close" {
+							gridActions++
+						}
+					}
+					secondaryActions.SetMaxChildrenPerLine(max(1, min(3, gridActions)))
 					secondaryActions.SetColumnSpacing(8)
 					secondaryActions.SetRowSpacing(8)
+					var closeAction *gtk.Button
 					for i, item := range dynamicList {
 						item := item
 						b := gtk.NewButtonWithLabel(item.Label)
@@ -1379,6 +1388,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						b.ConnectClicked(func() { reply(item.Reply) })
 						if item.Suggested {
 							dynamicActions.Append(b)
+						} else if item.Reply == "close" {
+							// Close takes its own centered row below the others, so it
+							// never ends up alone in one column when they wrap.
+							b.SetHAlign(gtk.AlignCenter)
+							closeAction = b
 						} else {
 							b.SetHExpand(true)
 							child := gtk.NewFlowBoxChild()
@@ -1392,6 +1406,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					if secondaryActions.FirstChild() != nil {
 						dynamicActions.Append(secondaryActions)
+					}
+					if closeAction != nil {
+						dynamicActions.Append(closeAction)
 					}
 					window.SetDefaultWidget(nil)
 					if preserveManual && previousFocus != nil {

@@ -23,6 +23,7 @@ window.try-omarchy {
   --border-color: #414868;
   background: var(--window-bg-color);
   color: var(--window-fg-color);
+  font-family: monospace;
 }
 window.try-omarchy .product-title {
   font-family: monospace;
@@ -30,9 +31,14 @@ window.try-omarchy .product-title {
   font-weight: 700;
 }
 window.try-omarchy .product-version { color: #7aa2f7; }
-window.try-omarchy .dim-label { opacity: 1; color: #a9b5de; }
+window.try-omarchy .product-platform { color: #7aa2f7; font-weight: 600; }
+window.try-omarchy .dim-label, window.try-omarchy .dimmed { opacity: 1; color: #a9b5de; }
 window.try-omarchy .heading { color: #7dcfff; }
 window.try-omarchy .boxed-list { border: 1px solid #414868; }
+window.try-omarchy .boxed-list .title { font-weight: 600; }
+window.try-omarchy .boxed-list .subtitle { color: #a9b5de; opacity: 1; }
+window.try-omarchy image.success { color: #9ece6a; }
+window.try-omarchy image.error { color: #f7768e; }
 window.try-omarchy button.suggested-action { font-weight: 700; }
 window.try-omarchy button:focus-visible { outline-color: #7dcfff; }
 window.try-omarchy .action-footer { background: #1a1b26; }

@@ -36,11 +36,13 @@ func linuxLocationState(defaultDir, notice string) linuxSetupState {
 		Sections: []linuxSection{{Rows: rows}}}
 }
 
+// linuxAccountState explains both sign-in choices and how to return host shortcuts.
 func linuxAccountState() linuxSetupState {
 	return linuxSetupState{Prompt: "account", Status: "How do you want to start?",
 		Sections: []linuxSection{{Rows: []linuxRow{
 			{Title: "Set up my own account", Detail: "Omarchy's setup asks for your name and password when it first starts. Sudo and the lock screen use that password."},
 			{Title: "Quick start as " + trialUsername, Detail: "Skips setup and signs you in automatically as " + trialUsername + " (password " + trialPassword + "). Sudo does not ask for a password. Good for a first look."},
+			{Title: "Your first shortcuts", Detail: "Super+Space opens Omarchy's menu and Super+K shows its key bindings. Press Ctrl+Alt+G to use your Linux desktop's shortcuts again."},
 		}}}}
 }
 

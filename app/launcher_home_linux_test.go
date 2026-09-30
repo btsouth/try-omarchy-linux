@@ -50,11 +50,13 @@ func stubHomeChecks(t *testing.T, kvm error, free int64) {
 	diskFreeBytes = func(string) (int64, error) { return free, nil }
 }
 
+// TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded checks the size,
+// location and account guidance presented before setup can change any files.
 func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	stubHomeChecks(t, nil, 200<<30)
 	root := filepath.Join(t.TempDir(), "try-omarchy")
 	state, _ := linuxHomeState(root)
-	if state.Headline != "Omarchy is not set up yet." || state.Notice != "" || state.CheckAgain || state.Installed {
+	if state.Headline != "Welcome to Try Omarchy" || state.Notice != "" || state.CheckAgain || state.Installed {
 		t.Fatalf("first-run home: %+v", state)
 	}
 	if len(state.Sections) != 2 || state.Sections[0].Heading != "What setup does" {
@@ -79,6 +81,8 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	}
 }
 
+// TestLinuxHomeActionsFollowTheStateOfThings checks safe actions and default focus
+// for fresh, installed and unavailable VMs.
 func TestLinuxHomeActionsFollowTheStateOfThings(t *testing.T) {
 	labels := func(actions []linuxAction) []string {
 		var out []string
@@ -103,7 +107,7 @@ func TestLinuxHomeActionsFollowTheStateOfThings(t *testing.T) {
 		suggested string
 	}{
 		{"first setup", linuxSetupState{CanAttach: true},
-			[]string{"Set up Omarchy=setup", "Customize...=customize", "Settings=settings", "Close=close"},
+			[]string{"Set up Omarchy=setup", "Choose location...=customize", "Settings=settings", "Close=close"},
 			[]string{"About and help=about", "Use existing data folder=attach"}, "setup"},
 		{"first setup without room", linuxSetupState{Setup: "customize"},
 			[]string{"Choose another folder...=customize", "Settings=settings", "Close=close"},
@@ -451,6 +455,104 @@ func TestTheHomeLoopSendsTheButtonsItDecided(t *testing.T) {
 	actions, menu := linuxHomeActions(bare)
 	if !reflect.DeepEqual(sent.Actions, actions) || !reflect.DeepEqual(sent.Menu, menu) {
 		t.Fatalf("sent %+v / %+v, decided %+v / %+v", sent.Actions, sent.Menu, actions, menu)
+	}
+}
+
+// TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible drives the real home
+// loop to check countdown eligibility, explicit Close and preference preservation.
+func TestLinuxAutomaticStartKeepsFirstSetupAndProblemsVisible(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		installed     bool
+		free          int64
+		kvm           error
+		countdown     bool
+		badPreference string
+	}{
+		{"ready VM", true, 200 << 30, nil, true, ""},
+		{"first setup", false, 200 << 30, nil, false, ""},
+		{"KVM unavailable", true, 200 << 30, errors.New("KVM is unavailable"), false, ""},
+		{"low space", true, 0, nil, false, ""},
+		{"unreadable settings", true, 200 << 30, nil, false, settingsFileName},
+		{"unreadable startup settings", true, 200 << 30, nil, false, launchPreferencesFilename},
+		{"unreadable resource settings", true, 200 << 30, nil, false, resourcePreferencesFilename},
+		{"unreadable device settings", true, 200 << 30, nil, false, desktopPreferencesFilename},
+		{"unreadable audio settings", true, 200 << 30, nil, false, audioPreferencesFilename},
+		{"unreadable storage settings", true, 200 << 30, nil, false, storageSettingsFilename},
+		{"unreadable display and keyboard settings", true, 200 << 30, nil, false, linuxExperiencePreferencesFilename},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubHomeChecks(t, tc.kvm, tc.free)
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			root := filepath.Join(t.TempDir(), "try-omarchy")
+			if err := saveLaunchPreferences(root, launchPreferences{StartAutomatically: true}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.installed {
+				if err := os.MkdirAll(filepath.Join(root, "vm"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "vm", "disk.raw"), []byte("known guest file"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.badPreference != "" {
+				if err := os.WriteFile(filepath.Join(root, tc.badPreference), []byte("{"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			record := filepath.Join(t.TempDir(), "states.jsonl")
+			t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
+			answers := []string{"close"}
+			if tc.badPreference != "" {
+				answers = []string{"settings", "close"}
+			}
+			if runLinuxHome(linuxScriptedWindow(t, answers...), root, "", false) {
+				t.Fatal("Close launched the VM")
+			}
+			data, err := os.ReadFile(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var sent linuxSetupState
+			if err := json.Unmarshal(bytes.SplitN(data, []byte("\n"), 2)[0], &sent); err != nil {
+				t.Fatal(err)
+			}
+			if countdown := strings.Contains(sent.Status, "automatically in 10 seconds"); countdown != tc.countdown {
+				t.Fatalf("countdown %t, want %t: %+v", countdown, tc.countdown, sent)
+			}
+			if tc.kvm != nil && !strings.Contains(sent.Status, "KVM is unavailable") {
+				t.Fatalf("automatic start hid the failure: %+v", sent)
+			}
+			if tc.badPreference != "" && (!sent.CheckAgain || sent.Headline != "Saved settings need attention.") {
+				t.Fatalf("unreadable preferences offered a ready VM: %+v", sent)
+			}
+			if tc.badPreference != "" {
+				records := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+				var details linuxSetupState
+				if len(records) != 2 || json.Unmarshal(records[1], &details) != nil || !strings.Contains(details.Status, "Could not read") || !details.CheckAgain {
+					t.Fatalf("opening Settings hid the preference error: %s", data)
+				}
+			}
+			if tc.badPreference != "" {
+				data, err := os.ReadFile(filepath.Join(root, tc.badPreference))
+				if err != nil || string(data) != "{" {
+					t.Fatalf("unreadable preferences were changed: %q, %v", data, err)
+				}
+			}
+			if tc.badPreference != launchPreferencesFilename {
+				prefs, err := loadLaunchPreferences(root)
+				if err != nil || !prefs.StartAutomatically {
+					t.Fatalf("automatic-start choice was lost: %+v, %v", prefs, err)
+				}
+			}
+			if tc.installed {
+				data, err := os.ReadFile(filepath.Join(root, "vm", "disk.raw"))
+				if err != nil || string(data) != "known guest file" {
+					t.Fatalf("guest file was changed: %q, %v", data, err)
+				}
+			}
+		})
 	}
 }
 

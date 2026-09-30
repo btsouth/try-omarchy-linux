@@ -105,7 +105,7 @@ uses takes space on your drive. The home screen shows where the VM lives, what
 it uses and what is free, and warns when the drive has less than 2 GB left,
 since Omarchy can stop working if it fills up.
 
-To make room, free space on that drive, or choose **Customize** and pick
+To make room, free space on that drive, or choose **Choose location** and pick
 another folder before setup. An existing VM can move later with **Backup and
 recovery**, **Move this VM**.
 
@@ -158,6 +158,10 @@ VM settings apply on the next launch. If Omarchy is running, shut it down and
 launch it again; rebooting inside the guest does not restart the VM. Audio
 device choices can apply during a running session, as described below. The
 startup choice applies the next time you open Try Omarchy.
+
+**Start Omarchy when I open Try Omarchy** waits 10 seconds before launching
+an existing VM. Choose Settings or Close to stop it. First setup and startup
+warnings keep the launcher open so you can review the explanation and actions.
 
 If a save fails, Settings names the failed group and any groups already saved.
 Your remaining edits stay in the form. Fix the folder's permissions or free

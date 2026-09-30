@@ -135,9 +135,8 @@ func clearChildren(box *gtk.Box) {
 	}
 }
 
-// fillSections lays headed rows out as boxed lists. Rows show their value in
-// the prominent line, the way a properties page does, and their text can be
-// selected so a path can be copied.
+// fillSections lays headed rows out as boxed lists. Names stay prominent and
+// details can be selected so a path can be copied.
 func fillSections(box *gtk.Box, sections []section) {
 	clearChildren(box)
 	for _, s := range sections {
@@ -153,12 +152,11 @@ func fillSections(box *gtk.Box, sections []section) {
 			item.SetTitleLines(0)
 			item.SetSubtitleLines(0)
 			item.SetSubtitleSelectable(true)
-			item.AddCSSClass("property")
 			if r.State != "" {
 				iconName, style := "content-loading-symbolic", "dim-label"
 				switch r.State {
 				case "enabled":
-					iconName, style = "emblem-ok-symbolic", "success"
+					iconName, style = "object-select-symbolic", "success"
 				case "disabled":
 					iconName = "action-unavailable-symbolic"
 				case "unavailable":
@@ -192,7 +190,8 @@ func wrapWindowLabels(widget *gtk.Widget) {
 	}
 }
 
-// onWindow lets native layout tests inspect the same widgets the launcher uses.
+// runUI presents complete backend snapshots with native controls and writes
+// request-scoped replies. onWindow lets isolated tests inspect the real window.
 func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWindow)) int {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -208,6 +207,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		layout := gtk.NewBox(gtk.OrientationVertical, 0)
 		header := adw.NewHeaderBar()
 		header.AddCSSClass("flat")
+		header.SetTitleWidget(gtk.NewLabel(""))
 		// Less common home actions sit behind the header's overflow button.
 		menuButton := gtk.NewMenuButton()
 		menuButton.SetIconName("view-more-symbolic")
@@ -242,19 +242,31 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			})
 		}
 		banner.ConnectButtonClicked(func() { openHelp(bannerURL) })
-		page := adw.NewStatusPage()
-		page.SetTitle("Try Omarchy")
-		page.SetIconName("com.tryomarchy.TryOmarchy")
+		page := gtk.NewBox(gtk.OrientationVertical, 0)
 		page.SetVExpand(true)
 		content := gtk.NewBox(gtk.OrientationVertical, 20)
+		content.SetMarginTop(24)
 		content.SetMarginStart(24)
 		content.SetMarginEnd(24)
 		content.SetMarginBottom(16)
+		pageHeader, pageVersion := newBrandHeader()
+		content.Append(pageHeader)
+		pageTitle := gtk.NewLabel("")
+		pageTitle.AddCSSClass("title-2")
+		pageTitle.SetXAlign(0)
+		content.Append(pageTitle)
+		pageIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
+		pageIcon.SetPixelSize(32)
+		pageIcon.SetHAlign(gtk.AlignStart)
+		pageIcon.AddCSSClass("error")
+		pageIcon.SetVisible(false)
+		content.Append(pageIcon)
 		label := gtk.NewLabel("Preparing Omarchy...")
 		label.SetWrap(true)
 		label.SetWrapMode(pango.WrapWordChar)
 		label.SetMaxWidthChars(48)
-		label.SetJustify(gtk.JustifyCenter)
+		label.SetJustify(gtk.JustifyLeft)
+		label.SetXAlign(0)
 		content.Append(label)
 		pageSections := gtk.NewBox(gtk.OrientationVertical, 12)
 		pageSections.SetVisible(false)
@@ -266,7 +278,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		detail.SetWrap(true)
 		detail.SetWrapMode(pango.WrapWordChar)
 		detail.SetMaxWidthChars(48)
-		detail.SetJustify(gtk.JustifyCenter)
+		detail.SetJustify(gtk.JustifyLeft)
+		detail.SetXAlign(0)
 		detail.AddCSSClass("dim-label")
 		detail.SetVisible(false)
 		content.Append(detail)
@@ -278,41 +291,35 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		homeContent.SetMarginBottom(24)
 		homeContent.SetMarginStart(24)
 		homeContent.SetMarginEnd(24)
-		homeIcon := gtk.NewImageFromIconName("com.tryomarchy.TryOmarchy")
-		homeIcon.SetPixelSize(48)
-		homeIcon.SetHAlign(gtk.AlignCenter)
-		named(homeIcon, "Try Omarchy")
-		homeContent.Append(homeIcon)
-		homeTitle := gtk.NewLabel("Try Omarchy")
-		homeTitle.AddCSSClass("title-1")
-		homeTitle.AddCSSClass("product-title")
-		homeContent.Append(homeTitle)
-		homeVersion := gtk.NewLabel("")
-		homeVersion.AddCSSClass("product-version")
-		homeVersion.AddCSSClass("caption")
-		homeContent.Append(homeVersion)
+		homeHeader, homeVersion := newBrandHeader()
+		homeContent.Append(homeHeader)
 		homeHeadline := gtk.NewLabel("")
 		homeHeadline.AddCSSClass("title-3")
 		homeHeadline.SetWrap(true)
 		homeHeadline.SetMaxWidthChars(48)
-		homeHeadline.SetJustify(gtk.JustifyCenter)
+		homeHeadline.SetJustify(gtk.JustifyLeft)
+		homeHeadline.SetXAlign(0)
 		homeContent.Append(homeHeadline)
 		homeStatus := gtk.NewLabel("")
 		homeStatus.SetWrap(true)
 		homeStatus.SetMaxWidthChars(48)
-		homeStatus.SetJustify(gtk.JustifyCenter)
+		homeStatus.SetJustify(gtk.JustifyLeft)
+		homeStatus.SetXAlign(0)
 		homeContent.Append(homeStatus)
 		homeDetail := gtk.NewLabel("")
 		homeDetail.SetWrap(true)
 		homeDetail.SetWrapMode(pango.WrapWordChar)
 		homeDetail.SetSelectable(true)
 		homeDetail.SetMaxWidthChars(48)
-		homeDetail.SetJustify(gtk.JustifyCenter)
+		homeDetail.SetJustify(gtk.JustifyLeft)
+		homeDetail.SetXAlign(0)
 		homeDetail.AddCSSClass("dim-label")
 		homeContent.Append(homeDetail)
 		homeSections := gtk.NewBox(gtk.OrientationVertical, 12)
-		homeDetails := gtk.NewExpander("Storage and account details")
-		homeDetails.SetChild(homeSections)
+		homeContent.Append(homeSections)
+		homeSetup := gtk.NewBox(gtk.OrientationVertical, 12)
+		homeDetails := gtk.NewExpander("What setup does")
+		homeDetails.SetChild(homeSetup)
 		homeContent.Append(homeDetails)
 		homeClamp := adw.NewClamp()
 		homeClamp.SetMaximumSize(480)
@@ -327,8 +334,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		settingsContent.SetMarginBottom(24)
 		settingsContent.SetMarginStart(24)
 		settingsContent.SetMarginEnd(24)
+		settingsHeader, settingsVersion := newBrandHeader()
+		settingsContent.Append(settingsHeader)
 		settingsTitle := gtk.NewLabel("Settings")
-		settingsTitle.AddCSSClass("title-1")
+		settingsTitle.AddCSSClass("title-2")
+		settingsTitle.SetXAlign(0)
 		settingsContent.Append(settingsTitle)
 		settingsStatus := gtk.NewLabel("")
 		settingsStatus.SetWrap(true)
@@ -433,14 +443,14 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		groupContent.Append(defaults)
 		beginGroup("Storage", "Your installation and shared files.", false)
 		formLabel("Disk capacity (GiB)")
-		standardDisk := gtk.NewCheckButtonWithLabel("Use standard capacity (24 GiB)")
+		standardDisk := gtk.NewCheckButtonWithLabel("Keep current capacity")
 		diskGiB := gtk.NewSpinButtonWithRange(24, 1024, 1)
 		diskGiB.SetNumeric(true)
 		named(diskGiB, "Disk capacity in GiB")
 		groupContent.Append(standardDisk)
 		groupContent.Append(diskGiB)
 		standardDisk.ConnectToggled(func() { diskGiB.SetSensitive(!standardDisk.Active()) })
-		formHelp("A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
+		formHelp("New VMs start at 24 GiB. A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
 		share := entry("Shared folder")
 		share.SetEditable(false)
 		named(share, "Shared folder")
@@ -497,7 +507,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		beginGroup("Startup", "Choose what happens when you open Try Omarchy.", false)
 		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
 		groupContent.Append(startAutomatically)
-		formHelp("The launcher stays open for 10 seconds so you can choose Settings or Close.")
+		formHelp("After setup, Omarchy starts after 10 seconds. Choose Settings or Close to stop. Setup and problems keep the launcher open.")
 
 		beginGroup("Network and SSH", "Local connections only. Changes apply on the next launch.", true)
 		sshEnabled := gtk.NewCheckButtonWithLabel("Allow SSH from this computer")
@@ -562,6 +572,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		tertiary := gtk.NewButtonWithLabel("Create diagnostics")
 		moveButton := gtk.NewButtonWithLabel("Move this VM...")
 		resetButton := gtk.NewButtonWithLabel("Reset this VM...")
+		resetButton.AddCSSClass("destructive-action")
 		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
 		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
 		cleanLeftoversButton := gtk.NewButtonWithLabel("Remove unfinished files...")
@@ -590,7 +601,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		clamp.SetMaximumSize(480)
 		clamp.SetTighteningThreshold(480)
 		clamp.SetChild(content)
-		page.SetChild(clamp)
+		page.Append(clamp)
 		scroll := gtk.NewScrolledWindow()
 		scroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
 		scroll.SetVExpand(true)
@@ -941,6 +952,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						previousFocus = window.Window.Focus()
 					}
 					submittedFocus = nil
+					pageChanged := current.Prompt != next.Prompt
 					preserveManual := current.Prompt == "settings" && next.Prompt == "settings"
 					current = next
 					answered = false
@@ -976,21 +988,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					if next.Booting && next.Prompt == "" {
 						button.SetLabel("Stop Omarchy")
 					}
-					page.SetTitle("Try Omarchy")
-					page.SetIconName("com.tryomarchy.TryOmarchy")
-					if next.Prompt != "" {
-						page.AddCSSClass("compact")
-						if len(next.Sections) > 0 {
-							page.SetIconName("")
-						}
-					} else {
-						page.RemoveCSSClass("compact")
-					}
+					pageTitle.SetText("")
+					pageIcon.SetVisible(next.Error || next.Prompt == "error")
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
-					homeVersion.SetText("Linux · " + next.Version)
-					homeVersion.SetVisible(next.Version != "")
+					for _, version := range []*gtk.Label{homeVersion, pageVersion, settingsVersion} {
+						version.SetText(versionLabel(next.Version))
+						version.SetVisible(next.Version != "")
+					}
 					homeHeadline.SetText(next.Headline)
 					homeHeadline.SetVisible(next.Headline != "")
 					homeStatus.SetText(next.Status)
@@ -998,9 +1004,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					homeDetail.SetVisible(next.Detail != "")
 					settingsStatus.SetText(next.Status)
 					secondary.RemoveCSSClass("destructive-action")
-					fillSections(homeSections, sectionsIf(next.Prompt == "home", next.Sections))
-					homeDetails.SetVisible(next.Prompt == "home" && len(next.Sections) > 0)
-					homeDetails.SetExpanded(next.Installed)
+					visibleSections, setupSections := homeSectionsForState(next)
+					fillSections(homeSections, visibleSections)
+					fillSections(homeSetup, setupSections)
+					homeDetails.SetVisible(len(setupSections) > 0)
 					fillSections(pageSections, sectionsIf(next.Prompt != "home" && next.Prompt != "settings", next.Sections))
 					clearChildren(menuBox)
 					for _, item := range next.Menu {
@@ -1019,35 +1026,34 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					menuButton.SetVisible(next.Prompt == "home" && len(next.Menu) > 0)
 					switch next.Prompt {
 					case "recovery":
-						page.SetTitle("Backup and recovery")
-						page.SetIconName("")
+						pageTitle.SetText("Backup and recovery")
 						primary.SetLabel("Create backup")
 						secondary.SetLabel("Restore as a copy")
 						button.SetLabel("Back")
 					case "forget-location":
-						page.SetTitle("Forget saved location?")
+						pageTitle.SetText("Forget saved location?")
 						primary.SetLabel("Keep saved location")
 						secondary.SetLabel("Forget saved location")
 						secondary.AddCSSClass("destructive-action")
 						button.SetLabel("Cancel")
 					case "delete-default":
-						page.SetTitle("Delete this VM?")
+						pageTitle.SetText("Delete this VM?")
 						primary.SetLabel("Keep this VM")
 						secondary.SetLabel("Delete VM and system files")
 						secondary.AddCSSClass("destructive-action")
 						button.SetLabel("Cancel")
 					case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
-						page.SetTitle("Backup and recovery")
+						pageTitle.SetText("Backup and recovery")
 						if next.Prompt == "attach-folder" {
-							page.SetTitle("Use an existing VM")
+							pageTitle.SetText("Use an existing VM")
 						}
 						if next.Prompt == "move-folder" {
-							page.SetTitle("Move this VM")
+							pageTitle.SetText("Move this VM")
 						}
 						primary.SetLabel("Choose location...")
 						button.SetLabel("Cancel")
 					case "choice":
-						page.SetTitle(next.Title)
+						pageTitle.SetText(next.Title)
 						primary.SetLabel(next.Primary)
 						secondary.SetLabel(next.Secondary)
 						if next.Destructive {
@@ -1055,19 +1061,18 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						}
 						button.SetLabel("Cancel")
 					case "about":
-						page.SetTitle("About Try Omarchy")
+						pageTitle.SetText("About Try Omarchy")
 						primary.SetLabel("Back")
 						button.SetLabel("Back")
 						if next.Status == "" {
 							next.Status = "Try Omarchy for Linux, version " + next.Version + "."
 						}
 					case "settings-saved":
-						page.SetTitle("Settings saved")
+						pageTitle.SetText("Settings saved")
 						primary.SetLabel("Done")
 						button.SetLabel("Close")
 					case "settings":
-						page.SetTitle("Settings")
-						page.SetIconName("")
+						pageTitle.SetText("Settings")
 						primary.SetLabel("Save settings")
 						secondary.SetLabel("Choose a shared folder...")
 						if next.Settings != nil {
@@ -1158,26 +1163,26 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							shareEnabled.SetActive(next.Settings.ShareEnabled)
 						}
 					case "location":
-						page.SetTitle("Where should Omarchy live?")
+						pageTitle.SetText("Where should Omarchy live?")
 						primary.SetLabel("Use default location")
 						secondary.SetLabel("Choose another folder...")
 					case "account":
-						page.SetTitle("Make yourself at home")
+						pageTitle.SetText("Make yourself at home")
 						primary.SetLabel("Set up my own account")
 						secondary.SetLabel("Quick start as omarchy")
 					case "share":
-						page.SetTitle("Share a folder with Omarchy?")
+						pageTitle.SetText("Share a folder with Omarchy?")
 						primary.SetLabel("Not now")
 						secondary.SetLabel("Choose a shared folder...")
 						if next.Status == "" {
 							next.Status = "Omarchy can read, change, and delete files in the folder you choose. Use a dedicated folder to exchange files."
 						}
 					case "grant-files":
-						page.SetTitle("Share dropped files")
+						pageTitle.SetText("Share dropped files")
 						primary.SetLabel("Choose files...")
 						button.SetLabel("Cancel")
 					case "close":
-						page.SetTitle("Shut down Omarchy?")
+						pageTitle.SetText("Shut down Omarchy?")
 						primary.SetLabel("Keep running")
 						secondary.SetLabel("Shut down")
 						secondary.AddCSSClass("destructive-action")
@@ -1185,8 +1190,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							next.Status = "Save your work inside Omarchy before shutting down."
 						}
 					case "error":
-						page.SetTitle(orDefault(next.ErrorTitle, "Omarchy could not start"))
-						page.SetIconName("dialog-error-symbolic")
+						pageTitle.SetText(orDefault(next.ErrorTitle, "Omarchy could not start"))
 					}
 					secondary.SetVisible(next.Prompt != "settings" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
 					// The home's buttons, or an error page's, in the order asked for.
@@ -1247,6 +1251,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						primary.GrabFocus()
 					}
 					failed = next.Error
+					if next.Prompt == "" {
+						label.AddCSSClass("title-3")
+					} else {
+						label.RemoveCSSClass("title-3")
+					}
 					label.SetText(next.Status)
 					label.SetSelectable(failed || next.Prompt == "error")
 					determinate = next.Total > 0
@@ -1265,9 +1274,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						helpLink.SetURI(next.HelpURL)
 					}
 					if failed {
-						page.SetTitle(orDefault(next.ErrorTitle, "Omarchy could not start"))
-						page.SetIconName("dialog-error-symbolic")
+						pageTitle.SetText(orDefault(next.ErrorTitle, "Omarchy could not start"))
 						button.SetLabel("Close")
+					}
+					pageTitle.SetVisible(pageTitle.Text() != "")
+					if pageChanged {
+						for _, pane := range []*gtk.ScrolledWindow{scroll, homeScroll, settingsScroll} {
+							pane.VAdjustment().SetValue(0)
+							pane.HAdjustment().SetValue(0)
+						}
 					}
 					wrapWindowLabels(&window.Window.Widget)
 					page.QueueResize()

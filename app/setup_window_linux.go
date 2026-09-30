@@ -43,7 +43,7 @@ type linuxSetupState struct {
 	// Progress detail under the bar, and whether an error page offers Try again.
 	Detail   string `json:"detail,omitempty"`
 	CanRetry bool   `json:"canRetry,omitempty"`
-	// The home replaces Launch with Check again while KVM is unavailable.
+	// The home replaces Launch with Check again for host or saved-settings problems.
 	CheckAgain bool `json:"checkAgain,omitempty"`
 	Installed  bool `json:"installed,omitempty"`
 	// Setup is "customize" when a first setup cannot use the default location.
@@ -191,6 +191,9 @@ func launchLinuxWindow(cmd *exec.Cmd, cancel func()) *linuxSetupWindow {
 // Called under progressUI.mu. Coalescing keeps a stalled helper from blocking
 // verification or disk writes, while retaining the latest complete state.
 func (w *linuxSetupWindow) update(state linuxSetupState) {
+	if state.Version == "" {
+		state.Version = linuxAppVersion
+	}
 	select {
 	case <-w.updates:
 	default:

@@ -148,11 +148,17 @@ Settings lets you choose separate playback and microphone devices. System
 default follows the device selected by your Linux desktop. Microphone access
 changes require shutting down Omarchy and launching it again.
 
-In published preview 4, device choices also need a shutdown and launch.
-Development builds apply device choices when you save while Omarchy is running.
+Preview 5 applies device choices when you save while Omarchy is running.
 Use **Refresh audio devices** after connecting a headset; refreshing keeps your
 edits without saving them. If a live switch fails, Settings shows the error and
 keeps the saved choices for the next launch. You can retry Save.
+
+## Camera
+
+In Settings, turn on camera access and choose a camera, then shut down Omarchy
+and launch it again. When an app inside Omarchy opens the camera, your desktop
+asks for permission. Camera capture stops when the guest app closes the device.
+Camera selection and access changes need another shutdown and launch.
 
 ## Updates
 

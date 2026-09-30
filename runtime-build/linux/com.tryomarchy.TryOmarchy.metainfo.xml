@@ -45,6 +45,17 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.0~preview.5" date="2026-09-29" type="development">
+      <description>
+        <p>Fifth preview.</p>
+        <ul>
+          <li>Switch playback and microphone devices while Omarchy runs</li>
+          <li>Use a camera through your desktop's permission portal</li>
+          <li>Release the keyboard when the pointer leaves the window on Wayland</li>
+          <li>Keep unsupported clipboard sharing out of startup error windows</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0~preview.4" date="2026-09-29" type="development">
       <description>
         <p>Fourth preview.</p>

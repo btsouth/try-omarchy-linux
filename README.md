@@ -100,12 +100,11 @@ The Flatpak does not get access to your home folder. Folders and files reach the
 
 ## Preview limits
 
-Camera capture, live audio route switching, touchpad gestures, bridged/LAN networking,
-USB passthrough, opening host apps from the guest, and host biometric authentication
-are outside the first Linux release. The published preview 4 requires stopping and starting the VM to change audio
-routes. Development builds switch playback and microphone devices from Settings
-while Omarchy runs. Development builds also capture cameras through the desktop
-camera permission portal, only while an app inside Omarchy opens the camera.
+Touchpad gestures, bridged/LAN networking, USB passthrough, opening host apps from
+the guest, and host biometric authentication are outside the first Linux release.
+Preview 5 switches playback and microphone devices from Settings while Omarchy
+runs. Camera capture uses the desktop's camera permission portal, only while an
+app inside Omarchy opens the camera.
 Camera selection, camera access and microphone access changes require shutting
 down Omarchy and launching it again. Networking uses NAT with local SSH and port forwarding.
 

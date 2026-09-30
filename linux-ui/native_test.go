@@ -450,3 +450,57 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 		t.Fatalf("hidden settings/edits were not preserved: %+v", saved)
 	}
 }
+
+// A real compositor sends Return to the selected radio control. The native
+// radio must not consume it instead of activating the request's Continue action.
+func TestNativeAccountEnter(t *testing.T) {
+	marker := os.Getenv("TRYOMARCHY_UI_KEYBOARD_READY")
+	if os.Getenv("TRYOMARCHY_UI_TEST") != "1" || marker == "" {
+		t.Skip("requires external keys in an isolated desktop")
+	}
+	r, w := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer w.Close()
+		json.NewEncoder(w).Encode(state{Request: 701, Prompt: "account"})
+		<-done
+	}()
+	var output bytes.Buffer
+	ready, ticks := false, 0
+	quick := os.Getenv("TRYOMARCHY_UI_ACCOUNT_QUICK") == "1"
+	expected := "personal"
+	choice := "My own username and password (recommended)"
+	if quick {
+		expected, choice = "instant", "Quick start (omarchy / omarchy)"
+	}
+	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		glib.TimeoutAdd(100, func() bool {
+			ticks++
+			var walk func(*gtk.Widget)
+			walk = func(widget *gtk.Widget) {
+				if radio, ok := widget.Object.Cast().(*gtk.CheckButton); ok && radio.Label() == choice && radio.Mapped() && !ready {
+					radio.SetActive(true)
+					if radio.GrabFocus() {
+						if err := os.WriteFile(marker, []byte("ready\n"), 0600); err != nil {
+							t.Error(err)
+						}
+						ready = true
+					}
+				}
+				for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+					walk(gtk.BaseWidget(child))
+				}
+			}
+			walk(&window.Window.Widget)
+			replied := strings.Contains(output.String(), `"event":"reply"`)
+			if replied || ticks == 200 {
+				if !strings.Contains(output.String(), `"value":"`+expected+`"`) || strings.Count(output.String(), `"event":"reply"`) != 1 {
+					t.Errorf("Return did not continue exactly once with %s: %s", expected, output.String())
+				}
+				close(done)
+				return false
+			}
+			return true
+		})
+	})
+}

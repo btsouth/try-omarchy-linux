@@ -119,3 +119,8 @@ First account setup uses grouped native radio choices and Continue. Personal
 account setup is the default; choosing Quick start only sends `instant` when
 Continue is activated. Pending replies disable choices and prevent duplicate
 submission. The underlying account and preference formats are unchanged.
+
+Enter on either account radio continues with the selected choice; arrows and
+Space change the selection. `TestNativeAccountEnter` uses the same external
+keyboard marker as the multiline test; set `TRYOMARCHY_UI_ACCOUNT_QUICK=1`
+to check Quick start, or leave it unset for the personal-account default.

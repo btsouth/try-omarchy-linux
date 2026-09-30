@@ -800,6 +800,22 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			return false
 		})
 		window.AddController(keys)
+		// Radio controls consume Return before GTK reaches the default button.
+		// Within account choices, Enter means Continue; Space/arrows stay native.
+		accountKeys := gtk.NewEventControllerKey()
+		accountKeys.SetPropagationPhase(gtk.PhaseCapture)
+		accountKeys.ConnectKeyPressed(func(keyval, keycode uint, mods gdk.ModifierType) bool {
+			if current.Prompt != "account" || (keyval != gdk.KEY_Return && keyval != gdk.KEY_KP_Enter) || mods&(gdk.ControlMask|gdk.AltMask|gdk.SuperMask|gdk.MetaMask) != 0 {
+				return false
+			}
+			focus := window.Window.Focus()
+			if focus == nil || !gtk.BaseWidget(focus).IsAncestor(accountOptions) {
+				return false
+			}
+			primary.Emit("clicked")
+			return true
+		})
+		window.AddController(accountKeys)
 		settingsValue := func(refresh bool) string {
 			memoryValue, cpuValue := "0", "0"
 			if !autoMemory.Active() {

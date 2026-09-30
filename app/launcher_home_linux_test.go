@@ -57,7 +57,7 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	if state.Headline != "Omarchy is not set up yet." || state.Notice != "" || state.CheckAgain || state.Installed {
 		t.Fatalf("first-run home: %+v", state)
 	}
-	if len(state.Sections) != 1 || state.Sections[0].Heading != "What setup does" {
+	if len(state.Sections) != 2 || state.Sections[0].Heading != "What setup does" {
 		t.Fatalf("setup section: %+v", state.Sections)
 	}
 	rows := map[string]string{}
@@ -451,5 +451,39 @@ func TestTheHomeLoopSendsTheButtonsItDecided(t *testing.T) {
 	actions, menu := linuxHomeActions(bare)
 	if !reflect.DeepEqual(sent.Actions, actions) || !reflect.DeepEqual(sent.Menu, menu) {
 		t.Fatalf("sent %+v / %+v, decided %+v / %+v", sent.Actions, sent.Menu, actions, menu)
+	}
+}
+
+func TestLinuxResourceSummaryIsAnEstimateFromHostSizing(t *testing.T) {
+	text := linuxAutomaticResourcesSummary(hostResources{LogicalCPUs: 12, TotalMiB: 32768, AvailableMiB: 16384})
+	for _, want := range []string{"8 processors", "6.0–8.0 GiB", "estimate", "Checked again at launch"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in %q", want, text)
+		}
+	}
+}
+
+func TestLinuxProfilesRetainManualValues(t *testing.T) {
+	dir := t.TempDir()
+	if err := saveSettings(settingsPath(dir), settings{MemoryMiB: 2048, CPUs: 1}); err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range []string{resourceBalanced, resourceManual} {
+		t.Setenv("TRY_OMARCHY_PROFILE", profile)
+		w := setupWindowFixture(t, "settings-profile")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		result := showLinuxSettingsInWindow(ctx, w, dir, false)
+		cancel()
+		if !strings.Contains(result, "Settings saved") {
+			t.Fatalf("save: %q", result)
+		}
+		prefs, err := loadSettings(settingsPath(dir))
+		if err != nil || prefs.MemoryMiB != 2048 || prefs.CPUs != 1 {
+			t.Fatalf("manual values changed: %+v %v", prefs, err)
+		}
+		resources, err := loadResourcePreferences(dir)
+		if err != nil || resources.Profile != profile {
+			t.Fatalf("profile: %+v %v", resources, err)
+		}
 	}
 }

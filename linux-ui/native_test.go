@@ -35,7 +35,8 @@ func TestNativeFooterAndReply(t *testing.T) {
 		button string
 	}{
 		{state{Prompt: "home", Actions: []action{{Label: "Launch Omarchy", Reply: "launch", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Storage", Rows: []row{{Title: "Location", Detail: strings.Repeat("Long folder/", 30)}}}}, Installed: true}, "Launch Omarchy"},
-		{state{Prompt: "settings", Settings: &settingsForm{CPUMax: 8}}, "Save settings"},
+		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3"}}, "Save settings"},
+		{state{Prompt: "settings", Settings: &settingsForm{ResourceProfile: "manual", CPUMax: 8, Memory: "0", CPUs: "0"}}, "Save settings"},
 		{state{Prompt: "account"}, "Set up my own account"},
 		{state{Prompt: "error", CanRetry: true}, "Try again"},
 		{state{Prompt: "recovery", CanMove: true, CanReset: true, CanCleanMove: true, CanCleanReset: true, CanCleanLeftovers: true}, "Back"},
@@ -55,13 +56,21 @@ func TestNativeFooterAndReply(t *testing.T) {
 				return true
 			}
 			var found *gtk.Button
+			var memory *gtk.SpinButton
+			var autoMemory *gtk.CheckButton
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
-				if !widget.Visible() {
+				if !widget.Visible() && widget.CSSName() != "spinbutton" {
 					return
 				}
 				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
+				}
+				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok && spin.Digits() == 2 {
+					memory = spin
+				}
+				if check, ok := widget.Object.Cast().(*gtk.CheckButton); ok && check.Label() == "Choose memory automatically" {
+					autoMemory = check
 				}
 				if b, ok := widget.Object.Cast().(*gtk.Button); ok {
 					if b.Label() == cases[index].button {
@@ -82,6 +91,19 @@ func TestNativeFooterAndReply(t *testing.T) {
 			}
 			if window.HasCSSClass("try-omarchy") == adw.StyleManagerGetDefault().HighContrast() {
 				t.Error("brand override did not follow high contrast")
+			}
+			if index == 1 && memory != nil && autoMemory != nil {
+				memory.SetValue(8)
+				autoMemory.SetActive(true)
+				if memory.Visible() {
+					t.Error("automatic memory did not hide numeric tuning")
+				}
+			}
+			if index == 2 && memory != nil && autoMemory != nil {
+				autoMemory.SetActive(false)
+				if memory.Value() != 8 || !memory.Visible() {
+					t.Error("device refresh discarded hidden manual memory")
+				}
 			}
 			if index == 0 && found != nil {
 				// Duplicate activation must produce one reply for this request.

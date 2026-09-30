@@ -97,6 +97,11 @@ func TestLinuxSetupHelperProcess(t *testing.T) {
 				value = string(data)
 			}
 			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: value})
+		case "settings-profile":
+			form := *state.Settings
+			form.ResourceProfile = os.Getenv("TRY_OMARCHY_PROFILE")
+			data, _ := json.Marshal(form)
+			json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: string(data)})
 		case "settings-share-save":
 			if state.Prompt != "settings" || state.Settings == nil {
 				os.Exit(3)

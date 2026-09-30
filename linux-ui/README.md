@@ -77,3 +77,11 @@ TRYOMARCHY_UI_TEST=1 go test -tags 'gtk_4_18,adw_1_7' -run Native -v .
 Run these inside an isolated desktop on a test machine. Check smaller windows,
 larger desktop fonts and high contrast as well as the default size. Ordinary
 headless tests explicitly skip native layout checks.
+
+Settings groups resources, storage/shared files, display/keyboard, devices and
+startup into cards. Advanced network settings expand separately. Balanced,
+Maximum performance and Manual use the launcher's existing resource preference
+format; switching profiles retains manual CPU/memory values. Numeric tuning is
+shown for Manual. The Balanced summary is an estimate checked again at launch,
+not a reservation or the running VM's allocation. Device refresh preserves
+unsaved edits and the hidden manual values.

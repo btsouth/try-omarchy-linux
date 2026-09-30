@@ -11,6 +11,7 @@ import (
 type row struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
+	State  string `json:"state,omitempty"`
 }
 
 type section struct {

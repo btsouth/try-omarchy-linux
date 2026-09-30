@@ -40,6 +40,8 @@ type linuxSettingsForm struct {
 	StartAutomatically bool               `json:"startAutomatically"`
 	Share              string             `json:"share"`
 	ShareEnabled       bool               `json:"shareEnabled"`
+	ResourceProfile    string             `json:"resourceProfile"`
+	ResourceSummary    string             `json:"resourceSummary"`
 	CPUMax             int                `json:"cpuMax"`
 	// Only shown on GNOME Wayland, where clipboard sharing needs a permission.
 	ClipboardShare     bool `json:"clipboardShare"`
@@ -93,10 +95,16 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	if err != nil {
 		return "Could not read startup preferences: " + err.Error()
 	}
+	resources, err := loadResourcePreferences(dir)
+	if err != nil {
+		return "Could not read resource preferences: " + err.Error()
+	}
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
 	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
+	form.ResourceProfile = effectiveResourceProfile(resources.Profile, saved.CPUs, saved.MemoryMiB)
+	form.ResourceSummary = linuxAutomaticResourcesSummary(measureHostResources(false))
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
 	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
@@ -127,10 +135,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			return ""
 		}
 		audioLive := form.AudioLive
+		resourceSummary := form.ResourceSummary
 		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
 		cameras := form.Cameras
 		err = json.Unmarshal([]byte(value), form)
 		form.AudioLive = audioLive
+		form.ResourceSummary = resourceSummary
 		form.AudioOutputs, form.AudioInputs = audioOutputs, audioInputs
 		form.Cameras = cameras
 		if err != nil {
@@ -181,6 +191,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err == nil && (len(form.CameraID) > 4096 || strings.ContainsRune(form.CameraID, 0)) {
 			err = fmt.Errorf("invalid camera selection")
 		}
+		if err == nil {
+			err = validateResourceProfile(form.ResourceProfile)
+		}
 		nextAudio := audio
 		nextAudio.Output, nextAudio.Input = form.AudioOutput, form.AudioInput
 		if err == nil {
@@ -212,6 +225,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			}
 			saved.Forwards, saved.SSHKey = next.Forwards, next.SSHKey
 			err = saveSettings(settingsPath(dir), saved)
+			if err == nil && form.ResourceProfile != resources.Profile {
+				err = saveResourcePreferences(dir, form.ResourceProfile)
+				if err == nil {
+					resources.Profile = form.ResourceProfile
+				}
+			}
 			if err == nil && (desktop.MicrophoneDisabled == form.Microphone || desktop.CameraDisabled == form.Camera || desktop.CameraID != form.CameraID) {
 				nextDesktop := desktop
 				nextDesktop.MicrophoneDisabled = !form.Microphone
@@ -277,6 +296,19 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	}
 }
 
+// This is an estimate, not a reservation or the running VM's allocation.
+// Automatic graphics selection can change memory sizing at launch.
+func linuxAutomaticResourcesSummary(host hostResources) string {
+	cpu := pickGuestCPUs(host.LogicalCPUs)
+	low := pickGuestMemMiB(false, host.TotalMiB, host.AvailableMiB)
+	high := pickGuestMemMiB(true, host.TotalMiB, host.AvailableMiB)
+	memory := fmt.Sprintf("%.1f GiB", float64(low)/1024)
+	if high != low {
+		memory = fmt.Sprintf("%.1f–%.1f GiB", float64(min(low, high))/1024, float64(max(low, high))/1024)
+	}
+	return fmt.Sprintf("Automatic estimate now: %d processors, %s memory depending on rendering. Checked again at launch. Manual choices below override each resource.", cpu, memory)
+}
+
 // A desktop launch has no flags. Explicit CLI options keep their historical
 // direct-start behavior, while -launcher lets a script request the home.
 func linuxDirectStart(flags map[string]bool) bool {
@@ -328,6 +360,7 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 		state.Headline = "Omarchy's storage cannot be read."
 		state.Status = "Cannot read virtual machine storage: " + err.Error()
 	}
+	state.Sections = append(state.Sections, linuxSection{Heading: "Integrations", Rows: linuxHomeIntegrationRows(dir)})
 	if err := linuxKVMCheck(); err != nil {
 		state.Notice, state.HelpURL, state.CheckAgain = "KVM is not available.", linuxHelpURL("kvm"), true
 		var kvm *kvmError
@@ -349,6 +382,42 @@ func linuxHomeStateForDir(dir, defaultDir string) (linuxSetupState, string) {
 		}
 	}
 	return state, dir
+}
+
+// Saved choices only: building this card never opens devices or asks portals
+// for permission. Running integration status belongs to the running Settings.
+func linuxHomeIntegrationRows(dir string) []linuxRow {
+	prefs, err := loadSettings(settingsPath(dir))
+	if err != nil {
+		return []linuxRow{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}
+	}
+	resources, resourceErr := loadResourcePreferences(dir)
+	desktop, deviceErr := loadDesktopPreferences(dir)
+	if resourceErr != nil || deviceErr != nil {
+		return []linuxRow{{Title: "Settings", Detail: "Saved device or resource choices could not be read. Open Settings to see the problem.", State: "unavailable"}}
+	}
+	profile := effectiveResourceProfile(resources.Profile, prefs.CPUs, prefs.MemoryMiB)
+	profileName := map[string]string{resourceBalanced: "Balanced", resourceMaximum: "Maximum performance", resourceManual: "Manual"}[profile]
+	rows := []linuxRow{{Title: "Resources", Detail: profileName + " · checked at the next launch", State: "pending"}}
+	share := linuxRow{Title: "Shared folder", Detail: "Not shared", State: "disabled"}
+	if prefs.Share != "" && !prefs.ShareDisabled {
+		share.Detail, share.State = "Shared at the next launch: "+prefs.Share, "enabled"
+	}
+	rows = append(rows, share)
+	for _, device := range []struct {
+		title    string
+		disabled bool
+	}{{"Microphone", desktop.MicrophoneDisabled}, {"Camera", desktop.CameraDisabled}} {
+		r := linuxRow{Title: device.title, Detail: "Access allowed at the next launch", State: "enabled"}
+		if device.disabled {
+			r.Detail, r.State = "Access disabled at the next launch", "disabled"
+		}
+		if device.title == "Camera" && !device.disabled {
+			r.Detail += "; your desktop asks for permission when needed"
+		}
+		rows = append(rows, r)
+	}
+	return rows
 }
 
 // linuxSetupRows is what a first setup will do, in the order it matters:
@@ -467,6 +536,7 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 		case "launch", "customize", "setup":
 			// Check again after a fix that needs no restart, such as loading the
 			// KVM module. The banner keeps saying what is wrong until it is gone.
+			state.Sections = append(state.Sections, linuxSection{Heading: "Integrations", Rows: linuxHomeIntegrationRows(dir)})
 			if err := linuxKVMCheck(); err != nil {
 				status = ""
 				continue

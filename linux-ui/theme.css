@@ -83,5 +83,16 @@ window.try-omarchy .integration-icon { color: #7aa2f7; }
 window.try-omarchy .integration-state { font-size: 0.85em; }
 window.try-omarchy label.integration-state.success { color: #9ece6a; }
 window.try-omarchy .action-footer button.suggested-action { min-width: 9em; }
+/* The forward list is a text view on a card of the same color; frame it like
+   an entry so it reads as a field. */
+window.try-omarchy .settings-card textview {
+  border: 1px solid #414868;
+  border-radius: 6px;
+}
+window.try-omarchy .settings-card textview > text {
+  background: alpha(currentColor, 0.1);
+  border-radius: 6px;
+}
+window.try-omarchy .settings-card textview:focus-within { border-color: #7dcfff; }
 
 window .setting-field > flowboxchild, window .footer-buttons > flowboxchild { padding: 0; }

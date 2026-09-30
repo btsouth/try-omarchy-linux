@@ -78,3 +78,18 @@ func TestSectionsFlattenForTheTerminalFallback(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsTimingNamesWhatAppliesOnSave(t *testing.T) {
+	if got := settingsFooterText(false, false, false); got != "VM settings apply on the next launch." {
+		t.Fatalf("stopped VM: %q", got)
+	}
+	if got := settingsFooterText(true, true, true); !strings.HasSuffix(got, "Audio devices and port forwards apply when saved.") {
+		t.Fatalf("running VM with live audio and forwards: %q", got)
+	}
+	if got := settingsFooterText(true, false, true); !strings.HasSuffix(got, "Port forwards apply when saved.") {
+		t.Fatalf("running VM with live forwards: %q", got)
+	}
+	if forwardsHelpText(true) == forwardsHelpText(false) || !strings.Contains(forwardsHelpText(false), "next launch") {
+		t.Fatalf("forward help does not follow the running VM")
+	}
+}

@@ -15,8 +15,6 @@
   &nbsp;·&nbsp; <a href="docs/LINUX-HELP.md">User guide</a>
 </p>
 
-<p align="center">Preview · Hardware testing in progress</p>
-
 <p align="center">x86_64 · KVM required · Flatpak · Wayland or X11</p>
 
 Try Omarchy runs [Omarchy](https://omarchy.org) in a virtual machine. You can explore its apps, themes, and keyboard-first workflow without replacing your current distro or repartitioning a drive. It is the full Omarchy desktop, not a demo or time-limited trial, and your Omarchy files persist between sessions.
@@ -28,8 +26,10 @@ This is the Linux version of [Try Omarchy for Windows](https://github.com/omacom
 ## Get started
 
 1. **[Download the installer](https://tryomarchy.com/linux.flatpakref)** and open it with **Software**, **Discover** or your distribution's Flatpak installer, then choose **Install**. On Ubuntu or NixOS, complete the setup below first.
-2. **Open Try Omarchy from your application menu.** Choose **Set up Omarchy**, then **Set up my own account** to pick your username and password, or **Quick start as omarchy** to skip that and sign in as `omarchy` with the password `omarchy`. Setup then downloads Omarchy (about 2 GB). **Customize** lets you choose another folder first.
+2. **Open Try Omarchy from your application menu.** Choose **Set up Omarchy**, then **My own username and password** to create your account on Omarchy's first screen, or **Quick start** to sign in as `omarchy` with the password `omarchy`. Setup then downloads Omarchy (about 2 GB). **Choose location...** lets you pick another folder first.
 3. **Start exploring.** **Super+Space** opens Omarchy's menu. **Ctrl+Alt+G** gives your keyboard back to your Linux desktop, and **Ctrl+Alt+F** switches fullscreen.
+
+<img src="docs/images/try-omarchy-linux-launcher.png" width="560" alt="The Try Omarchy launcher on Linux, ready to set up Omarchy">
 
 <details>
 <summary>Ubuntu setup</summary>
@@ -94,29 +94,26 @@ Answer no if Flatpak offers to delete the app's data. Then install the new relea
 - **Move between your desktop and Omarchy.** Share text, images, and files through the clipboard, drop files into Omarchy, and pick a shared folder. On GNOME, Try Omarchy explains the clipboard permission before GNOME asks, and Settings can turn sharing on or off later.
 - **Keep your shortcuts straight.** While the Omarchy window is focused, Super and the rest of your keyboard go to Omarchy. Ctrl+Alt+G gives the keyboard back to your desktop until you click the window again.
 - **Keep your work.** The guest disk persists. Back it up, restore a backup as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app.
-- **Make it yours.** Choose memory, processors, rendering, fullscreen launch, and microphone access in Settings.
+- **Make it yours.** Choose memory, processors, rendering, fullscreen launch, audio and camera devices, and SSH and port forwards in Settings.
 
 The Flatpak does not get access to your home folder. Folders and files reach the app through the desktop's file chooser and document portal.
 
-## Preview limits
+## Current limits
 
 Touchpad gestures, bridged/LAN networking, USB passthrough, opening host apps from
-the guest, and host biometric authentication are outside the first Linux release.
-Preview 5 switches playback and microphone devices from Settings while Omarchy
-runs. Camera capture uses the desktop's camera permission portal, only while an
-app inside Omarchy opens the camera.
-Camera selection, camera access and microphone access changes require shutting
-down Omarchy and launching it again. Networking uses NAT with local SSH and port forwarding.
-
-Real GPU, audio, microphone, battery, suspend/resume and monitor behavior still
-need reports from hardware testers. Isolated desktop VM tests do not establish
-hardware support. See the [hardware testing checklist](docs/LINUX-HARDWARE-TESTING.md).
+the guest, and host biometric authentication are not in the Linux app yet.
+Playback and microphone devices and local port forwards change from Settings
+while Omarchy runs. Camera capture uses the desktop's camera permission portal,
+only while an app inside Omarchy opens the camera.
+Camera selection, camera access, microphone access and SSH changes require
+shutting down Omarchy and launching it again. Networking uses NAT with local SSH
+and port forwarding.
 
 ## Before you start
 
 - You need a **64-bit x86 PC** with hardware virtualization enabled and access to `/dev/kvm`. ARM64 is not supported.
 - The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu and NixOS instructions are above.
-- Tested end to end on fresh **Ubuntu 24.04, Fedora 44, Linux Mint 22.3 and NixOS 26.05** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds. Omarchy/Hyprland hosts and more physical hardware still need testing.
+- Tested end to end on fresh **Ubuntu 24.04, Fedora 44, Linux Mint 22.3 and NixOS 26.05** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds.
 - A user reported it working on **Debian testing (forky) with COSMIC** on Wayland, installed as a `--user` Flatpak through COSMIC Store on an Intel i3-8130U laptop with UHD 620 graphics and 16 GB of RAM. See [reports so far](docs/LINUX-HARDWARE-TESTING.md#reports-so-far).
 - Keep about **15 GB free** for Omarchy and its runtime. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GB disk, but only what it uses takes space.
 

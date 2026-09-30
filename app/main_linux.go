@@ -270,6 +270,9 @@ func main() {
 		fatal("%v.", err)
 	}
 	cfg.forwards = forwards
+	cfg.launchForwards = append([]portForward(nil), cfg.forwards...)
+	// Command-line -forward and -ssh replace the saved list for this launch.
+	startLinuxLiveForwards(cfg.launchForwards, !explicitFlags["forward"] && !explicitFlags["ssh"])
 	if len(userSettings.ForwardAdapters) > 0 {
 		logf("LAN forwarding is not available on Linux yet; forwarding on loopback only")
 	}

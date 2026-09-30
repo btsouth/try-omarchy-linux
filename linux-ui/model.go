@@ -123,13 +123,26 @@ func sectionsText(sections []section) string {
 }
 
 // settingsFooterText keeps operation timing visible without repeating row help.
-func settingsFooterText(running, audioLive bool) string {
+func settingsFooterText(running, audioLive, forwardsLive bool) string {
 	text := "VM settings apply on the next launch."
 	if running {
 		text = "Shut down Omarchy and launch again to apply VM settings."
 	}
-	if audioLive {
+	switch {
+	case audioLive && forwardsLive:
+		text += " Audio devices and port forwards apply when saved."
+	case audioLive:
 		text += " Audio device choices apply when saved."
+	case forwardsLive:
+		text += " Port forwards apply when saved."
 	}
 	return text
+}
+
+// forwardsHelpText says when edits to the forward list reach the VM.
+func forwardsHelpText(live bool) string {
+	if live {
+		return "Each forward opens a port on 127.0.0.1. Changes apply when you save."
+	}
+	return "Each forward opens a port on 127.0.0.1. Changes apply on the next launch."
 }

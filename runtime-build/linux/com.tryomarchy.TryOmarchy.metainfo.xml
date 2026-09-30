@@ -35,6 +35,10 @@
       <image>https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux-desktop.jpg</image>
     </screenshot>
     <screenshot>
+      <caption>Set up Omarchy from the Try Omarchy launcher</caption>
+      <image>https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux-launcher.png</image>
+    </screenshot>
+    <screenshot>
       <caption>Meet Try Omarchy for Linux</caption>
       <video codec="vp9" container="webm" width="1280" height="720">https://raw.githubusercontent.com/btsouth/try-omarchy-linux/master/docs/images/try-omarchy-linux.webm</video>
     </screenshot>
@@ -45,6 +49,18 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.0" date="2026-09-30" type="stable">
+      <description>
+        <p>First release of Try Omarchy for Linux.</p>
+        <ul>
+          <li>The launcher now matches Try Omarchy for Mac and Windows, with Settings grouped into General, Devices and Advanced pages</li>
+          <li>Local port forwards change when you save Settings while Omarchy runs</li>
+          <li>Backups keep the window responsive, and a slow first account setup no longer shows as a failure</li>
+          <li>Stopping Omarchy while it starts shuts it down cleanly</li>
+          <li>The home screen shows the shared folder's name</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0~preview.5" date="2026-09-29" type="development">
       <description>
         <p>Fifth preview.</p>

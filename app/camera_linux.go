@@ -5,18 +5,86 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"time"
 )
+
+func linuxCameraSocketPath() (string, error) {
+	dir, err := qmpControlDirectory()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "camera.sock")
+	if !filepath.IsAbs(path) || len([]byte(path)) > 103 {
+		return "", fmt.Errorf("private camera connection path is too long or is not absolute")
+	}
+	return path, nil
+}
+
+func listenLinuxCamera() (net.Listener, error) {
+	path, err := linuxCameraSocketPath()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(path)
+	if err = validateMovePath(dir); err != nil {
+		return nil, err
+	}
+	if err = os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	if err = os.Chmod(dir, 0700); err != nil {
+		return nil, err
+	}
+	if info, statErr := os.Lstat(path); statErr == nil {
+		if info.Mode()&os.ModeSocket == 0 {
+			return nil, fmt.Errorf("private camera path contains another file")
+		}
+		conn, dialErr := net.DialTimeout("unix", path, 300*time.Millisecond)
+		if dialErr == nil {
+			conn.Close()
+			return nil, fmt.Errorf("another Omarchy runtime owns the camera connection")
+		}
+		if !qmpConnectionRefused(dialErr) && !os.IsNotExist(dialErr) {
+			return nil, dialErr
+		}
+		if err = os.Remove(path); err != nil {
+			return nil, err
+		}
+	} else if !os.IsNotExist(statErr) {
+		return nil, statErr
+	}
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	if err = os.Chmod(path, 0600); err != nil {
+		listener.Close()
+		return nil, err
+	}
+	return listener, nil
+}
+
+// The private filesystem socket cannot be reached through another VM's
+// loopback network, or by other users on this host.
+func cameraChardev(dir string) string {
+	return "socket,id=cam0,path=" + qemuOptionValue(filepath.Join(dir, "camera.sock")) + ",reconnect-ms=1000"
+}
 
 // runCameraBridge answers QEMU's camera channel. The port has to be open
 // before QEMU starts even without camera capture: QEMU 11.1 aborts at startup
 // when a reconnecting client chardev finds nothing listening. Guest capture
-// requests get the unavailable source's error.
-func runCameraBridge(desktopPreferences) {
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", cameraPort))
-	if err != nil {
-		fatal("Try Omarchy camera port %d is in use.", cameraPort)
+// requests start capture through the desktop camera portal.
+func runCameraBridge(preferences desktopPreferences) {
+	if preferences.CameraDisabled {
+		cameraState.Store("Camera access is off. Enable it in Settings and launch Omarchy again.")
 	}
-	logf("camera: bridge listening on %d (no capture on Linux yet)", cameraPort)
+	listener, err := listenLinuxCamera()
+	if err != nil {
+		fatal("Could not prepare the private camera connection: %v", err)
+	}
+	logf("camera: bridge listening on its private connection")
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -26,7 +94,7 @@ func runCameraBridge(desktopPreferences) {
 			}
 			go func() {
 				defer conn.Close()
-				if err := serveCamera(conn, newCameraFrameSource()); err != nil {
+				if err := serveCamera(conn, configuredCameraSource(preferences)); err != nil {
 					logf("camera: %v", err)
 				}
 			}()

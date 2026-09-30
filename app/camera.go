@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -38,6 +39,13 @@ const (
 type cameraFrameSource interface {
 	start() (<-chan []byte, error)
 	stop()
+}
+
+// Linux permission prompts can remain open while the guest closes its camera.
+// Keep those starts cancellable without changing the Windows capture backend.
+type contextCameraFrameSource interface {
+	cameraFrameSource
+	startContext(context.Context) (<-chan []byte, error)
 }
 
 func cameraHeader(kind uint8, length int, sequence uint32) []byte {
@@ -131,7 +139,35 @@ func serveCamera(conn net.Conn, source cameraFrameSource) error {
 	}()
 
 	var frames <-chan []byte
+	type startResult struct {
+		frames <-chan []byte
+		err    error
+	}
+	var pending <-chan startResult
+	var startCtx context.Context
+	var cancelStart context.CancelFunc
+	var restartPending bool
+	begin := func(source contextCameraFrameSource) {
+		startCtx, cancelStart = context.WithCancel(context.Background())
+		ctx := startCtx
+		results := make(chan startResult)
+		pending = results
+		go func() {
+			stream, err := source.startContext(ctx)
+			select {
+			case results <- startResult{stream, err}:
+			case <-done:
+				if stream != nil {
+					source.stop()
+				}
+			}
+		}()
+	}
 	stop := func() {
+		restartPending = false
+		if cancelStart != nil {
+			cancelStart()
+		}
 		if frames != nil {
 			source.stop()
 			frames = nil
@@ -151,7 +187,15 @@ func serveCamera(conn net.Conn, source cameraFrameSource) error {
 			}
 			switch control.Type {
 			case "start":
+				if pending != nil {
+					restartPending = startCtx.Err() != nil
+					continue
+				}
 				if frames != nil {
+					continue
+				}
+				if contextual, ok := source.(contextCameraFrameSource); ok {
+					begin(contextual)
 					continue
 				}
 				stream, err := source.start()
@@ -167,6 +211,31 @@ func serveCamera(conn net.Conn, source cameraFrameSource) error {
 				stop()
 				_ = connection.frame(cameraBlackFrame())
 				_ = connection.status(map[string]any{"status": "idle"})
+			}
+		case result := <-pending:
+			pending = nil
+			if startCtx.Err() != nil {
+				if result.frames != nil {
+					source.stop()
+				}
+				if restartPending {
+					restartPending = false
+					begin(source.(contextCameraFrameSource))
+				}
+				continue
+			}
+			if result.err != nil {
+				cancelStart()
+				cameraState.Store(result.err.Error())
+				if err := connection.status(map[string]any{"status": "unavailable", "reason": result.err.Error()}); err != nil {
+					return err
+				}
+				continue
+			}
+			frames = result.frames
+			cameraState.Store("Camera in use by an application inside Omarchy.")
+			if err := connection.status(map[string]any{"status": "streaming", "name": "Host Camera"}); err != nil {
+				return err
 			}
 		case frame, ok := <-frames:
 			if !ok {

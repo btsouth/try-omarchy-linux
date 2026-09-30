@@ -38,9 +38,20 @@ jobs:
           python3 runtime-build/validate-lock.py
           bash -n runtime-build/*.sh
 
+      - name: Test Linux camera frame packing
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          cc -Wall -Wextra -Wno-unused-parameter runtime-build/linux/test-camera-capture.c -o /tmp/test-camera-capture $(pkg-config --cflags --libs gstreamer-app-1.0 gstreamer-video-1.0)
+          /tmp/test-camera-capture
+
       - name: Test launcher
         working-directory: app
         run: go test -race ./...
+
+      - name: Test Linux camera permission requests
+        working-directory: app
+        run: TRYOMARCHY_TEST_PRIVATE_BUS=1 dbus-run-session -- go test -race -run '^TestLinuxCameraPortalPrivateBus$' .
 
       - name: Vet launcher
         working-directory: app

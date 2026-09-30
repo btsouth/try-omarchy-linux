@@ -199,6 +199,10 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 	defer leaseTicker.Stop()
 	shutdownRetry := time.NewTicker(linuxShutdownRetryInterval)
 	defer shutdownRetry.Stop()
+	var startupStop <-chan struct{}
+	if desktopTimedOut {
+		startupStop = setupCancelWake
+	}
 	graphicsWarningShown := false
 	imageConfirmed := false
 	defer func() { visibility.visible = false; sendLinuxVisibility(visibility) }()
@@ -215,6 +219,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				go showLinuxSessionTips(cfg.instant)
 			}
 			desktopTimedOut = false
+			startupStop = nil
 		}
 		select {
 		case <-exited:
@@ -288,6 +293,13 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			if confirmed && interrupts == 0 {
 				requestLinuxShutdown(qmp, proc, &interrupts)
 			}
+		case <-startupStop:
+			startupStop = nil
+			confirmation.close()
+			if interrupts == 0 {
+				requestLinuxShutdown(qmp, proc, &interrupts)
+			}
+			getUI().finish()
 		case <-stop:
 			logf("interrupt")
 			requestLinuxShutdown(qmp, proc, &interrupts)

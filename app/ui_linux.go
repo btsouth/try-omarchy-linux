@@ -159,7 +159,6 @@ func (u *progressUI) showDesktopTimeout(message string) {
 	defer u.mu.Unlock()
 	u.state = linuxSetupState{Status: "Waiting for the Omarchy desktop", Detail: message, Booting: true}
 	if u.window != nil {
-		u.window.expected.Store(true)
 		u.window.update(u.state)
 	}
 	logf("%s", message)

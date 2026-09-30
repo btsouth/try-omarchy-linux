@@ -266,3 +266,52 @@ func TestLinuxDesktopWaitConfirmsEarlyWindowClose(t *testing.T) {
 		})
 	}
 }
+
+func TestLinuxStopAfterDesktopTimeoutRequestsShutdown(t *testing.T) {
+	configureSetupCancellation(false)
+	defer configureSetupCancellation(false)
+	oldGUI := linuxGUIEnabled
+	linuxGUIEnabled = false
+	defer func() { linuxGUIEnabled = oldGUI }()
+	oldDesktop := desktopReady.Load()
+	desktopReady.Store(false)
+	defer desktopReady.Store(oldDesktop)
+	oldUI := linuxUI
+	linuxUI = newLinuxProgressUI()
+	defer func() { linuxUI = oldUI }()
+	qmp, peer := testQMPStream(t)
+	commands := make(chan string, 2)
+	go func() {
+		scanner := bufio.NewScanner(peer)
+		for scanner.Scan() {
+			commands <- scanner.Text()
+		}
+	}()
+	exited := make(chan error, 1)
+	done := make(chan struct{})
+	go func() {
+		watchLinux(&config{}, qmp, &exec.Cmd{}, exited, make(chan os.Signal), nil,
+			&linuxVisibility{}, 0, newLinuxShutdownConfirmation(nil), true)
+		close(done)
+	}()
+	requestSetupCancel()
+	select {
+	case command := <-commands:
+		if !strings.Contains(command, "system_powerdown") || strings.Contains(command, "quit") {
+			t.Fatalf("Stop must request clean guest shutdown: %s", command)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop after desktop timeout did not reach QEMU")
+	}
+	exited <- nil
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("supervisor did not finish")
+	}
+	select {
+	case command := <-commands:
+		t.Fatalf("duplicate shutdown: %s", command)
+	default:
+	}
+}

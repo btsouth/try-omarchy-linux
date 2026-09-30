@@ -54,10 +54,41 @@ func TestLinuxMicrophoneRetryHelper(t *testing.T) {
 			panic("Save did not finish after retry")
 		}
 		form := *state.Settings
-		form.Microphone = !wantDisabled
+		if os.Getenv("TRY_OMARCHY_CAMERA_RETRY") == "1" {
+			form.Camera = !wantDisabled
+		} else {
+			form.Microphone = !wantDisabled
+		}
 		value, err := json.Marshal(form)
 		fail(err)
 		fail(json.NewEncoder(os.Stdout).Encode(linuxSetupReply{Event: "reply", Request: state.Request, Value: string(value)}))
+	}
+}
+
+func TestLinuxCameraSaveRetryPersistsChoice(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		dir := t.TempDir()
+		before := desktopPreferences{CameraDisabled: !disabled, MicrophoneDisabled: true, CameraID: "saved-camera", AutomaticUpdatesDisabled: true}
+		if err := saveDesktopPreferences(dir, before); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^TestLinuxMicrophoneRetryHelper$")
+		cmd.Env = append(os.Environ(), "TRY_OMARCHY_MIC_RETRY_DIR="+dir, "TRY_OMARCHY_CAMERA_RETRY=1", fmt.Sprintf("TRY_OMARCHY_MIC_RETRY_DISABLED=%t", disabled))
+		w := launchLinuxWindow(cmd, func() {})
+		if w == nil {
+			t.Fatal("retry helper did not start")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		feedback := showLinuxSettingsInWindow(ctx, w, dir, false)
+		cancel()
+		w.stop()
+		if !strings.Contains(feedback, "Settings saved") {
+			t.Fatalf("camera save: %s", feedback)
+		}
+		after, err := loadDesktopPreferences(dir)
+		if err != nil || after.CameraDisabled != disabled || after.MicrophoneDisabled != before.MicrophoneDisabled || after.CameraID != before.CameraID || after.AutomaticUpdatesDisabled != before.AutomaticUpdatesDisabled {
+			t.Fatalf("camera retry changed preferences: %+v %v", after, err)
+		}
 	}
 }
 

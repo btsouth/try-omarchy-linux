@@ -253,7 +253,7 @@ func TestBuildQemuArgsUsesReconnectMSForTheCameraChardev(t *testing.T) {
 	if strings.Contains(args, "reconnect=") {
 		t.Fatalf("camera chardev uses the removed reconnect option: %s", args)
 	}
-	want := fmt.Sprintf("socket,id=cam0,host=127.0.0.1,port=%d,reconnect-ms=1000", cameraPort)
+	want := "socket,id=cam0,path=camera.sock,reconnect-ms=1000"
 	if !strings.Contains(args, want) {
 		t.Fatalf("camera chardev missing %q: %s", want, args)
 	}

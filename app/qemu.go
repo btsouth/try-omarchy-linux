@@ -109,8 +109,7 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		"-device", "virtio-net-pci,netdev=n0", "-netdev", netdevArg(cfg.forwards),
 		"-device", "virtio-rng-pci",
 		// The camera bridge needs a bulk channel the host can write without
-		// going through slirp. The launcher listens on loopback (as it does
-		// for the clipboard and transfer ports) and QEMU connects to it, with
+		// going through slirp. The launcher listens and QEMU connects, with
 		// reconnect so QEMU rejoins if the launcher restarts. The guest reads
 		// the virtio port named dev.tryomarchy.camera.
 		//
@@ -119,7 +118,7 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		// bundled WINQ-EMU build and the QEMU 11 stock fallback) rejects it
 		// with "Invalid parameter 'reconnect'", which killed QEMU at startup
 		// before the guest ever booted.
-		"-chardev", fmt.Sprintf("socket,id=cam0,host=127.0.0.1,port=%d,reconnect-ms=1000", cameraPort),
+		"-chardev", cameraChardev(cfg.qmpDir),
 		"-device", "virtio-serial-pci,id=virtioserial0",
 		"-device", "virtserialport,chardev=cam0,name=dev.tryomarchy.camera",
 		// Root-only in the guest. The host sends only bounded responses to a

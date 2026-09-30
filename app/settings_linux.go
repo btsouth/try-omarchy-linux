@@ -21,6 +21,9 @@ type linuxSettingsForm struct {
 	Render             string             `json:"render"`
 	Fullscreen         bool               `json:"fullscreen"`
 	Microphone         bool               `json:"microphone"`
+	Camera             bool               `json:"camera"`
+	CameraID           string             `json:"cameraID"`
+	Cameras            []linuxAudioDevice `json:"cameras,omitempty"`
 	AudioOutput        string             `json:"audioOutput"`
 	AudioInput         string             `json:"audioInput"`
 	AudioOutputs       []linuxAudioDevice `json:"audioOutputs,omitempty"`
@@ -91,8 +94,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		return "Could not read startup preferences: " + err.Error()
 	}
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
+	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
-	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
+	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
 	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
@@ -102,13 +106,17 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	if running {
 		status = "Changes require shutting down Omarchy and launching it again. A guest reboot does not apply host settings."
 		if form.AudioLive {
-			status = "Audio device choices apply when you save. Microphone access and other changes need a shutdown and launch."
+			status = "Audio device choices apply when you save. Microphone access, camera settings and other changes need a shutdown and launch."
 		}
 	}
 	if audioListErr != nil {
 		status += " Audio devices could not be listed. System default remains available."
 	}
+	if cameraListErr != nil {
+		status += " Camera devices could not be listed. Automatic selection remains available."
+	}
 	if running {
+		status += "\n\nCamera: " + cameraStatusText()
 		if clipboardStatus, ok := linuxClipboardStatus.Load().(string); ok && clipboardStatus != "" {
 			status += "\n\nClipboard: " + clipboardStatus
 		}
@@ -120,9 +128,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		}
 		audioLive := form.AudioLive
 		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
+		cameras := form.Cameras
 		err = json.Unmarshal([]byte(value), form)
 		form.AudioLive = audioLive
 		form.AudioOutputs, form.AudioInputs = audioOutputs, audioInputs
+		form.Cameras = cameras
 		if err != nil {
 			status = "Could not read the settings."
 			continue
@@ -130,9 +140,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if form.RefreshAudio {
 			form.RefreshAudio = false
 			form.AudioOutputs, form.AudioInputs, err = listLinuxAudioDevices()
-			status = "Audio devices refreshed. Your changes have not been saved."
-			if err != nil {
-				status = "Audio devices could not be listed. Your changes have not been saved."
+			var cameraErr error
+			form.Cameras, cameraErr = listLinuxCameraDevices()
+			status = "Devices refreshed. Your changes have not been saved."
+			if err != nil || cameraErr != nil {
+				status = "Some devices could not be listed. Your changes have not been saved."
 			}
 			continue
 		}
@@ -166,6 +178,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err == nil && form.Share != "" && form.Share != saved.Share {
 			next.Share, err = validateLinuxSharedFolder(form.Share, dir)
 		}
+		if err == nil && (len(form.CameraID) > 4096 || strings.ContainsRune(form.CameraID, 0)) {
+			err = fmt.Errorf("invalid camera selection")
+		}
 		nextAudio := audio
 		nextAudio.Output, nextAudio.Input = form.AudioOutput, form.AudioInput
 		if err == nil {
@@ -197,9 +212,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			}
 			saved.Forwards, saved.SSHKey = next.Forwards, next.SSHKey
 			err = saveSettings(settingsPath(dir), saved)
-			if err == nil && desktop.MicrophoneDisabled == form.Microphone {
+			if err == nil && (desktop.MicrophoneDisabled == form.Microphone || desktop.CameraDisabled == form.Camera || desktop.CameraID != form.CameraID) {
 				nextDesktop := desktop
 				nextDesktop.MicrophoneDisabled = !form.Microphone
+				nextDesktop.CameraDisabled = !form.Camera
+				nextDesktop.CameraID = form.CameraID
 				err = saveDesktopPreferences(dir, nextDesktop)
 				if err == nil {
 					desktop = nextDesktop
@@ -249,7 +266,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			if running {
 				message := "Settings saved. Shut down Omarchy and launch it again to apply them. A guest reboot does not restart the VM."
 				if form.AudioLive {
-					message = "Audio device choices applied. Microphone access and other settings apply after shutting down Omarchy and launching it again."
+					message = "Audio device choices applied. Microphone access, camera settings and other settings apply after shutting down Omarchy and launching it again."
 				}
 				w.ask(ctx, linuxSetupState{Prompt: "settings-saved", Status: message})
 				return message

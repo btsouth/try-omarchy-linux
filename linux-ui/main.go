@@ -71,6 +71,9 @@ type settingsForm struct {
 	Render             string        `json:"render"`
 	Fullscreen         bool          `json:"fullscreen"`
 	Microphone         bool          `json:"microphone"`
+	Camera             bool          `json:"camera"`
+	CameraID           string        `json:"cameraID"`
+	Cameras            []audioDevice `json:"cameras"`
 	AudioOutput        string        `json:"audioOutput"`
 	AudioInput         string        `json:"audioInput"`
 	AudioOutputs       []audioDevice `json:"audioOutputs"`
@@ -371,6 +374,14 @@ func main() {
 		formHelp("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
 		microphone := gtk.NewCheckButtonWithLabel("Allow microphone access")
 		form.Append(microphone)
+		camera := gtk.NewCheckButtonWithLabel("Allow camera access")
+		form.Append(camera)
+		formLabel("Camera")
+		cameraChoice := gtk.NewDropDownFromStrings([]string{"Automatic"})
+		named(cameraChoice, "Camera")
+		form.Append(cameraChoice)
+		cameraNames := []string{""}
+		formHelp("Your desktop asks for camera permission when an app inside Omarchy first opens the camera. Capture stops when that app closes it. Access changes apply after shutting down Omarchy and launching it again.")
 		formLabel("Audio output")
 		audioOutput := gtk.NewDropDownFromStrings([]string{"System default"})
 		named(audioOutput, "Audio output")
@@ -380,7 +391,7 @@ func main() {
 		named(audioInput, "Audio input")
 		form.Append(audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
-		audioRefresh := gtk.NewButtonWithLabel("Refresh audio devices")
+		audioRefresh := gtk.NewButtonWithLabel("Refresh devices")
 		form.Append(audioRefresh)
 		audioHelp := formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
 		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
@@ -606,7 +617,7 @@ func main() {
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
+			data, _ := json.Marshal(settingsForm{RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: share.Text(), ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
@@ -959,6 +970,11 @@ func main() {
 							}
 							fullscreen.SetActive(next.Settings.Fullscreen)
 							microphone.SetActive(next.Settings.Microphone)
+							camera.SetActive(next.Settings.Camera)
+							cameraLabels, names, index := namedChoices("Automatic", "Unavailable: ", next.Settings.Cameras, next.Settings.CameraID)
+							cameraNames = names
+							cameraChoice.SetModel(gtk.NewStringList(cameraLabels))
+							cameraChoice.SetSelected(index)
 							diskCapacity, _ := strconv.Atoi(next.Settings.DiskGiB)
 							standardDisk.SetActive(diskCapacity == 0)
 							diskGiB.SetValue(float64(max(diskCapacity, 24)))

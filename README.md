@@ -104,7 +104,10 @@ Camera capture, live audio route switching, touchpad gestures, bridged/LAN netwo
 USB passthrough, opening host apps from the guest, and host biometric authentication
 are outside the first Linux release. The published preview 4 requires stopping and starting the VM to change audio
 routes. Development builds switch playback and microphone devices from Settings
-while Omarchy runs; microphone permission changes still require a new launch. Networking uses NAT with local SSH and port forwarding.
+while Omarchy runs. Development builds also capture cameras through the desktop
+camera permission portal, only while an app inside Omarchy opens the camera.
+Camera selection, camera access and microphone access changes require shutting
+down Omarchy and launching it again. Networking uses NAT with local SSH and port forwarding.
 
 Real GPU, audio, microphone, battery, suspend/resume and monitor behavior still
 need reports from hardware testers. Isolated desktop VM tests do not establish

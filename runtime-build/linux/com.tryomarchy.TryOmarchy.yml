@@ -65,6 +65,15 @@ modules:
       - type: file
         path: clipboard-capabilities.c
 
+  - name: camera-capture
+    buildsystem: simple
+    build-commands:
+      - cc -Wall -Wextra -Wno-unused-parameter camera-capture.c -o try-omarchy-camera $(pkg-config --cflags --libs gstreamer-app-1.0 gstreamer-video-1.0)
+      - install -Dm755 try-omarchy-camera /app/bin/try-omarchy-camera
+    sources:
+      - type: file
+        path: camera-capture.c
+
   - name: libslirp
     buildsystem: meson
     sources:

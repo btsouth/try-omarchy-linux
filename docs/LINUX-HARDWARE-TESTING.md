@@ -49,12 +49,36 @@ checking it. With a USB headset and the built-in speakers and microphone:
 2. Switch back and select System default. Change your desktop's default device
    and confirm Omarchy follows it without changing other apps' routes.
 3. Unplug and reconnect the selected headset. Check fallback and recovery;
-   **Refresh audio devices** updates the list without saving other edits.
+   **Refresh devices** updates the list without saving other edits.
 4. Shut down and launch again. Confirm the device choices are kept. Start with
    microphone access disabled and confirm selecting an input cannot enable it.
 
 Virtual PipeWire nodes can check routing and disconnection behavior, but do not
 establish physical playback or recording acceptance.
+
+## Cameras in development builds
+
+Camera capture is not in published preview 4. Use a disposable guest and record
+the candidate bundle hash. Your desktop must expose the camera through PipeWire
+and provide the camera permission portal.
+
+1. In Settings, enable camera access and choose Automatic or a specific camera.
+   Shut down Omarchy and launch it again. Selecting a camera does not open it.
+2. Open a camera app inside Omarchy and grant the desktop permission prompt.
+   Confirm moving video appears. Close the guest camera app and confirm the
+   camera indicator turns off. Repeat to check that capture restarts.
+3. Decline camera permission and check the Camera status in Settings. Reopen the
+   guest camera app and confirm access can be requested again.
+4. Disable camera access, shut down and launch again. Open the guest camera and
+   confirm no permission request or physical capture occurs.
+5. Select a specific camera, disconnect it, and open the guest camera. Capture
+   must stay unavailable instead of switching to another camera. Reconnect the
+   selected camera and reopen the guest camera app.
+
+The current guest image labels its virtual camera **Windows Camera** at
+`/dev/video42`; development Linux capture uses that existing camera bridge.
+Virtual video sources check the capture pipeline but do not establish physical
+webcam acceptance.
 
 ## Reports so far
 

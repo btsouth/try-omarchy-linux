@@ -68,6 +68,12 @@ func TestNativeFooterAndReply(t *testing.T) {
 				if widget.CSSName() == "flowboxchild" && widget.Focusable() {
 					t.Error("secondary action wrapper adds an inactive keyboard focus stop")
 				}
+				if scroller, ok := widget.Object.Cast().(*gtk.ScrolledWindow); ok {
+					adjustment := scroller.HAdjustment()
+					if adjustment.Upper()-adjustment.PageSize() > 1 {
+						t.Errorf("%s: content requires horizontal scrolling (%.0f > %.0f)", cases[index].state.Prompt, adjustment.Upper(), adjustment.PageSize())
+					}
+				}
 				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok && spin.Digits() == 2 {
 					memory = spin
 				}

@@ -150,6 +150,9 @@ func TestLinuxLiveForwardsChangeLocalForwardsAndRetryFailures(t *testing.T) {
 	if !change.changed || len(change.deferred) != 2 {
 		t.Fatalf("change: %+v", change)
 	}
+	if notice := linuxForwardFailureNotice(change); !strings.Contains(notice, "some applied") {
+		t.Fatalf("partial live update was hidden: %q", notice)
+	}
 	want := []string{"hostfwd_remove n0 udp:127.0.0.1:5353", "hostfwd_add n0 tcp:127.0.0.1:9090-:90", "hostfwd_add n0 tcp:127.0.0.1:9091-:91"}
 	if got := monitor.take(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("monitor commands:\n got %q\nwant %q", got, want)
@@ -257,7 +260,13 @@ func TestLinuxLiveForwardSettingsHelper(t *testing.T) {
 			}
 			form.Forwards = "tcp:" + os.Getenv("TRY_OMARCHY_LIVE_FORWARD_NEW") + ":80"
 		default:
-			panic("forward save did not finish")
+			// Another process can claim a released ephemeral port before
+			// Settings validates it. Retry a fresh port, with its listener
+			// closed so the test does not make its own validation fail.
+			if count > 8 || !strings.Contains(state.Status, "cannot open TCP") {
+				panic("forward save did not finish: " + state.Status)
+			}
+			form.Forwards = fmt.Sprintf("tcp:%d:80", freeLoopbackPort(t))
 		}
 		value, err := json.Marshal(form)
 		fail(err)
@@ -295,16 +304,23 @@ func TestLinuxRunningSettingsApplyPortForwards(t *testing.T) {
 	if !strings.HasPrefix(message, "Port forwards applied.") || strings.Contains(message, "SSH changes") {
 		t.Fatalf("saved message: %q", message)
 	}
-	want := []string{fmt.Sprintf("hostfwd_remove n0 tcp:127.0.0.1:%d", oldPort), fmt.Sprintf("hostfwd_add n0 tcp:127.0.0.1:%d-:80", newPort)}
-	if got := monitor.take(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("monitor commands:\n got %q\nwant %q", got, want)
-	}
 	after, err := loadSettings(settingsPath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(after.Forwards, " "); got != fmt.Sprintf("tcp:%d:80 tcp:%d:22", newPort, sshPort) {
-		t.Fatalf("saved forwards: %q", got)
+	if len(after.Forwards) != 2 {
+		t.Fatalf("saved forwards: %q", after.Forwards)
+	}
+	applied, err := parseForward(after.Forwards[0])
+	if err != nil || applied.guestPort != 80 || applied.hostPort == oldPort || applied.hostPort == busy.Addr().(*net.TCPAddr).Port {
+		t.Fatalf("saved replacement: %+v %v", applied, err)
+	}
+	if after.Forwards[1] != fmt.Sprintf("tcp:%d:22", sshPort) {
+		t.Fatalf("SSH forward changed: %q", after.Forwards)
+	}
+	want := []string{fmt.Sprintf("hostfwd_remove n0 tcp:127.0.0.1:%d", oldPort), fmt.Sprintf("hostfwd_add n0 tcp:127.0.0.1:%d-:80", applied.hostPort)}
+	if got := monitor.take(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("monitor commands:\n got %q\nwant %q", got, want)
 	}
 }
 

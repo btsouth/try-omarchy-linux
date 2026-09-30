@@ -26,7 +26,7 @@ Pages. It serves the Linux page and a copy of the `.flatpakref` at
 `/linux.flatpakref`, which must match the one `publish-repo.sh` writes.
 
 App versions and guest images are separate. App releases are tagged
-`linux-app-vX.Y.Z` (previews add `-preview.N`) and carry the Flatpak. Guest
+`linux-app-vX.Y.Z` and carry the Flatpak. Guest
 images are tagged `linux-vX.Y.Z`, and each app version pins exactly one of them
 in `app/linux_release_linux.go`. A new app version with a newer pin downloads
 the new guest at the next launch and rolls back to the previous one if it does
@@ -45,8 +45,8 @@ copy.
 ## Steps
 
 1. Bump `linuxAppVersion` in `app/version_linux.go` and add a `<release>` to
-   the metainfo, with `~` before a preview suffix (`0.1.0~preview.3`) so the
-   final `0.1.0` sorts after it.
+   the metainfo with the same version, for example `0.1.0`. Regular versions
+   sort after the earlier `0.1.0~preview.N` releases.
 2. Build from a clean checkout of the release commit:
    `runtime-build/linux/build-flatpak.sh OUT`. The metainfo's screenshot
    URLs must already load from `master`, because `appstreamcli compose` drops

@@ -331,7 +331,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			notice = "Audio choices saved; live switch failed."
 		}
 		if forwardApplyFailed {
-			notice = "Port forwards saved; the running VM did not change."
+			notice = linuxForwardFailureNotice(forwardChange)
 		}
 		var partial *linuxSettingsSaveError
 		if errors.As(err, &partial) {
@@ -384,6 +384,15 @@ func linuxSettingsTiming(running, audioLive, forwardsLive bool) string {
 		message = "Local port forwards apply when you save. " + message
 	}
 	return message
+}
+
+// linuxForwardFailureNotice keeps partial live updates visible when a later
+// monitor command fails. Successfully applied forwards stay active for retry.
+func linuxForwardFailureNotice(change linuxForwardChange) string {
+	if change.changed {
+		return "Port forwards saved; some applied, but the live update failed."
+	}
+	return "Port forwards saved; live update failed."
 }
 
 // linuxSettingsSavedMessage says what a save in the running VM changed now

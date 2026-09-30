@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strconv"
@@ -159,7 +160,13 @@ func fillSections(box *gtk.Box, sections []section) {
 }
 
 func main() {
+	os.Exit(runUI(os.Stdin, os.Stdout, nil))
+}
+
+// onWindow lets native layout tests inspect the same widgets the launcher uses.
+func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWindow)) int {
 	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	glib.SetPrgname("com.tryomarchy.TryOmarchy")
 	glib.SetApplicationName("Try Omarchy")
 	app := adw.NewApplication("com.tryomarchy.TryOmarchy", gio.ApplicationNonUnique)
@@ -168,6 +175,7 @@ func main() {
 		window.SetTitle("Try Omarchy")
 		window.SetDefaultSize(540, 620)
 		window.SetResizable(true)
+		applyBrand(window)
 		layout := gtk.NewBox(gtk.OrientationVertical, 0)
 		header := adw.NewHeaderBar()
 		header.AddCSSClass("flat")
@@ -248,7 +256,12 @@ func main() {
 		homeContent.Append(homeIcon)
 		homeTitle := gtk.NewLabel("Try Omarchy")
 		homeTitle.AddCSSClass("title-1")
+		homeTitle.AddCSSClass("product-title")
 		homeContent.Append(homeTitle)
+		homeVersion := gtk.NewLabel("")
+		homeVersion.AddCSSClass("product-version")
+		homeVersion.AddCSSClass("caption")
+		homeContent.Append(homeVersion)
 		homeHeadline := gtk.NewLabel("")
 		homeHeadline.AddCSSClass("title-3")
 		homeHeadline.SetWrap(true)
@@ -486,6 +499,7 @@ func main() {
 		dynamicActions := gtk.NewBox(gtk.OrientationVertical, 8)
 		dynamicActions.SetVisible(false)
 		actions := gtk.NewBox(gtk.OrientationVertical, 8)
+		actions.AddCSSClass("action-footer")
 		actions.SetMarginTop(12)
 		actions.SetMarginStart(24)
 		actions.SetMarginEnd(24)
@@ -559,15 +573,17 @@ func main() {
 				return
 			}
 			answered = true
+			window.SetDefaultWidget(nil)
+			button.SetSensitive(false)
 			choices.SetSensitive(false)
 			dynamicActions.SetSensitive(false)
 			menuButton.SetSensitive(false)
-			if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"event": "reply", "request": current.Request, "value": value}); err != nil {
+			if err := json.NewEncoder(output).Encode(map[string]any{"event": "reply", "request": current.Request, "value": value}); err != nil {
 				app.Quit()
 			}
 		}
 		emit := func(event string) {
-			if err := json.NewEncoder(os.Stdout).Encode(map[string]string{"event": event}); err != nil {
+			if err := json.NewEncoder(output).Encode(map[string]string{"event": event}); err != nil {
 				app.Quit()
 			}
 		}
@@ -814,7 +830,7 @@ func main() {
 			return true
 		})
 		go func() {
-			scanner := bufio.NewScanner(os.Stdin)
+			scanner := bufio.NewScanner(input)
 			scanner.Buffer(make([]byte, 4096), 1024*1024)
 			for scanner.Scan() {
 				var next state
@@ -873,6 +889,8 @@ func main() {
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
+					homeVersion.SetText("Linux · " + next.Version)
+					homeVersion.SetVisible(next.Version != "")
 					homeHeadline.SetText(next.Headline)
 					homeHeadline.SetVisible(next.Headline != "")
 					homeStatus.SetText(next.Status)
@@ -1055,6 +1073,13 @@ func main() {
 					}
 					var focus *gtk.Button
 					clearChildren(dynamicActions)
+					secondaryActions := gtk.NewFlowBox()
+					secondaryActions.SetSelectionMode(gtk.SelectionNone)
+					secondaryActions.SetHomogeneous(true)
+					secondaryActions.SetMinChildrenPerLine(1)
+					secondaryActions.SetMaxChildrenPerLine(3)
+					secondaryActions.SetColumnSpacing(8)
+					secondaryActions.SetRowSpacing(8)
 					for i, item := range dynamicList {
 						item := item
 						b := gtk.NewButtonWithLabel(item.Label)
@@ -1069,14 +1094,27 @@ func main() {
 							b.AddCSSClass("flat")
 						}
 						b.ConnectClicked(func() { reply(item.Reply) })
-						dynamicActions.Append(b)
+						if item.Suggested {
+							dynamicActions.Append(b)
+						} else {
+							b.SetHExpand(true)
+							secondaryActions.Append(b)
+						}
 						if i == homeSuggested(dynamicList) {
 							focus = b
 						}
 					}
+					if secondaryActions.FirstChild() != nil {
+						dynamicActions.Append(secondaryActions)
+					}
+					window.SetDefaultWidget(nil)
 					if focus != nil {
+						window.SetDefaultWidget(focus)
 						focus.GrabFocus()
+					} else if next.Prompt == "recovery" {
+						button.GrabFocus()
 					} else if next.Prompt != "" {
+						window.SetDefaultWidget(primary)
 						primary.GrabFocus()
 					}
 					failed = next.Error
@@ -1110,8 +1148,11 @@ func main() {
 		}()
 		window.Present()
 		emit("ready")
+		if onWindow != nil {
+			onWindow(window)
+		}
 	})
-	os.Exit(app.Run(os.Args))
+	return app.Run([]string{os.Args[0]})
 }
 
 func orDefault(value, fallback string) string {

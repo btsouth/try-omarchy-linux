@@ -185,6 +185,11 @@ func main() {
 	cfg.vmDir = filepath.Join(cfg.dir, "vm")
 	cfg.diskFormat = "raw"
 	cfg.disk = filepath.Join(cfg.vmDir, "disk.raw")
+	// An interrupted roll back can have moved vm aside. Finish or undo it
+	// before anything creates or reads the VM's files.
+	if err := recoverLinuxSnapshots(cfg.dir); err != nil {
+		fatal("Could not finish an interrupted snapshot operation: %v", err)
+	}
 	if err := os.MkdirAll(cfg.vmDir, 0o755); err != nil {
 		fatal("Could not create the Omarchy data directory: %v", err)
 	}
@@ -317,6 +322,14 @@ func main() {
 
 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
 		fatal("Could not restore the previous Omarchy image after an interrupted update: %v", err)
+	}
+	// A rolled-back VM first boots on the system files saved with it. A newer
+	// image, if this app pins one, is fetched on the launch after that.
+	var runtimeRelease, runtimeSums string
+	if pinned, err := pinCheckpointBoot(cfg.dir, explicitFlags, &selectedRelease, &selectedSumsSHA256, &runtimeRelease, &runtimeSums); err != nil {
+		fatal("Could not prepare the snapshot you rolled back to: %v", err)
+	} else if pinned {
+		logf("snapshots: first boot after roll back uses its saved system files (%s)", releaseVersion(selectedRelease))
 	}
 	if err := ensureLinuxGuest(cfg, selectedRelease, selectedSumsSHA256); err != nil {
 		failLinuxSetup(err, cfg.dir)

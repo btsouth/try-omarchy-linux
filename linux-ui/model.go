@@ -12,6 +12,7 @@ type row struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
 	State  string `json:"state,omitempty"`
+	Reply  string `json:"reply,omitempty"`
 }
 
 type section struct {
@@ -36,7 +37,7 @@ func escapeReply(s state) string {
 		return ""
 	}
 	switch s.Prompt {
-	case "home":
+	case "home", "snapshots", "snapshot":
 		return "close"
 	case "about", "settings-saved", "recovery":
 		return "back"
@@ -44,10 +45,20 @@ func escapeReply(s state) string {
 		return "keep"
 	case "error":
 		return "close"
-	case "settings", "grant-files", "backup-folder", "restore-archive", "restore-parent", "attach-folder", "move-folder", "choice":
+	case "settings", "grant-files", "backup-folder", "restore-archive", "restore-parent", "attach-folder", "move-folder", "choice", "snapshot-name":
 		return "cancel"
 	}
 	return ""
+}
+
+// dynamicActionsPrompt reports whether a prompt draws exactly the buttons the
+// launcher sent, rather than the fixed footer.
+func dynamicActionsPrompt(prompt string) bool {
+	switch prompt {
+	case "home", "error", "snapshots", "snapshot":
+		return true
+	}
+	return false
 }
 
 // errorActions is the button row of a failure the launcher can retry.
@@ -97,10 +108,17 @@ func homeSectionsForState(s state) (visible, setup []section) {
 	return
 }
 
-// homeSuggested is the action the window focuses first.
+// homeSuggested is the action the window focuses first. Without a suggested
+// action, a page that offers a way back focuses it, so Enter never starts a
+// destructive choice by default.
 func homeSuggested(actions []action) int {
 	for i, a := range actions {
 		if a.Suggested {
+			return i
+		}
+	}
+	for i, a := range actions {
+		if a.Reply == "close" {
 			return i
 		}
 	}

@@ -60,6 +60,9 @@ func lockMoveStore(s moveStore) (*os.File, error) {
 		return nil, err
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		if portalStoreLockFallback(s.dir, err) {
+			return f, nil
+		}
 		f.Close()
 		return nil, err
 	}

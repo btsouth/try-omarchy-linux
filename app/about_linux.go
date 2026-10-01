@@ -35,7 +35,8 @@ func linuxAboutState() linuxSetupState {
 			}},
 			{Heading: "Removing the app and your VM", Rows: []linuxRow{
 				{Title: "Uninstalling the app", Detail: "Your VM stays if you keep the app's data: choose Keep under App Settings & Data in Software, or use flatpak uninstall without --delete-data. Choosing Delete also removes a VM stored in the app's own storage. A VM in a folder you chose is never touched."},
-				{Title: "Deleting a VM", Detail: "Delete this VM, in the menu on the home screen, removes only the VM in the app's own storage. To delete a folder you chose, remove it in your file manager. Backups are ordinary .zip files; delete them yourself when you no longer need them."},
+				{Title: "Deleting a VM", Detail: "Delete this VM, in the menu on the home screen, removes only the VM in the app's own storage, with its snapshots. To delete a folder you chose, remove it in your file manager. Backups are ordinary .zip files; delete them yourself when you no longer need them."},
+				{Title: "Snapshots", Detail: "Backup and recovery, Snapshots saves the VM inside its folder so you can roll back to that point or restore it as a separate copy. Rolling back keeps the state you left until you remove it."},
 				{Title: "Coming back", Detail: "After reinstalling, your VM opens as before. If you deleted the app's data, choose Use existing data folder and pick the folder that holds your VM."},
 			}},
 			{Heading: "Updates", Rows: []linuxRow{

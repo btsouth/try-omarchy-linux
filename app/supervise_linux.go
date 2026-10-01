@@ -211,6 +211,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 	for {
 		if !imageConfirmed && guestReady.Load() {
 			commitGuestPayloadUpdate(cfg.dir)
+			commitCheckpointBoot(cfg.dir)
 			markLinuxMovedGuestReady(defaultLinuxDataDirectory(), cfg.dir)
 			imageConfirmed = true
 		}

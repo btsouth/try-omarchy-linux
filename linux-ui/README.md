@@ -107,6 +107,13 @@ Startup follows the next app open; VM
 configuration follows the next VM launch. A guest reboot does not restart the
 host VM process.
 
+Recovery shows **Snapshots...** when the VM is complete. `snapshots` and
+`snapshot` pages draw the buttons the launcher sends, like the home page;
+rows with a `reply` are activatable and send it back. `snapshot-name` shows
+one text field prefilled from `text`; Create sends its contents and Escape
+or Cancel sends `cancel`. Without a suggested action, focus starts on Back so
+Enter never starts a destructive choice.
+
 Use the desktop's text-scaling setting for 150%/200% checks and confirm the
 resulting rendered text, not only the requested window size. Native bounds
 checks include horizontal overflow, readable action labels and the fixed action

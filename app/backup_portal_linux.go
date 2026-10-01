@@ -38,6 +38,19 @@ func portalBackupDiskLockFallback(path string, disk *os.File, lockErr error) err
 	return rejectQEMUWithOpenDisk(disk)
 }
 
+// portalStoreLockFallback accepts a store lock the document portal cannot
+// take. It does not implement flock, so a VM folder chosen through the folder
+// portal could not hold snapshots at all. The launcher already owns its
+// single-instance lifecycle port before it changes a store, and only one
+// recovery window runs at a time, so the lock adds nothing there.
+func portalStoreLockFallback(dir string, lockErr error) bool {
+	if !linuxDocumentPortalDisk(dir, os.Getuid()) || (!errors.Is(lockErr, syscall.ENOSYS) && !errors.Is(lockErr, syscall.EOPNOTSUPP)) {
+		return false
+	}
+	logf("store lock: the document portal cannot lock %s; relying on the single running launcher", dir)
+	return true
+}
+
 func rejectQEMUWithOpenDisk(disk *os.File) error {
 	want, err := disk.Stat()
 	if err != nil {

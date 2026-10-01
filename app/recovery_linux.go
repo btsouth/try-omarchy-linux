@@ -63,9 +63,9 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 		sections = append(sections, linuxSection{Heading: "Left behind by an interrupted backup or restore", Rows: rows})
 	}
 	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Sections: sections,
-		Status:  "Backups are .zip files saved in a folder you choose, and Try Omarchy never deletes them. Restoring makes a separate copy and keeps your current VM.",
+		Status:  "Snapshots save this VM inside its folder so you can roll back later. Backups are .zip files saved in a folder you choose, and Try Omarchy never deletes them. Restoring makes a separate copy and keeps your current VM.",
 		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0,
-		CanCleanLeftovers: len(linuxRemovableLeftovers(found)) > 0})
+		CanCleanLeftovers: len(linuxRemovableLeftovers(found)) > 0, CanSnapshot: complete, CanCleanRollback: len(linuxRollbackKept(dir)) > 0})
 	if err != nil || answer == "back" || answer == "cancel" {
 		return ""
 	}
@@ -92,6 +92,10 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 		return cleanupLinuxResetDisks(w, dir)
 	case "clean-leftovers":
 		return cleanupLinuxLeftovers(w, defaultDir)
+	case "snapshots":
+		return showLinuxSnapshots(w, dir)
+	case "clean-rollback":
+		return cleanupLinuxRollbackKept(w, dir)
 	case "restore":
 		archive, err := w.ask(context.Background(), linuxSetupState{Prompt: "restore-archive", Status: "Choose a Try Omarchy backup. Restoring will make a new copy and leave the current VM in place."})
 		if err != nil || archive == "cancel" {

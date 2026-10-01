@@ -64,6 +64,12 @@ type linuxSetupState struct {
 	CanCleanReset bool `json:"canCleanReset,omitempty"`
 	// Unfinished backup or restore files an interrupted run left behind.
 	CanCleanLeftovers bool `json:"canCleanLeftovers,omitempty"`
+	// Snapshots: the page opens from recovery, and a roll back keeps the
+	// previous state until it is removed.
+	CanSnapshot      bool `json:"canSnapshot,omitempty"`
+	CanCleanRollback bool `json:"canCleanRollback,omitempty"`
+	// Text is the initial value of a prompt's text field, such as a name.
+	Text string `json:"text,omitempty"`
 }
 
 type linuxAction struct {

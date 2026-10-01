@@ -643,6 +643,18 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 				state, dir = linuxHomeStateForDir(resolved, defaultDir)
 			}
 		}
+		// Finish an interrupted roll back before describing the VM; until then
+		// its disk can be set aside and the home would offer a new setup.
+		if dir != "" && linuxSnapshotRecoveryPending(dir) {
+			if err := recoverLinuxSnapshots(dir); err != nil {
+				logf("home: snapshot recovery: %v", err)
+				state.Notice, state.HelpURL, state.CheckAgain = "An interrupted roll back needs attention.", linuxHelpURL("snapshots"), true
+				state.Headline = "Omarchy cannot start yet."
+				state.Status = "Try Omarchy could not finish rolling back to a snapshot: " + err.Error() + ". Make sure no other copy of Omarchy is running, then choose Check again. Nothing has been deleted."
+			} else {
+				state, dir = linuxHomeStateForDir(dir, defaultDir)
+			}
+		}
 		state.CanAttach = !explicitDir
 		state.CanDelete = !explicitDir && !state.CanForget && dir != "" && pathsEqual(dir, defaultDir) && linuxDefaultVMCanDelete(defaultDir)
 		if status != "" {
@@ -724,7 +736,7 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 				status = "Saved location forgotten. Its files were not deleted. You can reconnect the drive or choose an existing data folder later."
 			}
 		case "delete-default":
-			answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "delete-default", Path: defaultDir, Status: "Permanently delete this VM and its downloaded guest files from " + defaultDir + "? Files inside Omarchy will be lost. Shared host folders and backups outside this location will stay. You can create a new VM later."})
+			answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "delete-default", Path: defaultDir, Status: "Permanently delete this VM, its snapshots and its downloaded guest files from " + defaultDir + "? Files inside Omarchy will be lost. Shared host folders and backups outside this location will stay. You can create a new VM later."})
 			if err != nil || answer != "delete" {
 				status = "The VM was kept."
 				continue
@@ -732,7 +744,7 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 			if err := deleteLinuxDefaultVM(defaultDir); err != nil {
 				status = "Could not delete the VM: " + err.Error()
 			} else {
-				status = "The VM and downloaded guest files were deleted from " + defaultDir + ". Shared host folders and backups were kept."
+				status = "The VM, its snapshots and downloaded guest files were deleted from " + defaultDir + ". Shared host folders and backups were kept."
 			}
 		case "about":
 			_, err := w.ask(context.Background(), linuxAboutState())

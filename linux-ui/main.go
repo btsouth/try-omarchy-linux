@@ -44,6 +44,7 @@ type state struct {
 	Destructive       bool   `json:"destructive"`
 	CanMove           bool   `json:"canMove"`
 	CanReset          bool   `json:"canReset"`
+	CanMigrate        bool   `json:"canMigrate"`
 	CanCleanMove      bool   `json:"canCleanMove"`
 	CanCleanReset     bool   `json:"canCleanReset"`
 	CanCleanLeftovers bool   `json:"canCleanLeftovers"`
@@ -726,12 +727,13 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
 		cleanLeftoversButton := gtk.NewButtonWithLabel("Remove unfinished files...")
 		snapshotsButton := gtk.NewButtonWithLabel("Snapshots...")
+		migrationButton := gtk.NewButtonWithLabel("Move to installed Omarchy...")
 		cleanRollbackButton := gtk.NewButtonWithLabel("Remove state kept from roll back...")
 		primary.SetHExpand(true)
 		secondary.SetHExpand(true)
 		choices := gtk.NewBox(gtk.OrientationVertical, 8)
 		choices.SetHExpand(true)
-		for _, action := range []*gtk.Button{primary, secondary, snapshotsButton, tertiary, moveButton, resetButton, cleanMoveButton, cleanResetButton, cleanRollbackButton, cleanLeftoversButton} {
+		for _, action := range []*gtk.Button{primary, secondary, snapshotsButton, migrationButton, tertiary, moveButton, resetButton, cleanMoveButton, cleanResetButton, cleanRollbackButton, cleanLeftoversButton} {
 			choices.Append(action)
 		}
 		choices.SetHAlign(gtk.AlignEnd)
@@ -1122,6 +1124,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				reply("snapshots")
 			}
 		})
+		migrationButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanMigrate {
+				reply("migration")
+			}
+		})
 		cleanRollbackButton.ConnectClicked(func() {
 			if current.Prompt == "recovery" && current.CanCleanRollback {
 				reply("clean-rollback")
@@ -1188,6 +1195,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					cleanResetButton.SetVisible(next.Prompt == "recovery" && next.CanCleanReset)
 					cleanLeftoversButton.SetVisible(next.Prompt == "recovery" && next.CanCleanLeftovers)
 					snapshotsButton.SetVisible(next.Prompt == "recovery" && next.CanSnapshot)
+					migrationButton.SetVisible(next.Prompt == "recovery" && next.CanMigrate)
 					cleanRollbackButton.SetVisible(next.Prompt == "recovery" && next.CanCleanRollback)
 					nameEntry.SetVisible(next.Prompt == "snapshot-name")
 					if next.Prompt == "snapshot-name" && pageChanged {
@@ -1280,7 +1288,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						button.SetLabel("Cancel")
 					case "snapshots":
 						pageTitle.SetText("Snapshots")
-					case "snapshot":
+					case "snapshot", "migration":
 						pageTitle.SetText(next.Title)
 					case "snapshot-name":
 						pageTitle.SetText(orDefault(next.Title, "Create a snapshot"))
@@ -1533,7 +1541,12 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					detail.SetText(next.Detail)
 					detail.SetVisible(next.Detail != "" && next.Prompt != "home")
-					helpLink.SetVisible((failed || next.Prompt == "error") && next.HelpURL != "")
+					helpLink.SetVisible((failed || next.Prompt == "error" || next.Prompt == "migration") && next.HelpURL != "")
+					if next.Prompt == "migration" {
+						helpLink.SetLabel("Full migration instructions")
+					} else {
+						helpLink.SetLabel("How to fix this")
+					}
 					if next.HelpURL != "" {
 						helpLink.SetURI(next.HelpURL)
 					}

@@ -78,12 +78,12 @@ func TestHomeFocusStartsOnTheSuggestedAction(t *testing.T) {
 }
 
 func TestSnapshotPagesUseLauncherButtonsAndSafeEscape(t *testing.T) {
-	for prompt, want := range map[string]string{"snapshots": "close", "snapshot": "close", "snapshot-name": "cancel"} {
+	for prompt, want := range map[string]string{"snapshots": "close", "snapshot": "close", "migration": "close", "snapshot-name": "cancel"} {
 		if got := escapeReply(state{Prompt: prompt}); got != want {
 			t.Errorf("%s: Escape replies %q, want %q", prompt, got, want)
 		}
 	}
-	for prompt, want := range map[string]bool{"home": true, "error": true, "snapshots": true, "snapshot": true, "snapshot-name": false, "recovery": false} {
+	for prompt, want := range map[string]bool{"home": true, "error": true, "snapshots": true, "snapshot": true, "migration": true, "snapshot-name": false, "recovery": false} {
 		if got := dynamicActionsPrompt(prompt); got != want {
 			t.Errorf("%s: launcher buttons %v, want %v", prompt, got, want)
 		}

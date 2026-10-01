@@ -42,12 +42,12 @@ type linuxMenuNode struct {
 
 func linuxTrayLayout(id int32) linuxMenuNode {
 	n := linuxMenuNode{ID: id, Properties: map[string]dbus.Variant{}, Children: []dbus.Variant{}}
-	labels := map[int32]string{1: "Settings...", 2: "Shut down Omarchy..."}
+	labels := map[int32]string{1: "Settings...", 3: "Reclaim disk space...", 2: "Shut down Omarchy..."}
 	if label, ok := labels[id]; ok {
 		n.Properties = map[string]dbus.Variant{"label": dbus.MakeVariant(label), "enabled": dbus.MakeVariant(true), "visible": dbus.MakeVariant(true)}
 	} else if id == 0 {
 		n.Properties["children-display"] = dbus.MakeVariant("submenu")
-		for _, child := range []int32{1, 2} {
+		for _, child := range []int32{1, 3, 2} {
 			n.Children = append(n.Children, dbus.MakeVariant(linuxTrayLayout(child)))
 		}
 	}
@@ -62,6 +62,8 @@ func (*linuxTrayMenu) Event(id int32, event string, data dbus.Variant, timestamp
 		switch id {
 		case 1:
 			requestTraySettings()
+		case 3:
+			requestTrayReclaim()
 		case 2:
 			select {
 			case linuxShutdownRequests <- struct{}{}:

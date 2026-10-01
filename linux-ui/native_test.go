@@ -52,6 +52,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Status: "Waiting for the Omarchy desktop", Detail: "Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.", Booting: true}, "Stop Omarchy"},
 		{state{Prompt: "home", Installed: true, CheckAgain: true, Headline: "Saved settings need attention.", Notice: "Saved settings could not be read.", HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#settings", Actions: []action{{Label: "Check again", Reply: "check", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Integrations", Rows: []row{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}}}}, "Check again"},
 		{state{Prompt: "settings", Notice: "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again.", Settings: &settingsForm{Running: true, AudioLive: true, ForwardsLive: true, ResourceProfile: "balanced", CPUMax: 8}}, "Save settings"},
+		{state{Prompt: "settings", Settings: &settingsForm{Running: true, ResourceProfile: "balanced", CPUMax: 8, Reclaim: &reclaimInfo{Status: "Omarchy's disk uses 9.4 GB on this drive. Reclaim gives back space from files you deleted inside Omarchy.", CanStart: true}}}, "Save settings"},
+		{state{Prompt: "settings", Settings: &settingsForm{Running: true, ResourceProfile: "balanced", CPUMax: 8, Reclaim: &reclaimInfo{Status: "Preparing free space. Keep Omarchy running until preparation finishes."}}}, "Save settings"},
+		{state{Prompt: "message", Title: "Reclaim disk space", Status: "Preparing free space. Keep Omarchy running until it finishes, then shut it down to give the space back."}, "Done"},
 	}
 	index, inspecting := 0, false
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
@@ -77,7 +80,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var found *gtk.Button
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
-			var refresh *gtk.Button
+			var refresh, reclaim *gtk.Button
 			var pages *gtk.Stack
 			brandVisible, integrationsVisible := false, false
 			noticeVisible := false
@@ -140,6 +143,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 					if b.Label() == "Refresh devices" {
 						refresh = b
 					}
+					if b.Label() == "Prepare free space" {
+						reclaim = b
+					}
 					if b.Label() == cases[index].button {
 						found = b
 					}
@@ -164,6 +170,13 @@ func TestNativeFooterAndReply(t *testing.T) {
 				t.Errorf("%s: footer button is outside %dx%d window", cases[index].state.Prompt, window.Width(), window.Height())
 			} else {
 				t.Logf("%s: %q visible inside %dx%d", cases[index].state.Prompt, cases[index].button, window.Width(), window.Height())
+			}
+			if settings := cases[index].state.Settings; cases[index].state.Prompt == "settings" && reclaim != nil {
+				if wantShown := settings.Reclaim != nil; reclaim.Mapped() != wantShown {
+					t.Errorf("settings %d: reclaim card shown=%v, want %v", index, reclaim.Mapped(), wantShown)
+				} else if wantShown && reclaim.Sensitive() != settings.Reclaim.CanStart {
+					t.Errorf("settings %d: reclaim button sensitive=%v, want %v", index, reclaim.Sensitive(), settings.Reclaim.CanStart)
+				}
 			}
 			if window.HasCSSClass("try-omarchy") == adw.StyleManagerGetDefault().HighContrast() {
 				t.Error("brand override did not follow high contrast")

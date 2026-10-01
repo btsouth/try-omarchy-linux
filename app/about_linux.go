@@ -27,6 +27,7 @@ func linuxAboutState() linuxSetupState {
 			{Heading: "Files", Rows: []linuxRow{
 				{Title: "Copy, paste and drop", Detail: "Text, images and files move both ways through the clipboard, and dropping files on the window sends them to Omarchy. On GNOME, clipboard sharing asks your permission once."},
 				{Title: "A shared folder", Detail: "Settings can share one folder with Omarchy, where it appears as /mnt/host. Omarchy can change what is in it. Nothing else on your computer is visible to Omarchy."},
+				{Title: "Disk space", Detail: "Deleting files inside Omarchy does not shrink its disk on this drive. While Omarchy runs, choose Prepare free space in Settings or Reclaim disk space in the tray, then shut Omarchy down when it is ready. The space comes back during shutdown."},
 			}},
 			{Heading: "Settings and devices", Rows: []linuxRow{
 				{Title: "Resources", Detail: "Balanced leaves room for your Linux desktop. Maximum performance uses more available resources. Manual lets you tune memory and processors. Changes apply on the next VM launch."},

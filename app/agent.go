@@ -42,6 +42,9 @@ type guestAgent struct {
 	zeroFilled      bool
 	zeroFillPending bool
 	zeroFillStatus  string
+	// reclaimFinished, when set, hears whether a requested zero-fill finished
+	// (true) or failed (false). It runs without the agent lock held.
+	reclaimFinished func(ok bool)
 }
 
 func newGuestAgent() *guestAgent {
@@ -167,21 +170,29 @@ func (a *guestAgent) read(c net.Conn, r *bufio.Reader) {
 			logf("agent: guest agent connected (%s)", strings.TrimSpace(strings.TrimPrefix(line, "hello")))
 		case strings.TrimSpace(line) == "zero-fill done":
 			a.mu.Lock()
-			if a.conn == c && a.zeroFillPending {
+			finished := a.conn == c && a.zeroFillPending
+			if finished {
 				a.zeroFilled = true
 				a.zeroFillPending = false
-				a.zeroFillStatus = "Preparation finished. Shut down Omarchy to return the space to Windows."
+				a.zeroFillStatus = reclaimReadyStatus
 			}
 			a.mu.Unlock()
 			logf("agent: guest zero-filled its free space; disk.raw will be compacted after shutdown")
+			if finished && a.reclaimFinished != nil {
+				a.reclaimFinished(true)
+			}
 		case strings.HasPrefix(line, "zero-fill failed"):
 			a.mu.Lock()
-			if a.conn == c && a.zeroFillPending {
+			failed := a.conn == c && a.zeroFillPending
+			if failed {
 				a.zeroFillPending = false
 				a.zeroFillStatus = "Preparation failed. Check diagnostics before retrying."
 			}
 			a.mu.Unlock()
 			logf("agent: guest could not zero-fill: %s", strings.TrimSpace(strings.TrimPrefix(line, "zero-fill failed")))
+			if failed && a.reclaimFinished != nil {
+				a.reclaimFinished(false)
+			}
 		}
 	}
 	a.mu.Lock()
@@ -320,6 +331,14 @@ func (a *guestAgent) reclaimStatus() string {
 		return "The guest agent is not connected. Wait for startup or update the guest."
 	}
 	return "No reclaim requested during this session."
+}
+
+// reclaimInProgress reports whether a pass is preparing free space or has
+// finished and waits for shutdown. Either way a new request would be refused.
+func (a *guestAgent) reclaimInProgress() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.zeroFillPending || a.zeroFilled
 }
 
 func (a *guestAgent) compactPending() bool {

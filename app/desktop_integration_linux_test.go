@@ -44,7 +44,7 @@ func TestLinuxTrayDispatch(t *testing.T) {
 		t.Fatal("menu actions not dispatched")
 	}
 	root := linuxTrayLayout(0)
-	if len(root.Children) != 2 {
+	if len(root.Children) != 3 {
 		t.Fatal(root)
 	}
 	// Pin the wire type consumed by dbusmenu hosts.

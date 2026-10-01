@@ -21,6 +21,8 @@ func TestEscapeNeverStopsProgressOrAbandonsSetup(t *testing.T) {
 		{"forget prompt keeps the location", state{Prompt: "forget-location"}, "keep"},
 		{"a retryable error closes", state{Prompt: "error", CanRetry: true}, "close"},
 		{"choice cancels", state{Prompt: "choice"}, "cancel"},
+		{"a message goes back", state{Prompt: "message"}, "back"},
+		{"returning reclaimed space", state{Status: "Giving unused space back...", NonCancellable: true}, ""},
 		// Progress and first-run questions would cancel setup or shut Omarchy
 		// down, so a stray Escape must not answer them.
 		{"download progress", state{Status: "Downloading Omarchy"}, ""},

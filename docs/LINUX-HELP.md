@@ -114,6 +114,25 @@ To make room, free space on that drive, or choose **Choose location** and pick
 another folder before setup. An existing VM can move later with **Backup and
 recovery**, **Move this VM**.
 
+### Give space back after deleting files
+
+Deleting files inside Omarchy frees space for Omarchy, but its disk file on
+your drive does not shrink by itself. To give that space back, open
+**Settings** while Omarchy runs and choose **Prepare free space** under
+**Disk space**, or choose **Reclaim disk space** from the Try Omarchy tray
+icon. From a terminal, `flatpak run com.tryomarchy.TryOmarchy -reclaim` does
+the same.
+
+Omarchy then fills up to 8 GB of its free space with zeros. That space is in
+use on your drive while it works, and at least 4 GB always stays free. A
+notification says when it is ready. Shut Omarchy down, and Try Omarchy gives
+the space back during shutdown, then says how much the disk file shrank. If
+you deleted more than 8 GB, run it again after the next launch. Your files
+inside Omarchy are not changed.
+
+Reclaim is unavailable when the folder that holds Omarchy is on a drive that
+cannot release unused blocks; Settings says so.
+
 ## Keyboard, window and files
 
 - While the Omarchy window is focused it has your keyboard, Super key

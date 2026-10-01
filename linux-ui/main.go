@@ -84,6 +84,8 @@ type settingsForm struct {
 	ForwardsLive       bool          `json:"forwardsLive"`
 	Running            bool          `json:"running"`
 	RefreshAudio       bool          `json:"refreshAudio,omitempty"`
+	Reclaim            *reclaimInfo  `json:"reclaim,omitempty"`
+	StartReclaim       bool          `json:"startReclaim,omitempty"`
 	DiskGiB            string        `json:"diskGiB"`
 	Scale              string        `json:"scale"`
 	Keyboard           string        `json:"keyboard"`
@@ -100,6 +102,13 @@ type settingsForm struct {
 	CPUMax             int           `json:"cpuMax"`
 	ClipboardShare     bool          `json:"clipboardShare"`
 	ClipboardAvailable bool          `json:"clipboardAvailable"`
+}
+
+// reclaimInfo is the running VM's unused-space state. The launcher decides
+// whether a pass can start; the window only shows it.
+type reclaimInfo struct {
+	Status   string `json:"status"`
+	CanStart bool   `json:"canStart"`
 }
 
 type audioDevice struct {
@@ -560,6 +569,17 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		chooseShare := gtk.NewButtonWithLabel("Choose a shared folder...")
 		groupContent.Append(chooseShare)
 		formHelp("Omarchy can read, change and delete files in the folder you share. Access changes apply on the next launch.")
+		reclaimGroup := beginGroup("Disk space", "General")
+		reclaimStatus := gtk.NewLabel("")
+		reclaimStatus.SetWrap(true)
+		reclaimStatus.SetXAlign(0)
+		reclaimStatus.SetSelectable(true)
+		groupContent.Append(reclaimStatus)
+		reclaimButton := gtk.NewButtonWithLabel("Prepare free space")
+		reclaimButton.SetHAlign(gtk.AlignStart)
+		groupContent.Append(reclaimButton)
+		formHelp(reclaimHelpText)
+		reclaimGroup.SetVisible(false)
 		beginGroup("Display and keyboard", "Advanced")
 		scaleChoices := []audioDevice{{"keep", "Keep guest choice"}, {"1", "100%"}, {"1.25", "125%"}, {"1.5", "150%"}, {"2", "200%"}, {"3", "300%"}, {"4", "400%"}}
 		scale := gtk.NewDropDownFromStrings([]string{"Follow host display"})
@@ -848,7 +868,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			return true
 		})
 		window.AddController(accountKeys)
-		settingsValue := func(refresh bool) string {
+		settingsValue := func(refresh, reclaim bool) string {
 			memoryValue, cpuValue := "0", "0"
 			if !autoMemory.Active() {
 				memoryValue = strconv.Itoa(int(memory.Value()*1024 + 0.5))
@@ -863,17 +883,22 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
 			if current.Prompt == "settings" {
-				reply(settingsValue(true))
+				reply(settingsValue(true, false))
+			}
+		})
+		reclaimButton.ConnectClicked(func() {
+			if current.Prompt == "settings" && current.Settings != nil && current.Settings.Reclaim != nil && current.Settings.Reclaim.CanStart {
+				reply(settingsValue(false, true))
 			}
 		})
 		primary.ConnectClicked(func() {
 			switch current.Prompt {
-			case "about", "settings-saved":
+			case "about", "settings-saved", "message":
 				reply("back")
 			case "location":
 				reply("default")
@@ -969,7 +994,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					reply(string(data))
 				})
 			case "settings":
-				reply(settingsValue(false))
+				reply(settingsValue(false, false))
 			}
 		})
 		chooseFolder := func() {
@@ -1118,7 +1143,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					choices.SetVisible(next.Prompt != "" && !dynamic)
 					placeChoices(next.Prompt == "recovery")
 					dynamicActions.SetVisible(dynamic)
-					button.SetVisible(!dynamic && !next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved")
+					button.SetVisible(!dynamic && !next.NonCancellable && next.Prompt != "close" && next.Prompt != "about" && next.Prompt != "settings-saved" && next.Prompt != "message")
 					tertiary.SetVisible(next.Prompt == "recovery")
 					moveButton.SetVisible(next.Prompt == "recovery" && next.CanMove)
 					resetButton.SetVisible(next.Prompt == "recovery" && next.CanReset)
@@ -1221,6 +1246,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						pageTitle.SetText("Settings saved")
 						primary.SetLabel("Done")
 						button.SetLabel("Close")
+					case "message":
+						pageTitle.SetText(orDefault(next.Title, "Try Omarchy"))
+						primary.SetLabel("Done")
 					case "settings":
 						pageTitle.SetText("Settings")
 						primary.SetLabel("Save settings")
@@ -1316,6 +1344,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							clipboardHelp.SetVisible(next.Settings.ClipboardAvailable)
 							setSharedFolder(next.Settings.Share, next.Settings.ShareDisplay)
 							shareEnabled.SetActive(next.Settings.ShareEnabled)
+							reclaimGroup.SetVisible(next.Settings.Reclaim != nil)
+							if next.Settings.Reclaim != nil {
+								reclaimStatus.SetText(next.Settings.Reclaim.Status)
+								reclaimButton.SetSensitive(next.Settings.Reclaim.CanStart)
+							}
 						}
 					case "location":
 						pageTitle.SetText("Where should Omarchy live?")
@@ -1495,7 +1528,7 @@ func sectionsIf(show bool, sections []section) []section {
 // oneButtonPrompt lists prompts whose only choice is Back, Close or a picker.
 func oneButtonPrompt(prompt string) bool {
 	switch prompt {
-	case "about", "settings-saved", "grant-files", "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
+	case "about", "settings-saved", "message", "grant-files", "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
 		return true
 	}
 	return false

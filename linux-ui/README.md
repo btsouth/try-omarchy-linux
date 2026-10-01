@@ -107,6 +107,12 @@ Startup follows the next app open; VM
 configuration follows the next VM launch. A guest reboot does not restart the
 host VM process.
 
+While Omarchy runs, General has a Disk space card. Its status and whether a
+reclaim pass can start come from the launcher. **Prepare free space** sends
+the current form with `startReclaim`; the launcher starts the pass without
+saving the form and returns the same edits with a new status. A `message`
+prompt shows one result with Done, used by the tray's reclaim window.
+
 Use the desktop's text-scaling setting for 150%/200% checks and confirm the
 resulting rendered text, not only the requested window size. Native bounds
 checks include horizontal overflow, readable action labels and the fixed action

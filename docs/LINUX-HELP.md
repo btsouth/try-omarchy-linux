@@ -314,6 +314,9 @@ copy kept somewhere else.
 - **Move this VM** copies it to another folder and keeps the original until the
   moved copy has started once.
 - **Reset this VM** starts over and keeps the old disk until you remove it.
+- **Move to installed Omarchy** shows how to export your trial, keep the archive
+  outside the VM, and import it after installing Omarchy. See the
+  [migration instructions](MIGRATION.md).
 - If a backup or restore is interrupted, for example by a crash or a full
   drive, the unfinished files stay where they were being written. Try Omarchy
   remembers exactly which files those are, the home screen mentions them, and

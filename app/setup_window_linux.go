@@ -60,6 +60,7 @@ type linuxSetupState struct {
 	// Backup and recovery actions available for the selected VM.
 	CanMove       bool `json:"canMove,omitempty"`
 	CanReset      bool `json:"canReset,omitempty"`
+	CanMigrate    bool `json:"canMigrate,omitempty"`
 	CanCleanMove  bool `json:"canCleanMove,omitempty"`
 	CanCleanReset bool `json:"canCleanReset,omitempty"`
 	// Unfinished backup or restore files an interrupted run left behind.

@@ -62,12 +62,26 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 	if rows := linuxLeftoverRows(found); len(rows) > 0 {
 		sections = append(sections, linuxSection{Heading: "Left behind by an interrupted backup or restore", Rows: rows})
 	}
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "recovery", Sections: sections,
+	page := linuxSetupState{Prompt: "recovery", Sections: sections,
 		Status:  "Snapshots save this VM inside its folder so you can roll back later. Backups are .zip files saved in a folder you choose, and Try Omarchy never deletes them. Restoring makes a separate copy and keeps your current VM.",
 		CanMove: complete && retained == nil, CanReset: complete, CanCleanMove: retained != nil && booted, CanCleanReset: len(linuxRetainedResetDisks(dir)) > 0,
-		CanCleanLeftovers: len(linuxRemovableLeftovers(found)) > 0, CanSnapshot: complete, CanCleanRollback: len(linuxRollbackKept(dir)) > 0})
-	if err != nil || answer == "back" || answer == "cancel" {
-		return ""
+		CanCleanLeftovers: len(linuxRemovableLeftovers(found)) > 0, CanSnapshot: complete, CanMigrate: complete, CanCleanRollback: len(linuxRollbackKept(dir)) > 0}
+	var answer string
+	for {
+		var err error
+		answer, err = w.ask(context.Background(), page)
+		if err != nil || answer == "back" || answer == "cancel" {
+			return ""
+		}
+		if answer != "migration" {
+			break
+		}
+		if !complete {
+			return "There is no complete VM here to export."
+		}
+		if _, err := w.ask(context.Background(), linuxMigrationState()); err != nil {
+			return ""
+		}
 	}
 	switch answer {
 	case "diagnostics":
@@ -125,6 +139,18 @@ func showLinuxRecoveryInWindow(w *linuxSetupWindow, defaultDir, dir string) stri
 	default:
 		return ""
 	}
+}
+
+func linuxMigrationState() linuxSetupState {
+	return linuxSetupState{Prompt: "migration", Title: "Move to installed Omarchy",
+		Status: "Bring the changes you made in this trial into an installed Omarchy. Export before installing, especially if installation will replace this system.",
+		Sections: []linuxSection{{Rows: []linuxRow{
+			{Title: "1. Export inside the trial", Detail: "Launch Omarchy, open a terminal and run:\ntry-omarchy-export\nChoose which settings, apps and files to bring over. Browser profiles, keys and sign-ins are off by default."},
+			{Title: "2. Keep the archive outside the trial", Detail: "The command saves omarchy-export-<date>.tar.gz in your shared host folder, or in the trial's home if no shared folder is available. Copy it to the host or a USB drive and check that the copy exists before installing. Keep it private."},
+			{Title: "3. Import on installed Omarchy", Detail: "Extract the archive and run ./import.sh as your normal account. Use ./import.sh --dry-run to inspect the plan first. It asks before changing files and backs up replaced settings. Older guest images include restore.sh instead; use that script for those archives. Log out and back in when finished."},
+		}}},
+		HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/MIGRATION.md",
+		Actions: []linuxAction{{Label: "Back", Reply: "close"}}}
 }
 
 // backupLinuxVM asks for a folder and writes a backup there. It reports

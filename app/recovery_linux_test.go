@@ -3,12 +3,74 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLinuxRecoveryMigrationReturnsToRecoveryWithoutChangingVM(t *testing.T) {
+	dir := linuxSnapshotFixture(t)
+	disk := filepath.Join(dir, "vm", "disk.raw")
+	original, err := os.ReadFile(disk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(t.TempDir(), "states.jsonl")
+	t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
+	w := linuxScriptedWindow(t, "migration", "close", "back")
+	if result := showLinuxRecoveryInWindow(w, dir, dir); result != "" {
+		t.Fatal(result)
+	}
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+	if len(lines) != 3 {
+		t.Fatalf("expected recovery, migration and recovery, got %d prompts", len(lines))
+	}
+	for i, prompt := range []string{"recovery", "migration", "recovery"} {
+		var sent linuxSetupState
+		if err := json.Unmarshal(lines[i], &sent); err != nil {
+			t.Fatal(err)
+		}
+		if sent.Prompt != prompt || (prompt == "recovery" && !sent.CanMigrate) {
+			t.Fatalf("unexpected prompt: %+v", sent)
+		}
+		if prompt == "migration" {
+			for _, want := range []string{"try-omarchy-export", "copy exists before installing", "./import.sh --dry-run", "restore.sh", "normal account"} {
+				if !bytes.Contains(lines[i], []byte(want)) {
+					t.Errorf("migration guidance missing %q", want)
+				}
+			}
+		}
+	}
+	if got, err := os.ReadFile(disk); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("opening migration changed the VM: %v", err)
+	}
+}
+
+func TestLinuxRecoveryDoesNotOfferMigrationForAnIncompleteVM(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(t.TempDir(), "states.jsonl")
+	t.Setenv("TRY_OMARCHY_STATE_RECORD", record)
+	showLinuxRecoveryInWindow(linuxScriptedWindow(t, "back"), dir, dir)
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent linuxSetupState
+	if err := json.Unmarshal(bytes.TrimSpace(data), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent.CanMigrate {
+		t.Fatal("incomplete VM offered migration")
+	}
+}
 
 func linuxRecoveryTestWindow(t *testing.T, mode, folder, archive string) *linuxSetupWindow {
 	t.Helper()

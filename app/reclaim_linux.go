@@ -62,6 +62,9 @@ func linuxReclaimInfoFor(dir string) *linuxReclaimInfo {
 	if a.reclaimInProgress() {
 		return &linuxReclaimInfo{Status: usage + a.reclaimStatus()}
 	}
+	if !a.connected() {
+		return &linuxReclaimInfo{Status: usage + "Omarchy's helper is not connected yet. Wait for the desktop, then try again."}
+	}
 	status := usage + "Reclaim gives back space from files you deleted inside Omarchy."
 	if previous := a.reclaimStatus(); strings.HasPrefix(previous, "Preparation") || strings.HasPrefix(previous, "Could not") {
 		status += " " + previous

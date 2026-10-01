@@ -333,6 +333,13 @@ func (a *guestAgent) reclaimStatus() string {
 	return "No reclaim requested during this session."
 }
 
+// connected reports whether the guest agent is currently connected.
+func (a *guestAgent) connected() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.conn != nil
+}
+
 // reclaimInProgress reports whether a pass is preparing free space or has
 // finished and waits for shutdown. Either way a new request would be refused.
 func (a *guestAgent) reclaimInProgress() bool {

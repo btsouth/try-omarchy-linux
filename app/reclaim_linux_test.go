@@ -96,6 +96,11 @@ func TestLinuxReclaimInfoBeforeAndDuringAPass(t *testing.T) {
 		t.Fatalf("reclaim offered on a folder that cannot release blocks: %+v", info)
 	}
 
+	useReclaimAgent(t, newGuestAgent(), dir, true)
+	if info := linuxReclaimInfoFor(dir); info.CanStart || !strings.Contains(info.Status, "not connected") {
+		t.Fatalf("reclaim offered with no guest helper connected: %+v", info)
+	}
+
 	a, guest, r := connectReclaimAgent(t)
 	useReclaimAgent(t, a, dir, true)
 	info := linuxReclaimInfoFor(dir)

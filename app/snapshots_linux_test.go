@@ -163,6 +163,12 @@ func TestLinuxStartupFinishesAnInterruptedRollBack(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(preparing, "next"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	// A roll back that published its stage but crashed before the journal.
+	unjournaled := filepath.Join(dir, ".snapshot-rollback-"+randomCheckpointRollbackID())
+	if err := os.MkdirAll(filepath.Join(unjournaled, "data"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	copyTree(t, filepath.Join(stage, "next", "guest"), filepath.Join(unjournaled, "next", "guest"))
 	if !linuxSnapshotRecoveryPending(dir) {
 		t.Fatal("interrupted roll back not detected")
 	}
@@ -177,6 +183,12 @@ func TestLinuxStartupFinishesAnInterruptedRollBack(t *testing.T) {
 	}
 	if _, err := os.Stat(preparing); !os.IsNotExist(err) {
 		t.Fatal("abandoned preparation folder was kept")
+	}
+	if _, err := os.Stat(unjournaled); !os.IsNotExist(err) {
+		t.Fatal("an unjournaled stage holding only a snapshot copy was kept")
+	}
+	if kept := linuxRollbackKept(dir); len(kept) != 0 {
+		t.Fatalf("an undone roll back is listed as kept state: %v", kept)
 	}
 }
 
@@ -272,7 +284,7 @@ func TestLinuxSnapshotPagesHelper(t *testing.T) {
 		if json.Unmarshal(scanner.Bytes(), &state) != nil || state.Request == 0 {
 			continue
 		}
-		fmt.Fprintf(log, "%s|%s|%s\n", state.Prompt, state.Title, strings.ReplaceAll(state.Status, "\n", " "))
+		fmt.Fprintf(log, "%s|%s|%s|%s\n", state.Prompt, state.Title, state.Notice, strings.ReplaceAll(state.Status, "\n", " "))
 		if len(steps) == 0 {
 			panic("unexpected prompt " + state.Prompt)
 		}
@@ -329,7 +341,7 @@ func TestLinuxSnapshotPagesCreateAndRollBack(t *testing.T) {
 		t.Fatal("roll back did not restore the disk")
 	}
 	pages, _ := os.ReadFile(logPath)
-	for _, want := range []string{"snapshot-name|Create a snapshot|", "snapshot|Before trying Hyprland plugins|", "choice|Roll back to \"Before trying Hyprland plugins\"?|", "is kept in this VM's folder"} {
+	for _, want := range []string{"snapshot-name|Create a snapshot||", "snapshot|Before trying Hyprland plugins||", "choice|Roll back to \"Before trying Hyprland plugins\"?||", "is kept in this VM's folder"} {
 		if !strings.Contains(string(pages), want) {
 			t.Errorf("pages did not show %q:\n%s", want, pages)
 		}

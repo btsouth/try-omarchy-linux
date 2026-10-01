@@ -31,16 +31,21 @@ func recoverLinuxSnapshots(dir string) error {
 	if err := (checkpointStore{installation: dir}).Recover(); err != nil {
 		return fmt.Errorf("clearing an interrupted snapshot: %w", err)
 	}
-	// A roll back prepares the snapshot in a private folder before its
-	// journal exists. Without a journal, nothing in it is in use.
+	// A roll back prepares the snapshot in a private folder, publishes it as
+	// its stage and only then writes its journal. With no journal, nothing
+	// was moved out of the VM yet: a preparation folder, or a stage whose
+	// data folder is still empty, only holds an unused copy of the snapshot.
 	if entries, err := os.ReadDir(dir); err == nil {
 		for _, entry := range entries {
-			if entry.IsDir() && strings.HasPrefix(entry.Name(), ".snapshot-preparing-") {
-				path := filepath.Join(dir, entry.Name())
-				if validateMovePath(path) == nil {
-					if err := os.RemoveAll(path); err != nil {
-						logf("snapshots: could not remove %s: %v", path, err)
-					}
+			path := filepath.Join(dir, entry.Name())
+			abandoned := entry.IsDir() && strings.HasPrefix(entry.Name(), ".snapshot-preparing-")
+			if entry.IsDir() && linuxRollbackStage.MatchString(entry.Name()) {
+				kept, err := os.ReadDir(filepath.Join(path, "data"))
+				abandoned = err == nil && len(kept) == 0
+			}
+			if abandoned && validateMovePath(path) == nil {
+				if err := os.RemoveAll(path); err != nil {
+					logf("snapshots: could not remove %s: %v", path, err)
 				}
 			}
 		}
@@ -75,7 +80,7 @@ func linuxRollbackKept(dir string) []string {
 			continue
 		}
 		data := filepath.Join(dir, entry.Name(), "data")
-		if info, err := os.Lstat(data); err == nil && info.IsDir() {
+		if contents, err := os.ReadDir(data); err == nil && len(contents) > 0 {
 			kept = append(kept, data)
 		}
 	}
@@ -265,11 +270,8 @@ func createLinuxSnapshot(w *linuxSetupWindow, dir string) string {
 	name := linuxDefaultSnapshotName(time.Now())
 	notice := ""
 	for {
-		status := "Name this snapshot so you can find it later. Shut down Omarchy first if it is running.\n\n" + linuxSnapshotSpaceNote(dir)
-		if notice != "" {
-			status = notice + "\n\n" + status
-		}
-		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "snapshot-name", Title: "Create a snapshot", Text: name, Notice: notice, Status: status})
+		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "snapshot-name", Title: "Create a snapshot", Text: name, Notice: notice,
+			Status: "Name this snapshot so you can find it later. Shut down Omarchy first if it is running.\n\n" + linuxSnapshotSpaceNote(dir)})
 		if err != nil || answer == "cancel" {
 			return ""
 		}

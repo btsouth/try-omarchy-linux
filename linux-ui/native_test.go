@@ -213,12 +213,8 @@ func TestNativeFooterAndReply(t *testing.T) {
 					t.Error("device refresh discarded hidden manual memory")
 				}
 			}
-			// Capture on the next tick, after layout settles. Bring the reclaim
-			// card into view on the pages that show it.
+			// Capture on the next tick, after layout settles.
 			pendingCapture = fmt.Sprintf("footer-%02d-%s", index, orDefault(cases[index].state.Prompt, "progress"))
-			if settings := cases[index].state.Settings; settings != nil && settings.Reclaim != nil && reclaim != nil {
-				reclaim.GrabFocus()
-			}
 			if index == 0 && found != nil {
 				// Duplicate activation must produce one reply for this request.
 				found.Emit("clicked")

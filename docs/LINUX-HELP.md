@@ -4,6 +4,9 @@ Try Omarchy runs the Omarchy desktop in a virtual machine on your Linux PC. This
 page covers installing, first use, updates, storage and removal. The app links
 here from its own messages.
 
+Want to keep your trial when installing Omarchy for real? See
+[Bring your trial into an installed Omarchy](MIGRATION.md).
+
 ## Install
 
 You need a 64-bit x86 PC with virtualization turned on, Flatpak, and about

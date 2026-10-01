@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -47,6 +48,10 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "choice", Title: "Reset Omarchy?", Primary: "Keep this VM", Secondary: "Reset", Destructive: true}, "Keep this VM"},
 		{state{Prompt: "close"}, "Keep running"},
 		{state{Prompt: "delete-default"}, "Keep this VM"},
+		{state{Prompt: "recovery", CanSnapshot: true, CanCleanRollback: true, CanReset: true}, "Snapshots..."},
+		{state{Prompt: "snapshots", Sections: []section{{Heading: "Snapshots", Rows: []row{{Title: "Before trying Hyprland plugins", Detail: "Oct 1, 2026 at 09:30 · 5.2 GB", Reply: "snapshot:" + strings.Repeat("a", 32)}, {Title: "Damaged snapshot", Detail: "This snapshot cannot be used: snapshot archive size changed", State: "unavailable", Reply: "snapshot:" + strings.Repeat("b", 32)}}}}, Actions: []action{{Label: "Create snapshot", Reply: "create", Suggested: true}, {Label: "Back", Reply: "close"}}}, "Create snapshot"},
+		{state{Prompt: "snapshot", Title: "Before trying Hyprland plugins", Status: "Saved Thursday, October 1, 2026 at 09:30. Uses 5.2 GB in this VM's folder.", Actions: []action{{Label: "Restore as a copy", Reply: "restore", Suggested: true}, {Label: "Roll back to this snapshot...", Reply: "rollback", Destructive: true}, {Label: "Delete snapshot...", Reply: "delete"}, {Label: "Back", Reply: "close"}}}, "Roll back to this snapshot..."},
+		{state{Prompt: "snapshot-name", Title: "Create a snapshot", Text: "Snapshot Oct 1 09:30", Status: "Name this snapshot so you can find it later. Shut down Omarchy first if it is running."}, "Create snapshot"},
 		{state{Status: "Downloading Omarchy", Current: 42, Total: 100}, "Cancel"},
 		{state{Status: "Starting Omarchy", Booting: true}, "Stop Omarchy"},
 		{state{Status: "Waiting for the Omarchy desktop", Detail: "Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.", Booting: true}, "Stop Omarchy"},
@@ -54,6 +59,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "settings", Notice: "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again.", Settings: &settingsForm{Running: true, AudioLive: true, ForwardsLive: true, ResourceProfile: "balanced", CPUMax: 8}}, "Save settings"},
 	}
 	index, inspecting := 0, false
+	pendingCapture := ""
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
@@ -63,6 +69,12 @@ func TestNativeFooterAndReply(t *testing.T) {
 			}
 		}
 		glib.TimeoutAdd(250, func() bool {
+			if pendingCapture != "" {
+				if err := captureNative(window, pendingCapture); err != nil {
+					t.Errorf("capture %s: %v", pendingCapture, err)
+				}
+				pendingCapture = ""
+			}
 			if index == len(cases) {
 				close(updates)
 				return false
@@ -80,6 +92,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var refresh *gtk.Button
 			var pages *gtk.Stack
 			brandVisible, integrationsVisible := false, false
+			activatableRows, nameText := 0, ""
 			noticeVisible := false
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
@@ -129,6 +142,12 @@ func TestNativeFooterAndReply(t *testing.T) {
 						// Read About to the end before opening another surface.
 						scroller.VAdjustment().SetValue(scroller.VAdjustment().Upper())
 					}
+				}
+				if row, ok := widget.Object.Cast().(*adw.ActionRow); ok && row.Mapped() && row.Activatable() {
+					activatableRows++
+				}
+				if entry, ok := widget.Object.Cast().(*gtk.Entry); ok && entry.Mapped() && entry.MaxLength() == 80 {
+					nameText = entry.Text()
 				}
 				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok && spin.Digits() == 2 {
 					memory = spin
@@ -192,6 +211,22 @@ func TestNativeFooterAndReply(t *testing.T) {
 					t.Error("device refresh discarded hidden manual memory")
 				}
 			}
+			switch cases[index].state.Prompt {
+			case "snapshots":
+				if activatableRows != 2 {
+					t.Errorf("snapshots: %d rows can be opened, want 2", activatableRows)
+				}
+			case "snapshot-name":
+				if nameText != cases[index].state.Text {
+					t.Errorf("snapshot name field shows %q, want %q", nameText, cases[index].state.Text)
+				}
+			case "home":
+				if activatableRows != 0 {
+					t.Errorf("home: %d information rows act like buttons", activatableRows)
+				}
+			}
+			// Capture on the next tick, after layout settles.
+			pendingCapture = fmt.Sprintf("footer-%02d-%s", index, orDefault(cases[index].state.Prompt, "progress"))
 			if index == 0 && found != nil {
 				// Duplicate activation must produce one reply for this request.
 				found.Emit("clicked")

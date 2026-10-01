@@ -31,7 +31,7 @@ func checkpointRollbackNames() []string {
 	for index := 0; index < maximumGuestDisplays; index++ {
 		names = append(names, displayPlacementFilename(index))
 	}
-	return names
+	return append(names, platformPreferenceFiles...)
 }
 
 func rollbackPathExists(path string) (bool, error) {

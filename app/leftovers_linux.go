@@ -138,6 +138,9 @@ func linuxRestoreStagingNames() map[string]bool {
 	for index := 0; index < maximumGuestDisplays; index++ {
 		names[displayPlacementFilename(index)] = true
 	}
+	for _, name := range platformPreferenceFiles {
+		names[name] = true
+	}
 	return names
 }
 

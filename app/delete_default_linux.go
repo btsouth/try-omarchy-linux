@@ -11,6 +11,7 @@ import (
 var linuxVMDeleteFiles = map[string]bool{
 	"disk.raw": true, "qemu.log": true, "qemu-stderr.log": true,
 	"serial.log": true, "serial-gpu.log": true, "shell.log": true,
+	checkpointBootFilename: true,
 }
 
 var linuxGuestDeleteFiles = map[string]bool{
@@ -32,7 +33,7 @@ func linuxDefaultVMCanDelete(defaultDir string) bool {
 // linuxDeletePrompt names the folder and what deleting it frees. It says what
 // is lost and what is kept, since Delete cannot be undone.
 func linuxDeletePrompt(defaultDir string) string {
-	freed := linuxTreeBytes(filepath.Join(defaultDir, "vm")) + linuxTreeBytes(filepath.Join(defaultDir, "guest"))
+	freed := linuxTreeBytes(filepath.Join(defaultDir, "vm")) + linuxTreeBytes(filepath.Join(defaultDir, "guest")) + linuxTreeBytes(filepath.Join(defaultDir, "checkpoints"))
 	return "Delete this VM and its downloaded system files from " + linuxDisplayPath(defaultDir) + "? This frees about " + linuxGB(freed) +
 		". Everything inside Omarchy is lost: your files, apps and settings there. Try Omarchy's own settings, shared folders and backups stay. " +
 		"To use Omarchy again you would set it up and download it again."
@@ -110,6 +111,14 @@ func deleteLinuxDefaultVM(defaultDir string) error {
 		}
 		modePresent = true
 	} else if !os.IsNotExist(err) {
+		return err
+	}
+	// Snapshots and the state a roll back kept are this VM's own copies.
+	// Remove them first, so a failure leaves the VM itself in place.
+	if err := removeLinuxSnapshotStore(defaultDir); err != nil {
+		return fmt.Errorf("could not remove this VM's snapshots: %w", err)
+	}
+	if err := removeLinuxRollbackKept(defaultDir); err != nil {
 		return err
 	}
 	for _, name := range vmFiles {

@@ -275,6 +275,32 @@ before. If your VM is in a folder you chose and the app's data was deleted,
 choose **Use existing data folder** from the home screen's menu and pick that
 folder.
 
+## Snapshots
+
+A snapshot saves your VM as it is now: its disk, Omarchy's system files and
+Try Omarchy's settings for it. Take one before trying something you may want to
+undo. Shut down Omarchy, open **Backup and recovery**, choose **Snapshots...**,
+then **Create snapshot** and give it a name.
+
+Snapshots are compressed copies kept in the VM's own folder, under
+`checkpoints`. Each one can take as much space as the VM uses, so the
+Snapshots page and the storage summary show their sizes. Choose a snapshot to:
+
+- **Restore as a copy**: make a separate VM from it in a folder you choose. The
+  current VM stays as it is. Open the copy with **Use existing data folder**.
+- **Roll back to this snapshot**: replace the current VM with the snapshot.
+  The state you are leaving is kept in the VM's folder, so nothing is lost
+  yet. Remove it later with **Remove state kept from roll back...** in Backup
+  and recovery. The first launch after a roll back uses the system files saved
+  with the snapshot; a newer version, if any, is fetched on the launch after.
+- **Delete snapshot**: free its space. The VM and other snapshots stay.
+
+Every snapshot is checked against its checksum before it is restored. If a roll
+back is interrupted, for example by a crash or power loss, the next time Try
+Omarchy opens it finishes or undoes it before showing the VM. Snapshots live
+with the VM: **Delete this VM** removes them too. Use **Create backup** for a
+copy kept somewhere else.
+
 ## Backup and recovery
 
 - **Create backup** saves the VM and its settings as a `.zip` in a folder you

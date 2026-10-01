@@ -27,6 +27,8 @@ type linuxRow struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail,omitempty"`
 	State  string `json:"state,omitempty"`
+	// Reply makes the row activatable; the window sends it back when chosen.
+	Reply string `json:"reply,omitempty"`
 }
 
 type linuxSection struct {
@@ -176,6 +178,9 @@ func linuxKeptCopies(dir, defaultDir string) []linuxKeptCopy {
 	for _, disk := range linuxRetainedResetDisks(dir) {
 		kept = append(kept, linuxKeptCopy{Title: "Disk kept from a reset", Path: filepath.Dir(disk), Bytes: linuxAllocatedBytes(disk)})
 	}
+	for _, data := range linuxRollbackKept(dir) {
+		kept = append(kept, linuxKeptCopy{Title: "State kept from a roll back", Path: data, Bytes: linuxTreeBytes(data)})
+	}
 	if retained, _ := linuxRetainedMove(defaultDir, dir); retained != nil {
 		var size int64
 		for _, part := range []string{"vm", "guest"} {
@@ -232,6 +237,13 @@ func linuxStorageRows(dir, defaultDir string, full bool) []linuxRow {
 	}
 	if system := linuxTreeBytes(filepath.Join(dir, "guest")); system > 0 {
 		rows = append(rows, linuxRow{Title: "System files", Detail: linuxGB(system) + "\nKept so Omarchy can start, repair itself and reset."})
+	}
+	if count, bytes := linuxSnapshotsBytes(dir); count > 0 {
+		word := "snapshots"
+		if count == 1 {
+			word = "snapshot"
+		}
+		rows = append(rows, linuxRow{Title: "Snapshots", Detail: fmt.Sprintf("%d %s, %s\nIn this VM's folder. Delete old ones from Snapshots.", count, word, linuxGB(bytes))})
 	}
 	if free := linuxFreeBytes(dir); free >= 0 {
 		rows = append(rows, linuxRow{Title: "Free on this drive", Detail: linuxGB(free)})

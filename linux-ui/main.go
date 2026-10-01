@@ -47,6 +47,10 @@ type state struct {
 	CanCleanMove      bool   `json:"canCleanMove"`
 	CanCleanReset     bool   `json:"canCleanReset"`
 	CanCleanLeftovers bool   `json:"canCleanLeftovers"`
+	CanSnapshot       bool   `json:"canSnapshot"`
+	CanCleanRollback  bool   `json:"canCleanRollback"`
+	// Text is the initial value of a prompt's text field.
+	Text string `json:"text"`
 	// Plain-language content the launcher composes and this window only lays out.
 	Headline   string    `json:"headline"`
 	Notice     string    `json:"notice"`
@@ -62,9 +66,10 @@ type state struct {
 }
 
 // Recovery keeps this window open after a cancelled copy. Ignore copy progress
-// until the launcher returns to its home prompt, then make the window usable.
+// until the launcher returns to its home prompt, or to the snapshot list a
+// cancelled snapshot operation goes back to, then make the window usable.
 func acceptStateAfterCancel(cancelling bool, next state) bool {
-	return !cancelling || next.Prompt == "home" || next.NonCancellable
+	return !cancelling || next.Prompt == "home" || next.Prompt == "snapshots" || next.NonCancellable
 }
 
 type settingsForm struct {
@@ -149,8 +154,9 @@ func clearChildren(box *gtk.Box) {
 }
 
 // fillSections lays headed rows out as boxed lists. Names stay prominent and
-// details can be selected so a path can be copied.
-func fillSections(box *gtk.Box, sections []section) {
+// details can be selected so a path can be copied. A row with a Reply is
+// activatable and sends it through choose.
+func fillSections(box *gtk.Box, sections []section, choose func(string)) {
 	clearChildren(box)
 	for _, s := range sections {
 		group := adw.NewPreferencesGroup()
@@ -164,7 +170,12 @@ func fillSections(box *gtk.Box, sections []section) {
 			item.SetSubtitle(r.Detail)
 			item.SetTitleLines(0)
 			item.SetSubtitleLines(0)
-			item.SetSubtitleSelectable(true)
+			item.SetSubtitleSelectable(r.Reply == "")
+			if r.Reply != "" && choose != nil {
+				reply := r.Reply
+				item.SetActivatable(true)
+				item.ConnectActivated(func() { choose(reply) })
+			}
 			iconName := "dialog-information-symbolic"
 			switch {
 			case strings.Contains(strings.ToLower(r.Title), "resource"):
@@ -177,6 +188,8 @@ func fillSections(box *gtk.Box, sections []section) {
 				iconName = "folder-symbolic"
 			case strings.Contains(strings.ToLower(r.Title), "disk"), strings.Contains(strings.ToLower(r.Title), "space"):
 				iconName = "drive-harddisk-symbolic"
+			case strings.HasPrefix(r.Reply, "snapshot:"):
+				iconName = "document-open-recent-symbolic"
 			}
 			if gtk.IconThemeGetForDisplay(gdk.DisplayGetDefault()).HasIcon(iconName) {
 				icon := gtk.NewImageFromIconName(iconName)
@@ -201,6 +214,10 @@ func fillSections(box *gtk.Box, sections []section) {
 				status.AddCSSClass(style)
 				status.AddCSSClass("integration-state")
 				item.AddSuffix(status)
+			}
+			// The chevron comes last, after any state, to say the row opens.
+			if r.Reply != "" && choose != nil && gtk.IconThemeGetForDisplay(gdk.DisplayGetDefault()).HasIcon("go-next-symbolic") {
+				item.AddSuffix(gtk.NewImageFromIconName("go-next-symbolic"))
 			}
 
 			group.Add(item)
@@ -345,6 +362,12 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		accountOptions.Append(quickAccount)
 		accountOptions.SetVisible(false)
 		content.Append(accountOptions)
+		nameEntry := gtk.NewEntry()
+		nameEntry.SetMaxLength(80)
+		nameEntry.SetActivatesDefault(true)
+		named(nameEntry, "Snapshot name")
+		nameEntry.SetVisible(false)
+		content.Append(nameEntry)
 		progress := gtk.NewProgressBar()
 		named(progress, "Progress")
 		content.Append(progress)
@@ -702,11 +725,13 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
 		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
 		cleanLeftoversButton := gtk.NewButtonWithLabel("Remove unfinished files...")
+		snapshotsButton := gtk.NewButtonWithLabel("Snapshots...")
+		cleanRollbackButton := gtk.NewButtonWithLabel("Remove state kept from roll back...")
 		primary.SetHExpand(true)
 		secondary.SetHExpand(true)
 		choices := gtk.NewBox(gtk.OrientationVertical, 8)
 		choices.SetHExpand(true)
-		for _, action := range []*gtk.Button{primary, secondary, tertiary, moveButton, resetButton, cleanMoveButton, cleanResetButton, cleanLeftoversButton} {
+		for _, action := range []*gtk.Button{primary, secondary, snapshotsButton, tertiary, moveButton, resetButton, cleanMoveButton, cleanResetButton, cleanRollbackButton, cleanLeftoversButton} {
 			choices.Append(action)
 		}
 		choices.SetHAlign(gtk.AlignEnd)
@@ -922,6 +947,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				reply("primary")
 			case "error":
 				reply("retry")
+			case "snapshot-name":
+				reply(nameEntry.Text())
 			case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
 				id := current.Request
 				dialog := gtk.NewFileDialog()
@@ -1090,6 +1117,16 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				reply("clean-leftovers")
 			}
 		})
+		snapshotsButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanSnapshot {
+				reply("snapshots")
+			}
+		})
+		cleanRollbackButton.ConnectClicked(func() {
+			if current.Prompt == "recovery" && current.CanCleanRollback {
+				reply("clean-rollback")
+			}
+		})
 		button.ConnectClicked(close)
 		window.ConnectCloseRequest(func() bool { close(); return true })
 		glib.TimeoutAdd(100, func() bool {
@@ -1139,7 +1176,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					banner.SetRevealed(next.Notice != "" && !next.Error && next.Prompt != "error")
 					// The home and error pages get the buttons the launcher chose.
-					dynamic := next.Prompt == "home" || next.Prompt == "error"
+					dynamic := dynamicActionsPrompt(next.Prompt)
 					choices.SetVisible(next.Prompt != "" && !dynamic)
 					placeChoices(next.Prompt == "recovery")
 					dynamicActions.SetVisible(dynamic)
@@ -1150,6 +1187,12 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					cleanMoveButton.SetVisible(next.Prompt == "recovery" && next.CanCleanMove)
 					cleanResetButton.SetVisible(next.Prompt == "recovery" && next.CanCleanReset)
 					cleanLeftoversButton.SetVisible(next.Prompt == "recovery" && next.CanCleanLeftovers)
+					snapshotsButton.SetVisible(next.Prompt == "recovery" && next.CanSnapshot)
+					cleanRollbackButton.SetVisible(next.Prompt == "recovery" && next.CanCleanRollback)
+					nameEntry.SetVisible(next.Prompt == "snapshot-name")
+					if next.Prompt == "snapshot-name" && pageChanged {
+						nameEntry.SetText(next.Text)
+					}
 					tertiary.SetLabel("Create diagnostics")
 					button.SetLabel("Cancel")
 					if next.Booting && next.Prompt == "" {
@@ -1180,10 +1223,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					settingsStatus.SetText(next.Status)
 					secondary.RemoveCSSClass("destructive-action")
 					visibleSections, setupSections := homeSectionsForState(next)
-					fillSections(homeSections, visibleSections)
-					fillSections(homeSetup, setupSections)
+					fillSections(homeSections, visibleSections, nil)
+					fillSections(homeSetup, setupSections, nil)
 					homeDetails.SetVisible(len(setupSections) > 0)
-					fillSections(pageSections, sectionsIf(next.Prompt != "home" && next.Prompt != "settings", next.Sections))
+					fillSections(pageSections, sectionsIf(next.Prompt != "home" && next.Prompt != "settings", next.Sections), reply)
 					clearChildren(menuBox)
 					for _, item := range next.Menu {
 						item := item
@@ -1234,6 +1277,14 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						if next.Destructive {
 							secondary.AddCSSClass("destructive-action")
 						}
+						button.SetLabel("Cancel")
+					case "snapshots":
+						pageTitle.SetText("Snapshots")
+					case "snapshot":
+						pageTitle.SetText(next.Title)
+					case "snapshot-name":
+						pageTitle.SetText(orDefault(next.Title, "Create a snapshot"))
+						primary.SetLabel("Create snapshot")
 						button.SetLabel("Cancel")
 					case "about":
 						pageTitle.SetText("About Try Omarchy")
@@ -1379,7 +1430,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					case "error":
 						pageTitle.SetText(orDefault(next.ErrorTitle, "Omarchy could not start"))
 					}
-					secondary.SetVisible(next.Prompt != "account" && next.Prompt != "settings" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
+					secondary.SetVisible(next.Prompt != "account" && next.Prompt != "settings" && next.Prompt != "snapshot-name" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
 					choicesCell.SetVisible(choices.Visible())
 					gtk.BaseWidget(button.Parent()).SetVisible(button.Visible())
 					footerButtons.SetVisible(!dynamic)
@@ -1453,6 +1504,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					} else if next.Prompt == "account" {
 						window.SetDefaultWidget(primary)
 						personalAccount.GrabFocus()
+					} else if next.Prompt == "snapshot-name" {
+						window.SetDefaultWidget(primary)
+						nameEntry.GrabFocus()
+						nameEntry.SelectRegion(0, -1)
 					} else if next.Prompt == "recovery" {
 						button.GrabFocus()
 					} else if next.Prompt != "" {

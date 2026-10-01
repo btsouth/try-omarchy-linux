@@ -73,6 +73,8 @@ Each [release](https://github.com/btsouth/try-omarchy-linux/releases) also has t
 
 Your VM and files stay between sessions. Clipboard sharing is optional. The [user guide](docs/LINUX-HELP.md) covers setup, updates, storage, backups and removal.
 
+Installing Omarchy for real? [Bring your trial along](docs/MIGRATION.md) with an export of your settings, apps, files and projects.
+
 Signed-repository releases receive updates through Software or `flatpak update`.
 
 <details>

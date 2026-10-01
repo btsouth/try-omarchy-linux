@@ -1,63 +1,81 @@
-# Moving a Try Omarchy setup to a real Omarchy install
+# Bring your trial into an installed Omarchy
 
-Use Settings or Windows Apps & features to uninstall Try Omarchy, including
-moved or custom installations. If the trial wins you over,
-`try-omarchy-export` carries your configuration to a full Omarchy install.
+You can keep the settings, themes, keybindings, apps, files and projects you
+made in Try Omarchy when you install Omarchy on your computer.
 
-## Export inside Omarchy
+## Export before installing
 
-Open a terminal (SUPER+RETURN) and run:
+Inside the trial, open a terminal and run:
 
-```
+```sh
 try-omarchy-export
 ```
 
-It writes `omarchy-export-<date>.tar.gz` to the shared Windows folder when
-Try Omarchy was started with `-share`, otherwise to your home folder. Pass a
-directory to choose another place. The archive contains:
+Choose what to bring over. The export includes settings, your folders, app
+data and the apps you added. Browser profiles, keys and sign-ins are off by
+default; select them only if you want to carry them over too.
 
-- `home/`: an allowlist of Omarchy, Hyprland, terminal, bar, notification,
-  input, and other desktop configuration; `~/.local/bin`; and shell dotfiles (`.bashrc`, `.zshrc`, `.gitconfig`, and
-  friends).
-- `theme`: the name of the theme you had selected.
-- `packages/repo.txt` and `packages/aur.txt`: packages you added on top of the
-  factory image, split by where they come from.
-- `restore.sh` and `manifest.json`.
+The command writes `omarchy-export-<date>.tar.gz` to your shared host folder
+when one is available, otherwise to your home inside the trial. You can choose
+another destination with `try-omarchy-export /path/to/folder`.
 
-Left out on purpose: unlisted application config, `~/.ssh`, `~/.gnupg`,
-password managers, browser profiles, and caches. Those either may hold secrets
-you should move yourself or are rebuilt on the new machine. The allowlist
-avoids common credential files under `~/.config`, but the archive is still
-your data. Review it before sharing it with anyone.
+Copy the archive out of the trial before replacing your Linux installation.
+Use the shared folder, Files, or a USB drive. Check that the copy exists on
+the host or USB drive. Shared host folders themselves are not exported.
 
-## Restore on the real install
+After installing Omarchy, extract the archive and run the `import.sh` inside
+it as your normal account. It shows what it can bring over, lets you choose,
+and asks before changing anything. Add `--dry-run` to inspect the plan first.
+The archive contains its own importer, so it needs no download. When the
+import finishes, log out and back in.
 
-Copy the archive over (USB stick, the shared folder, `scp` through the SSH
-preset), then as the user who should receive the configuration:
+Older Try Omarchy images produce an archive with `restore.sh` instead. Use
+that script for those archives, or update the guest before exporting to use
+the newer importer described here.
 
+## Read a trial disk directly
+
+If you still have the Linux trial data folder, you can run the importer on
+the installed Omarchy without exporting first:
+
+```sh
+python3 try-omarchy-import.pyz --data /path/to/try-omarchy
 ```
-tar -xzf omarchy-export-<date>.tar.gz
-cd omarchy-export-<date>
-./restore.sh
-```
 
-The script backs up anything it replaces under
-`~/.omarchy-restore-backup/<time>`, installs the repository packages with
-pacman and the AUR packages with yay, and selects your theme. Log out and back
-in afterwards so Hyprland and the shell pick up the restored configuration.
+Use the folder that contains `vm/disk.raw`. The home screen's **Storage**
+page shows where your VM lives. Shut down the trial before importing and keep
+it closed until the import finishes. The
+importer reads the disk without changing it; a running VM or another disk
+operation is refused.
 
-The updated exporter preserves the destination's `monitors.lua` and
-`monitors.conf`, and does not replace its Omarchy runtime location. Linked
-Hyprland configuration requires manual review rather than automatic replacement.
+Without `--data`, the importer looks in this account's native and Flatpak
+Try Omarchy folders and follows saved locations. A folder on an old Linux
+installation, another account or another drive should be selected explicitly
+with `--data`. It also supports trials on Windows drives.
 
-Package or theme failures, including missing `yay` or `omarchy-theme-set`,
-produce an incomplete-restore message and a nonzero exit status. Configuration
-already restored and its backups remain available. Review `packages/*.txt`
-and the reported errors before logging out.
+For contributors, build the standalone importer from the repository with
+`python3 migrate/build.py --version dev --output /tmp/importer`. The output
+is `/tmp/importer/try-omarchy-import.pyz`.
 
-These migration fixes were introduced in compatibility revision 17 and are
-included in the published v0.0.20-preview guest (revision 29). Archives created
-by earlier exporters retain their original restore script; create a fresh export
-from the updated guest. Automated restore checks cover configuration preservation
-and incomplete-restore reporting. Restoration onto a separate physical Omarchy
-installation is still unverified.
+## What happens to your files
+
+Only changes you made in the trial come over. Untouched defaults keep the
+new install's version. When defaults changed between Omarchy versions, the
+importer combines your changes with the newer defaults where it can.
+
+If a setting changed on both sides, choose which version stays in place.
+Replaced files are backed up under
+`~/.local/share/try-omarchy-import/backups`. Documents with conflicting names
+are saved alongside the existing copy, with `(from Try Omarchy)` in the name.
+
+The virtual display setup, shared-folder links, VM integration, caches and
+hardware-specific monitor settings stay behind. Added packages and Flatpak
+apps can be reinstalled. Services and group memberships are listed for you
+to review; they are never enabled automatically.
+
+Run the import again after an interruption. It skips completed work, keeps
+later edits and deletions, and can pick up new changes from the trial.
+
+Import only a trial you set up and trust. Settings can run programs, and
+exports containing browser profiles, keys or sign-ins contain private data.
+Keep those archives private and delete them when you no longer need them.

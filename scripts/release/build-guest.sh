@@ -58,6 +58,12 @@ git -C "$work" config user.name "Try Omarchy Release"
 git -C "$work" config user.email "actions@users.noreply.github.com"
 git -C "$work" am "$repo_root"/guest-build/*.patch
 
+# Build the importer into the guest so every export carries the same code
+# that made it. Compatibility updates deliver it to existing guests too.
+python3 "$repo_root/migrate/build.py" --version "${RELEASE_TAG:-dev}" --output "$work/importer" >/dev/null
+install -Dm0755 "$work/importer/try-omarchy-import.pyz" \
+  "$work/guest/factory-overlay/usr/local/lib/try-omarchy/try-omarchy-import.pyz"
+
 "$work/guest/test"
 
 if ((contract_only)); then

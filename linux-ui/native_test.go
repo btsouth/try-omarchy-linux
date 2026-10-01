@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -57,6 +58,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Prompt: "message", Title: "Reclaim disk space", Status: "Preparing free space. Keep Omarchy running until it finishes, then shut it down to give the space back."}, "Done"},
 	}
 	index, inspecting := 0, false
+	pendingCapture := ""
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
@@ -66,6 +68,12 @@ func TestNativeFooterAndReply(t *testing.T) {
 			}
 		}
 		glib.TimeoutAdd(250, func() bool {
+			if pendingCapture != "" {
+				if err := captureNative(window, pendingCapture); err != nil {
+					t.Errorf("capture %s: %v", pendingCapture, err)
+				}
+				pendingCapture = ""
+			}
 			if index == len(cases) {
 				close(updates)
 				return false
@@ -204,6 +212,12 @@ func TestNativeFooterAndReply(t *testing.T) {
 				if memory.Value() != 8 || !memory.Visible() {
 					t.Error("device refresh discarded hidden manual memory")
 				}
+			}
+			// Capture on the next tick, after layout settles. Bring the reclaim
+			// card into view on the pages that show it.
+			pendingCapture = fmt.Sprintf("footer-%02d-%s", index, orDefault(cases[index].state.Prompt, "progress"))
+			if settings := cases[index].state.Settings; settings != nil && settings.Reclaim != nil && reclaim != nil {
+				reclaim.GrabFocus()
 			}
 			if index == 0 && found != nil {
 				// Duplicate activation must produce one reply for this request.

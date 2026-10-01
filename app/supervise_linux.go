@@ -293,6 +293,8 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			}
 		case <-linuxSettingsRequests:
 			go showLinuxSettings(ctx, cfg.dir)
+		case <-linuxReclaimRequests:
+			go showLinuxReclaim(ctx, cfg.dir)
 		case <-linuxShutdownRequests:
 			if interrupts == 0 && confirmation.pending == nil {
 				confirmation.request()

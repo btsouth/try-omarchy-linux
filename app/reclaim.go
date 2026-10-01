@@ -12,26 +12,31 @@ var theAgent atomic.Pointer[guestAgent]
 // requestReclaim asks the guest to zero its free space so disk.raw can be
 // compacted after shutdown. Used by the tray, and by "-reclaim" through the
 // lifecycle port.
-// reclaimDir is the data directory whose Windows drive bounds a reclaim pass.
+// reclaimDir is the data directory whose host drive bounds a reclaim pass.
 var reclaimDir atomic.Pointer[string]
 var reclaimSupported atomic.Bool
 
+// reclaimFreeBytes reads the host drive's free space; tests replace it.
+var reclaimFreeBytes = diskFreeBytes
+
+// requestReclaimError starts a pass with a budget from the host drive's free
+// space, or says why it cannot start.
 func requestReclaimError() error {
 	if !reclaimSupported.Load() {
-		return fmt.Errorf("Reclaim is available for standard raw disks only.")
+		return fmt.Errorf("%s", reclaimUnsupportedMessage)
 	}
 	dir := reclaimDir.Load()
 	a := theAgent.Load()
 	if dir == nil || a == nil {
 		return fmt.Errorf("Omarchy is not ready. Wait for the desktop and try again.")
 	}
-	free, err := diskFreeBytes(*dir)
+	free, err := reclaimFreeBytes(*dir)
 	if err != nil {
 		return fmt.Errorf("Could not check free space: %w", err)
 	}
 	budget := reclaimBudgetMiB(free)
 	if budget == 0 {
-		return fmt.Errorf("Reclaim needs at least 4.25 GiB free on the Windows drive.")
+		return fmt.Errorf("%s", reclaimNeedsSpaceMessage)
 	}
 	if !a.requestZeroFill(budget) {
 		return fmt.Errorf("Reclaim was not started. %s", a.reclaimStatus())

@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+// linuxSettingsForm is one Settings snapshot. Reclaim is nil before launch;
+// StartReclaim asks for a reclaim pass without saving the form.
 type linuxSettingsForm struct {
 	Memory             string             `json:"memory"`
 	CPUs               string             `json:"cpus"`
@@ -32,6 +34,8 @@ type linuxSettingsForm struct {
 	ForwardsLive       bool               `json:"forwardsLive"`
 	Running            bool               `json:"running"`
 	RefreshAudio       bool               `json:"refreshAudio,omitempty"`
+	Reclaim            *linuxReclaimInfo  `json:"reclaim,omitempty"`
+	StartReclaim       bool               `json:"startReclaim,omitempty"`
 	DiskGiB            string             `json:"diskGiB"`
 	Scale              string             `json:"scale"`
 	Keyboard           string             `json:"keyboard"`
@@ -112,6 +116,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
 	form.ForwardsLive = running && linuxLiveForwards.Load()
 	form.Running = running
+	if running {
+		form.Reclaim = linuxReclaimInfoFor(dir)
+	}
 	clipboardShared := form.ClipboardShare
 	if form.Render == "" {
 		form.Render = "auto"
@@ -140,15 +147,29 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		resourceSummary := form.ResourceSummary
 		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
 		cameras := form.Cameras
+		form.StartReclaim = false
 		err = json.Unmarshal([]byte(value), form)
 		form.AudioLive, form.ForwardsLive = audioLive, forwardsLive
 		form.Running = running
 		form.ResourceSummary = resourceSummary
 		form.AudioOutputs, form.AudioInputs = audioOutputs, audioInputs
 		form.Cameras = cameras
+		form.Reclaim = nil
+		if running {
+			form.Reclaim = linuxReclaimInfoFor(dir)
+		}
 		if err != nil {
 			status = "Could not read the settings."
 			notice = status
+			continue
+		}
+		if form.StartReclaim {
+			form.StartReclaim = false
+			notice = ""
+			// The Storage card shows the result. Unsaved edits stay in the form.
+			if running {
+				form.Reclaim = startLinuxReclaimFromSettings(dir)
+			}
 			continue
 		}
 		if form.RefreshAudio {

@@ -16,6 +16,8 @@ func TestLinuxKeyboardEnvironment(t *testing.T) {
 	}
 }
 
+// TestLinuxTrayDispatch checks that only clicks open windows and that the
+// menu layout keeps the type dbusmenu hosts expect.
 func TestLinuxTrayDispatch(t *testing.T) {
 	before := linuxGUIEnabled
 	linuxGUIEnabled = true
@@ -44,7 +46,7 @@ func TestLinuxTrayDispatch(t *testing.T) {
 		t.Fatal("menu actions not dispatched")
 	}
 	root := linuxTrayLayout(0)
-	if len(root.Children) != 2 {
+	if len(root.Children) != 3 {
 		t.Fatal(root)
 	}
 	// Pin the wire type consumed by dbusmenu hosts.

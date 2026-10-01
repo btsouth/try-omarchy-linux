@@ -79,6 +79,8 @@ func defaultLinuxDataDirectory() string {
 	return filepath.Join(base, "try-omarchy")
 }
 
+// main parses flags, shows the home unless launching directly, prepares the
+// guest and runs it until it shuts down.
 func main() {
 	cfg := &config{}
 	flag.StringVar(&cfg.dir, "dir", defaultLinuxDataDirectory(), "Try Omarchy data directory (virtual machine and settings)")
@@ -114,7 +116,12 @@ func main() {
 	noGUI := flag.Bool("no-gui", false, "show setup status in the terminal only")
 	startDirect := flag.Bool("start", false, "start Omarchy without the launcher home")
 	showLauncher := flag.Bool("launcher", false, "show the launcher home even with other options")
+	reclaim := flag.Bool("reclaim", false, "ask the running Omarchy to prepare its free space, so its disk file shrinks after shutdown, then exit")
 	flag.Parse()
+	if *reclaim {
+		// The running launcher owns the lifecycle port; this only talks to it.
+		os.Exit(sendLinuxReclaim(fmt.Sprintf("127.0.0.1:%d", lifecyclePort), os.Stdout, os.Stderr))
+	}
 	if os.Getenv(linuxRetryEnv) != "" {
 		// A retry continues the setup the person already chose.
 		os.Unsetenv(linuxRetryEnv)
@@ -385,8 +392,7 @@ func main() {
 		fatal("%v", err)
 	}
 
-	reclaimDir.Store(&cfg.dir)
-	reclaimSupported.Store(true)
+	configureLinuxReclaim(cfg)
 	go runLinuxGuestAgent(cfg.dir)
 	runCameraBridge(cfg.desktop)
 	if err := checkForwardBindings(cfg.forwards); err != nil {
@@ -483,25 +489,9 @@ func runLinuxGuestAgent(dir string) {
 	logf("agent: listening on %d", agentPort)
 	a := newGuestAgent()
 	a.appsDir = dir
+	a.reclaimFinished = linuxReclaimFinished
 	theAgent.Store(a)
 	a.run(l, make(chan struct{}))
-}
-
-// compactLinuxDisk returns zero-filled blocks to the host after a reclaim.
-func compactLinuxDisk(cfg *config) {
-	a := theAgent.Load()
-	if a == nil || !a.compactPending() {
-		return
-	}
-	getUI().setStatus("Reclaiming disk space...")
-	before, _ := platformAllocatedFileBytes(cfg.disk)
-	reclaimed, err := compactDisk(cfg.disk, nil)
-	if err != nil {
-		getUI().setStatus("Disk space could not be reclaimed: %v", err)
-		return
-	}
-	after, _ := platformAllocatedFileBytes(cfg.disk)
-	getUI().setStatus("Reclaimed %s (%s of zero blocks)", formatGiB(max(before-after, 0)), formatGiB(reclaimed))
 }
 
 // vulkanPresentMode resolves -vulkan-present. Automatic copies frames on

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -52,8 +53,16 @@ func TestNativeFooterAndReply(t *testing.T) {
 		{state{Status: "Waiting for the Omarchy desktop", Detail: "Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.", Booting: true}, "Stop Omarchy"},
 		{state{Prompt: "home", Installed: true, CheckAgain: true, Headline: "Saved settings need attention.", Notice: "Saved settings could not be read.", HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/LINUX-HELP.md#settings", Actions: []action{{Label: "Check again", Reply: "check", Suggested: true}, {Label: "Settings", Reply: "settings"}, {Label: "Backup and recovery", Reply: "recovery"}, {Label: "Close", Reply: "close"}}, Sections: []section{{Heading: "Integrations", Rows: []row{{Title: "Settings", Detail: "Saved choices could not be read. Open Settings to see the problem.", State: "unavailable"}}}}}, "Check again"},
 		{state{Prompt: "settings", Notice: "Could not save startup. Already saved: VM configuration and audio devices. Your remaining edits are kept here. Check that the VM folder is writable and has free space, then Save again.", Settings: &settingsForm{Running: true, AudioLive: true, ForwardsLive: true, ResourceProfile: "balanced", CPUMax: 8}}, "Save settings"},
+		{state{Prompt: "settings", Settings: &settingsForm{Running: true, ResourceProfile: "balanced", CPUMax: 8, Reclaim: &reclaimInfo{Status: "Omarchy's disk uses 9.4 GB on this drive. Reclaim gives back space from files you deleted inside Omarchy.", CanStart: true}}}, "Save settings"},
+		{state{Prompt: "settings", Settings: &settingsForm{Running: true, ResourceProfile: "balanced", CPUMax: 8, Reclaim: &reclaimInfo{Status: "Preparing free space. Keep Omarchy running until preparation finishes."}}}, "Save settings"},
+		{state{Prompt: "message", Title: "Reclaim disk space", Status: "Preparing free space. Keep Omarchy running until it finishes, then shut it down to give the space back."}, "Done"},
 	}
 	index, inspecting := 0, false
+	pendingCapture := ""
+	// A capture can first bring one control into view; scrolling is reset
+	// before the next case so it cannot leak into the scroll checks.
+	var captureTarget *gtk.Button
+	var captureScroller *gtk.ScrolledWindow
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
@@ -63,6 +72,21 @@ func TestNativeFooterAndReply(t *testing.T) {
 			}
 		}
 		glib.TimeoutAdd(250, func() bool {
+			if pendingCapture != "" && captureTarget != nil {
+				captureTarget.GrabFocus()
+				captureTarget = nil
+				return true
+			}
+			if pendingCapture != "" {
+				if err := captureNative(window, pendingCapture); err != nil {
+					t.Logf("capture %s: %v", pendingCapture, err)
+				}
+				pendingCapture = ""
+				if captureScroller != nil {
+					captureScroller.VAdjustment().SetValue(0)
+					captureScroller = nil
+				}
+			}
 			if index == len(cases) {
 				close(updates)
 				return false
@@ -77,7 +101,7 @@ func TestNativeFooterAndReply(t *testing.T) {
 			var found *gtk.Button
 			var memory *gtk.SpinButton
 			var autoMemory *gtk.CheckButton
-			var refresh *gtk.Button
+			var refresh, reclaim *gtk.Button
 			var pages *gtk.Stack
 			brandVisible, integrationsVisible := false, false
 			noticeVisible := false
@@ -140,6 +164,9 @@ func TestNativeFooterAndReply(t *testing.T) {
 					if b.Label() == "Refresh devices" {
 						refresh = b
 					}
+					if b.Label() == "Prepare free space" {
+						reclaim = b
+					}
 					if b.Label() == cases[index].button {
 						found = b
 					}
@@ -164,6 +191,13 @@ func TestNativeFooterAndReply(t *testing.T) {
 				t.Errorf("%s: footer button is outside %dx%d window", cases[index].state.Prompt, window.Width(), window.Height())
 			} else {
 				t.Logf("%s: %q visible inside %dx%d", cases[index].state.Prompt, cases[index].button, window.Width(), window.Height())
+			}
+			if settings := cases[index].state.Settings; cases[index].state.Prompt == "settings" && reclaim != nil {
+				if wantShown := settings.Reclaim != nil; reclaim.Mapped() != wantShown {
+					t.Errorf("settings %d: reclaim card shown=%v, want %v", index, reclaim.Mapped(), wantShown)
+				} else if wantShown && reclaim.Sensitive() != settings.Reclaim.CanStart {
+					t.Errorf("settings %d: reclaim button sensitive=%v, want %v", index, reclaim.Sensitive(), settings.Reclaim.CanStart)
+				}
 			}
 			if window.HasCSSClass("try-omarchy") == adw.StyleManagerGetDefault().HighContrast() {
 				t.Error("brand override did not follow high contrast")
@@ -190,6 +224,17 @@ func TestNativeFooterAndReply(t *testing.T) {
 				autoMemory.SetActive(false)
 				if memory.Value() != 8 || !memory.Visible() {
 					t.Error("device refresh discarded hidden manual memory")
+				}
+			}
+			// Capture on the next tick, after layout settles.
+			pendingCapture = fmt.Sprintf("footer-%02d-%s", index, orDefault(cases[index].state.Prompt, "progress"))
+			if settings := cases[index].state.Settings; settings != nil && settings.Reclaim != nil && reclaim != nil {
+				captureTarget = reclaim
+				for parent := reclaim.Parent(); parent != nil; parent = gtk.BaseWidget(parent).Parent() {
+					if scroller, ok := gtk.BaseWidget(parent).Object.Cast().(*gtk.ScrolledWindow); ok {
+						captureScroller = scroller
+						break
+					}
 				}
 			}
 			if index == 0 && found != nil {

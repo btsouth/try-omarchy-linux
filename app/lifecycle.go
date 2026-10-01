@@ -53,7 +53,7 @@ func runLifecycleListener() {
 					if err := requestReclaimError(); err != nil {
 						fmt.Fprintln(c, "error: "+err.Error())
 					} else {
-						fmt.Fprintln(c, "ok: Preparing free space. Check Reclaim status in the tray before shutting down.")
+						fmt.Fprintln(c, "ok: "+reclaimStartedMessage)
 					}
 				}
 			}(c)

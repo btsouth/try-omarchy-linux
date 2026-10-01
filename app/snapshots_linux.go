@@ -237,7 +237,7 @@ func showLinuxSnapshots(w *linuxSetupWindow, dir string) string {
 			return "Could not read snapshots: " + err.Error()
 		}
 		page := linuxSetupState{Prompt: "snapshots", Status: status,
-			Sections: []linuxSection{{Heading: "Snapshots", Rows: linuxSnapshotRows(entries)}},
+			Sections: []linuxSection{{Rows: linuxSnapshotRows(entries)}},
 			Actions:  []linuxAction{{Label: "Create snapshot", Reply: "create", Suggested: true}, {Label: "Back", Reply: "close"}}}
 		if status == "" {
 			page.Status = "A snapshot saves this VM as it is now, so you can return to that point later. Roll back replaces the VM with a snapshot; Restore as a copy makes a separate VM from it."

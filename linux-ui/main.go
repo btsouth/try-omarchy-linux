@@ -166,9 +166,6 @@ func fillSections(box *gtk.Box, sections []section, choose func(string)) {
 				reply := r.Reply
 				item.SetActivatable(true)
 				item.ConnectActivated(func() { choose(reply) })
-				if gtk.IconThemeGetForDisplay(gdk.DisplayGetDefault()).HasIcon("go-next-symbolic") {
-					item.AddSuffix(gtk.NewImageFromIconName("go-next-symbolic"))
-				}
 			}
 			iconName := "dialog-information-symbolic"
 			switch {
@@ -208,6 +205,10 @@ func fillSections(box *gtk.Box, sections []section, choose func(string)) {
 				status.AddCSSClass(style)
 				status.AddCSSClass("integration-state")
 				item.AddSuffix(status)
+			}
+			// The chevron comes last, after any state, to say the row opens.
+			if r.Reply != "" && choose != nil && gtk.IconThemeGetForDisplay(gdk.DisplayGetDefault()).HasIcon("go-next-symbolic") {
+				item.AddSuffix(gtk.NewImageFromIconName("go-next-symbolic"))
 			}
 
 			group.Add(item)

@@ -40,6 +40,8 @@ type linuxMenuNode struct {
 	Children   []dbus.Variant
 }
 
+// linuxTrayLayout describes the tray menu for dbusmenu hosts: Settings,
+// Reclaim disk space and Shut down.
 func linuxTrayLayout(id int32) linuxMenuNode {
 	n := linuxMenuNode{ID: id, Properties: map[string]dbus.Variant{}, Children: []dbus.Variant{}}
 	labels := map[int32]string{1: "Settings...", 3: "Reclaim disk space...", 2: "Shut down Omarchy..."}
@@ -57,6 +59,8 @@ func (*linuxTrayMenu) GetLayout(id, depth int32, names []string) (uint32, linuxM
 	return 1, linuxTrayLayout(id), nil
 }
 func (*linuxTrayMenu) AboutToShow(id int32) (bool, *dbus.Error) { return false, nil }
+
+// Event dispatches clicked menu items; hovering and other events do nothing.
 func (*linuxTrayMenu) Event(id int32, event string, data dbus.Variant, timestamp uint32) *dbus.Error {
 	if event == "clicked" {
 		switch id {

@@ -16,6 +16,8 @@ func TestLinuxKeyboardEnvironment(t *testing.T) {
 	}
 }
 
+// TestLinuxTrayDispatch checks that only clicks open windows and that the
+// menu layout keeps the type dbusmenu hosts expect.
 func TestLinuxTrayDispatch(t *testing.T) {
 	before := linuxGUIEnabled
 	linuxGUIEnabled = true

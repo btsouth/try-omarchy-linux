@@ -19,6 +19,8 @@ var reclaimSupported atomic.Bool
 // reclaimFreeBytes reads the host drive's free space; tests replace it.
 var reclaimFreeBytes = diskFreeBytes
 
+// requestReclaimError starts a pass with a budget from the host drive's free
+// space, or says why it cannot start.
 func requestReclaimError() error {
 	if !reclaimSupported.Load() {
 		return fmt.Errorf("%s", reclaimUnsupportedMessage)

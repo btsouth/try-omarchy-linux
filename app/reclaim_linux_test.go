@@ -49,6 +49,8 @@ func connectReclaimAgent(t *testing.T) (*guestAgent, net.Conn, *bufio.Reader) {
 	return a, guest, r
 }
 
+// useReclaimAgent installs a reclaim agent and state for one test and restores
+// the previous ones afterwards. The host drive reports plenty of free space.
 func useReclaimAgent(t *testing.T, a *guestAgent, dir string, supported bool) {
 	t.Helper()
 	oldAgent, oldDir, oldSupported := theAgent.Load(), reclaimDir.Load(), reclaimSupported.Load()
@@ -65,6 +67,7 @@ func useReclaimAgent(t *testing.T, a *guestAgent, dir string, supported bool) {
 	t.Cleanup(func() { reclaimFreeBytes = oldFree })
 }
 
+// TestLinuxReclaimMessagesNameThisComputer keeps Windows wording out of Linux.
 func TestLinuxReclaimMessagesNameThisComputer(t *testing.T) {
 	for _, text := range []string{reclaimReadyStatus, reclaimNeedsSpaceMessage, reclaimUnsupportedMessage, reclaimStartedMessage, linuxReclaimPrompt(8192)} {
 		if strings.Contains(text, "Windows") || strings.Contains(text, "tray") {
@@ -76,6 +79,8 @@ func TestLinuxReclaimMessagesNameThisComputer(t *testing.T) {
 	}
 }
 
+// TestLinuxReclaimInfoBeforeAndDuringAPass walks the Settings card through
+// startup, an unsupported folder, an idle agent, a running pass and its end.
 func TestLinuxReclaimInfoBeforeAndDuringAPass(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "vm"), 0o755); err != nil {
@@ -132,6 +137,8 @@ func TestLinuxReclaimInfoBeforeAndDuringAPass(t *testing.T) {
 	}
 }
 
+// TestLinuxReclaimFailureIsReportedOnceAndCanBeRetried ignores a repeated
+// failure line and offers the pass again with the reason shown.
 func TestLinuxReclaimFailureIsReportedOnceAndCanBeRetried(t *testing.T) {
 	dir := t.TempDir()
 	a, guest, r := connectReclaimAgent(t)
@@ -161,6 +168,8 @@ func TestLinuxReclaimFailureIsReportedOnceAndCanBeRetried(t *testing.T) {
 	}
 }
 
+// TestLinuxReclaimFromSettingsStartsAPass sends the capped budget to the guest
+// and refuses before contacting it when the drive lacks the reserve.
 func TestLinuxReclaimFromSettingsStartsAPass(t *testing.T) {
 	dir := t.TempDir()
 	a, _, r := connectReclaimAgent(t)
@@ -184,6 +193,7 @@ func TestLinuxReclaimFromSettingsStartsAPass(t *testing.T) {
 	}
 }
 
+// TestLinuxCanPunchHolesUsesItsOwnFile leaves the folder as it found it.
 func TestLinuxCanPunchHolesUsesItsOwnFile(t *testing.T) {
 	dir := t.TempDir()
 	stale := filepath.Join(dir, ".reclaim-check-old")
@@ -205,6 +215,8 @@ func TestLinuxCanPunchHolesUsesItsOwnFile(t *testing.T) {
 	}
 }
 
+// TestLinuxReclaimCommandTalksToTheLifecyclePort covers -reclaim's answers:
+// started, refused and no launcher running.
 func TestLinuxReclaimCommandTalksToTheLifecyclePort(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -244,6 +256,7 @@ func TestLinuxReclaimCommandTalksToTheLifecyclePort(t *testing.T) {
 	}
 }
 
+// TestLinuxTrayReclaimOpensItsWindowOnce queues one window for repeated clicks.
 func TestLinuxTrayReclaimOpensItsWindowOnce(t *testing.T) {
 	before := linuxGUIEnabled
 	linuxGUIEnabled = true
@@ -288,6 +301,7 @@ func TestLinuxReclaimWindowHelper(t *testing.T) {
 	}
 }
 
+// TestLinuxReclaimWindowAsksBeforeStarting starts a pass only after Prepare.
 func TestLinuxReclaimWindowAsksBeforeStarting(t *testing.T) {
 	for _, tc := range []struct {
 		answer  string
@@ -315,6 +329,8 @@ func TestLinuxReclaimWindowAsksBeforeStarting(t *testing.T) {
 	}
 }
 
+// TestLinuxCompactionAfterAPassPunchesZeroBlocks frees zero blocks without
+// changing what the disk reads, and reports the result.
 func TestLinuxCompactionAfterAPassPunchesZeroBlocks(t *testing.T) {
 	dir := t.TempDir()
 	if err := linuxCanPunchHoles(dir); err != nil {

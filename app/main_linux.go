@@ -79,6 +79,8 @@ func defaultLinuxDataDirectory() string {
 	return filepath.Join(base, "try-omarchy")
 }
 
+// main parses flags, shows the home unless launching directly, prepares the
+// guest and runs it until it shuts down.
 func main() {
 	cfg := &config{}
 	flag.StringVar(&cfg.dir, "dir", defaultLinuxDataDirectory(), "Try Omarchy data directory (virtual machine and settings)")

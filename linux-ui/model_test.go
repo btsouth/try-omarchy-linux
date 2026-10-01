@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// TestEscapeNeverStopsProgressOrAbandonsSetup pins what Escape answers for
+// each prompt, including that progress screens ignore it.
 func TestEscapeNeverStopsProgressOrAbandonsSetup(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

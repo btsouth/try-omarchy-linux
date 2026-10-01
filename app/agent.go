@@ -159,6 +159,8 @@ func (a *guestAgent) sendApprovedApps() bool {
 	return err == nil && a.sendLine(line)
 }
 
+// read handles the guest agent's replies on its persistent connection until
+// it closes, then clears any preparation that connection still owned.
 func (a *guestAgent) read(c net.Conn, r *bufio.Reader) {
 	for {
 		line, err := r.ReadString('\n')
@@ -321,6 +323,7 @@ func (a *guestAgent) requestZeroFill(budgetMiB int64) bool {
 	return true
 }
 
+// reclaimStatus is the last reclaim outcome in words a person can act on.
 func (a *guestAgent) reclaimStatus() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()

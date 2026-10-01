@@ -59,6 +59,10 @@ func TestNativeFooterAndReply(t *testing.T) {
 	}
 	index, inspecting := 0, false
 	pendingCapture := ""
+	// A capture can first bring one control into view; scrolling is reset
+	// before the next case so it cannot leak into the scroll checks.
+	var captureTarget *gtk.Button
+	var captureScroller *gtk.ScrolledWindow
 	runUI(r, &output, func(window *adw.ApplicationWindow) {
 		t.Logf("native high contrast: %t", adw.StyleManagerGetDefault().HighContrast())
 		icons := gtk.IconThemeGetForDisplay(window.Window.Widget.Display())
@@ -68,11 +72,20 @@ func TestNativeFooterAndReply(t *testing.T) {
 			}
 		}
 		glib.TimeoutAdd(250, func() bool {
+			if pendingCapture != "" && captureTarget != nil {
+				captureTarget.GrabFocus()
+				captureTarget = nil
+				return true
+			}
 			if pendingCapture != "" {
 				if err := captureNative(window, pendingCapture); err != nil {
 					t.Logf("capture %s: %v", pendingCapture, err)
 				}
 				pendingCapture = ""
+				if captureScroller != nil {
+					captureScroller.VAdjustment().SetValue(0)
+					captureScroller = nil
+				}
 			}
 			if index == len(cases) {
 				close(updates)
@@ -215,6 +228,15 @@ func TestNativeFooterAndReply(t *testing.T) {
 			}
 			// Capture on the next tick, after layout settles.
 			pendingCapture = fmt.Sprintf("footer-%02d-%s", index, orDefault(cases[index].state.Prompt, "progress"))
+			if settings := cases[index].state.Settings; settings != nil && settings.Reclaim != nil && reclaim != nil {
+				captureTarget = reclaim
+				for parent := reclaim.Parent(); parent != nil; parent = gtk.BaseWidget(parent).Parent() {
+					if scroller, ok := gtk.BaseWidget(parent).Object.Cast().(*gtk.ScrolledWindow); ok {
+						captureScroller = scroller
+						break
+					}
+				}
+			}
 			if index == 0 && found != nil {
 				// Duplicate activation must produce one reply for this request.
 				found.Emit("clicked")

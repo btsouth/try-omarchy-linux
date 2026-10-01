@@ -93,7 +93,7 @@ Answer no if Flatpak offers to delete the app's data. Then install the new relea
 - **Use the whole desktop.** Hyprland, Omarchy's apps, themes, menus, and notifications run inside the window, with GPU acceleration through VirGL. Software rendering is available when the GPU path is not.
 - **Move between your desktop and Omarchy.** Share text, images, and files through the clipboard, drop files into Omarchy, and pick a shared folder. On GNOME, Try Omarchy explains the clipboard permission before GNOME asks, and Settings can turn sharing on or off later.
 - **Keep your shortcuts straight.** While the Omarchy window is focused, Super and the rest of your keyboard go to Omarchy. Ctrl+Alt+G gives the keyboard back to your desktop until you click the window again.
-- **Keep your work.** The guest disk persists. Back it up, restore a backup as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app. After deleting files inside Omarchy, Reclaim gives that space back to your drive.
+- **Keep your work.** The guest disk persists. Take named snapshots and roll back to one, back it up, restore a backup or snapshot as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app. After deleting files inside Omarchy, Reclaim gives that space back to your drive.
 - **Make it yours.** Choose memory, processors, rendering, fullscreen launch, audio and camera devices, and SSH and port forwards in Settings.
 
 The Flatpak does not get access to your home folder. Folders and files reach the app through the desktop's file chooser and document portal.

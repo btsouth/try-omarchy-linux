@@ -74,8 +74,10 @@ func (s checkpointStore) cleanupInterrupted(root *os.Root) error {
 		for _, file := range files {
 			allowed := file.Name() == "vm.zip" || file.Name() == "snapshot.json"
 			if pending && strings.HasPrefix(file.Name(), ".try-omarchy-backup-") {
+				// Older launchers named the staging file with decimal digits;
+				// current ones use a random hexadecimal token.
 				suffix := strings.TrimPrefix(file.Name(), ".try-omarchy-backup-")
-				allowed = suffix != "" && strings.Trim(suffix, "0123456789") == ""
+				allowed = suffix != "" && strings.Trim(suffix, "0123456789abcdef") == ""
 			}
 			info, err := file.Info()
 			if err != nil {

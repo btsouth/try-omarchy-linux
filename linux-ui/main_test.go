@@ -13,6 +13,8 @@ func TestCancelledRecoveryWaitsForHomeBeforeResuming(t *testing.T) {
 		{"cancelled progress", true, "", false},
 		{"cancelled recovery prompt", true, "recovery", false},
 		{"completed cancellation", true, "home", true},
+		{"cancelled snapshot returns to its list", true, "snapshots", true},
+		{"cancelled snapshot detail is not resumed", true, "snapshot", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := acceptStateAfterCancel(tc.cancelling, state{Prompt: tc.prompt}); got != tc.want {

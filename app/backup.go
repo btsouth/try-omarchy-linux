@@ -46,6 +46,11 @@ func backupNameAllowed(name string) bool {
 			return true
 		}
 	}
+	for _, preference := range platformPreferenceFiles {
+		if name == preference {
+			return true
+		}
+	}
 	return name == "vm/disk.raw" || name == "settings.json" || name == desktopPreferencesFilename || name == launchPreferencesFilename || name == audioPreferencesFilename || name == audioEndpointsFilename || name == resourcePreferencesFilename || name == storageSettingsFilename || strings.HasPrefix(name, "guest/") || strings.HasPrefix(name, "runtime/")
 }
 
@@ -128,6 +133,7 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 	for index := 0; index < maximumGuestDisplays; index++ {
 		roots = append(roots, displayPlacementFilename(index))
 	}
+	roots = append(roots, platformPreferenceFiles...)
 	for _, root := range roots {
 		full := filepath.Join(dir, filepath.FromSlash(root))
 		if root == "vm/disk.raw" {

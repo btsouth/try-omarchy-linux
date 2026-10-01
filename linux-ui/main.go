@@ -66,9 +66,10 @@ type state struct {
 }
 
 // Recovery keeps this window open after a cancelled copy. Ignore copy progress
-// until the launcher returns to its home prompt, then make the window usable.
+// until the launcher returns to its home prompt, or to the snapshot list a
+// cancelled snapshot operation goes back to, then make the window usable.
 func acceptStateAfterCancel(cancelling bool, next state) bool {
-	return !cancelling || next.Prompt == "home" || next.NonCancellable
+	return !cancelling || next.Prompt == "home" || next.Prompt == "snapshots" || next.NonCancellable
 }
 
 type settingsForm struct {

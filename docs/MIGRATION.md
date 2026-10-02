@@ -67,6 +67,11 @@ it closed until the import finishes. The
 importer reads the disk without changing it; a running VM or another disk
 operation is refused.
 
+If the trial was interrupted, the importer recovers its filesystem journal in
+a temporary snapshot. The original disk stays unchanged. The trial account
+can have a different name or user ID; copied files belong to your installed
+account. Use `--user <trial-account>` to choose among multiple trial accounts.
+
 Without `--data`, the importer looks in this account's native and Flatpak
 Try Omarchy folders and follows saved locations. A folder on an old Linux
 installation, another account or another drive should be selected explicitly
@@ -91,6 +96,14 @@ The virtual display setup, shared-folder links, VM integration, caches and
 hardware-specific monitor settings stay behind. Added packages and Flatpak
 apps can be reinstalled. Services and group memberships are listed for you
 to review; they are never enabled automatically.
+
+Close your browser before importing its profile. The importer brings its
+keyring entries along so saved passwords and sessions can still be read. It
+preserves unrelated entries already on this computer. If either keyring is
+protected by a password, those entries cannot be merged automatically; saved
+sign-ins may need to be restored separately or entered again. Use your
+browser or password manager's own export before installing if you need it,
+and keep that export private too.
 
 Run the import again after an interruption. It skips completed work, keeps
 later edits and deletions, and can pick up new changes from the trial.

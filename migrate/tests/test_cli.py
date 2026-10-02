@@ -37,6 +37,31 @@ class CliCase(unittest.TestCase):
 
 
 class CliTests(CliCase):
+    def test_missing_indexes_stop_selected_apps_before_copying_any_files(self):
+        self.runner.failing.add("pacman -Sl")
+        before = (self.home / ".config/hypr/bindings.lua").read_bytes()
+        status, _ = self.main("--yes", "--select", "defaults")
+        self.assertEqual(status, 1)
+        self.assertEqual((self.home / ".config/hypr/bindings.lua").read_bytes(), before)
+        self.assertFalse((self.home / ".local/share/try-omarchy-import").exists())
+        self.assertNotIn("pacman -S", self.runner.commands())
+
+    def test_flatpak_installed_with_repo_packages_is_used_in_the_same_import(self):
+        from omarchy_import.packages import PackagePlan
+        from omarchy_import.ui import UI
+        plan = PackagePlan(repo=["flatpak"], flatpaks=[("com.example.App", "user")])
+        original = self.runner.run
+        def run(argv, **kwargs):
+            result = original(argv, **kwargs)
+            if argv[:2] == ["pacman", "-S"]:
+                self.runner.programs.add("flatpak")
+            return result
+        self.runner.run = run
+        with contextlib.redirect_stdout(io.StringIO()):
+            steps = cli._install_packages(UI(interactive=False), self.runner, plan)
+        self.assertTrue(all(step.ok for step in steps))
+        self.assertTrue(any(command.startswith("flatpak install") for command in self.runner.commands()))
+
     def test_dry_run_json_lists_groups_and_changes_nothing(self):
         before = sorted(path.relative_to(self.home) for path in self.home.rglob("*"))
         status, output = self.main("--dry-run", "--json", "--select", "defaults")

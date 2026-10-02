@@ -43,7 +43,7 @@ def option_rows(inventory, package_plan, theme, free):
             rows.append((group.id, "Keys and sign-ins: SSH and GPG keys, keyring, command line "
                                    f"logins ({files})", False))
     if package_plan is not None and not package_plan.empty():
-        count = len(package_plan.repo) + len(package_plan.aur) + len(package_plan.flatpaks)
+        count = len(package_plan.repo) + len(package_plan.aur) + len(package_plan.pending) + len(package_plan.flatpaks)
         rows.append(("packages", f"Apps you installed ({count} to install)", True))
     if theme:
         rows.append(("theme", f"Theme and background ({theme})", True))

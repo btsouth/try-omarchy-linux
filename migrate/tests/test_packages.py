@@ -53,13 +53,35 @@ class PackagePlanTests(unittest.TestCase):
                                             "cowsay"), True))
         self.assertEqual(runner.calls[1], (("yay", "-S", "--needed", "--noconfirm", "--",
                                             "figlet"), False))
-        self.assertEqual(runner.calls[2][0], ("flatpak", "install", "--noninteractive", "-y",
+        self.assertEqual(runner.calls[2], (("flatpak", "remote-add", "--if-not-exists", "--user",
+                                         "--", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"), False))
+        self.assertEqual(runner.calls[3][0], ("flatpak", "install", "--noninteractive", "-y",
                                               "--user", "--", "flathub", "com.spotify.Client"))
         # yay runs without the yay, makepkg and git settings in the home
         # folder, which the import may just have brought.
         self.assertEqual(runner.yay_config, ["pacman", "pacman/makepkg.conf"])
         self.assertEqual(runner.environments[1]["GIT_CONFIG_GLOBAL"], "/dev/null")
         self.assertFalse(Path(runner.environments[1]["XDG_CONFIG_HOME"]).exists())
+
+    def test_missing_repository_indexes_do_not_turn_repo_packages_into_aur_packages(self):
+        runner = self.runner()
+        runner.failing.add("pacman -Sl")
+        plan = packages.plan_packages(Trial(self.root), runner)
+        self.assertEqual(plan.pending, ["cowsay", "figlet"])
+        self.assertEqual(plan.repo, [])
+        self.assertEqual(plan.aur, [])
+        self.assertFalse(plan.empty())
+
+    def test_system_flatpak_remote_and_install_request_sudo(self):
+        runner = self.runner()
+        self.assertTrue(packages.install_flatpaks(runner, [("com.example.App", "system")], True).ok)
+        self.assertEqual([sudo for _, sudo in runner.calls], [True, True])
+
+    def test_remote_failure_is_reported_without_attempting_install(self):
+        runner = self.runner()
+        runner.failing.add("flatpak remote-add")
+        self.assertFalse(packages.install_flatpaks(runner, [("com.example.App", "user")], True).ok)
+        self.assertEqual(len(runner.calls), 1)
 
     def test_failures_are_reported_not_raised(self):
         runner = self.runner()

@@ -53,6 +53,11 @@ type linuxSettingsForm struct {
 	// Only shown on GNOME Wayland, where clipboard sharing needs a permission.
 	ClipboardShare     bool `json:"clipboardShare"`
 	ClipboardAvailable bool `json:"clipboardAvailable"`
+	// HostApps is the approved list, by desktop file ID, and the only part the
+	// window sends back. HostAppChoices is what this computer has installed.
+	HostApps       []linuxHostApp `json:"hostApps"`
+	HostAppChoices []linuxHostApp `json:"hostAppChoices,omitempty"`
+	HostAppsNote   string         `json:"hostAppsNote,omitempty"`
 }
 
 var linuxSettingsOpen atomic.Bool
@@ -107,6 +112,14 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	if err != nil {
 		return "Could not read resource preferences: " + err.Error()
 	}
+	approvedApps, err := loadApprovedWindowsApps(dir)
+	if err != nil {
+		return "Could not read approved apps: " + err.Error()
+	}
+	appsCtx, appsDone := context.WithTimeout(ctx, 10*time.Second)
+	hostFiles, hostAppsErr := readHostDesktopFiles(appsCtx)
+	appsDone()
+	hostApps := linuxHostApps(hostFiles)
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
@@ -116,6 +129,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
 	form.ForwardsLive = running && linuxLiveForwards.Load()
 	form.Running = running
+	form.HostApps, form.HostAppChoices = approvedLinuxHostApps(approvedApps), hostApps
+	if hostAppsErr != nil {
+		logf("apps: %v", hostAppsErr)
+		form.HostAppsNote = "The apps on this computer could not be listed, so none can be added now."
+	}
 	if running {
 		form.Reclaim = linuxReclaimInfoFor(dir)
 	}
@@ -148,7 +166,20 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
 		cameras := form.Cameras
 		form.StartReclaim = false
+		form.HostApps = nil
 		err = json.Unmarshal([]byte(value), form)
+		form.HostAppChoices = hostApps
+		chosenApps := make([]string, 0, len(form.HostApps))
+		for _, app := range form.HostApps {
+			chosenApps = append(chosenApps, app.ID)
+		}
+		nextApps, appsErr := approveLinuxHostApps(approvedApps, chosenApps, hostApps)
+		if appsErr == nil {
+			// Refreshing devices keeps the unsaved choices with their real names.
+			form.HostApps = approvedLinuxHostApps(nextApps)
+		} else {
+			form.HostApps = approvedLinuxHostApps(approvedApps)
+		}
 		form.AudioLive, form.ForwardsLive = audioLive, forwardsLive
 		form.Running = running
 		form.ResourceSummary = resourceSummary
@@ -251,6 +282,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err == nil {
 			err = nextExperience.validate()
 		}
+		if err == nil {
+			err = appsErr
+		}
 		var savedGroups []string
 		savePart := func(group string, write func() error) error {
 			if writeErr := write(); writeErr != nil {
@@ -310,6 +344,15 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 				err = savePart("clipboard sharing", func() error { return setLinuxClipboardSharing(form.ClipboardShare) })
 				if err == nil {
 					clipboardShared = form.ClipboardShare
+				}
+			}
+			if err == nil && !sameApprovedApps(nextApps, approvedApps) {
+				err = savePart("approved apps", func() error { return saveApprovedWindowsApps(dir, nextApps) })
+				if err == nil {
+					approvedApps = nextApps
+					if a := theAgent.Load(); a != nil {
+						a.sendApprovedApps()
+					}
 				}
 			}
 			if err == nil && form.StartAutomatically != launch.StartAutomatically {

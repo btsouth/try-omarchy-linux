@@ -350,7 +350,8 @@ func main() {
 		fatal("Cannot parse build-spec.json: %v", err)
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
-	cmdline := windowedKernelCmdline(spec)
+	// Tells the guest which host it runs on, for wording such as approved apps.
+	cmdline := windowedKernelCmdline(spec) + " tryomarchy.host=linux"
 	if linuxGuestScale != "keep" {
 		cmdline += " tryomarchy.host-scale=1"
 	}
@@ -491,8 +492,8 @@ func linuxPathWithin(parent, child string) bool {
 	return err == nil && (rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
 
-// runLinuxGuestAgent serves the guest agent: clock sync, reclaim and status.
-// Approved host apps are a Windows feature, so launchApp stays unset.
+// runLinuxGuestAgent serves the guest agent: clock sync, reclaim, status and
+// the apps on this computer that Settings approved for launching from Omarchy.
 func runLinuxGuestAgent(dir string) {
 	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", agentPort))
 	if err != nil {
@@ -502,6 +503,14 @@ func runLinuxGuestAgent(dir string) {
 	logf("agent: listening on %d", agentPort)
 	a := newGuestAgent()
 	a.appsDir = dir
+	a.appsMinVersion = linuxHostAppsAgentVersion
+	a.launchApp = func(id string) error {
+		err := launchApprovedLinuxApp(dir, id)
+		if err != nil {
+			logf("apps: %v", err)
+		}
+		return err
+	}
 	a.reclaimFinished = linuxReclaimFinished
 	theAgent.Store(a)
 	a.run(l, make(chan struct{}))

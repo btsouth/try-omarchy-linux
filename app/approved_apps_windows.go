@@ -11,6 +11,8 @@ import (
 	"syscall"
 )
 
+const approvedAppsFilename = "approved-windows-apps.json"
+
 func validateApprovedExecutable(path string) error {
 	if !filepath.IsAbs(path) || strings.HasPrefix(path, `\\`) || strings.HasPrefix(path, `//`) || filepath.Clean(path) != path || !strings.EqualFold(filepath.Ext(path), ".exe") {
 		return fmt.Errorf("choose a local Windows .exe file")

@@ -172,7 +172,8 @@ sharing back on in **Settings**, **Share the clipboard with Omarchy**.
 ## Settings
 
 Settings uses **General**, **Devices** and **Advanced** pages. General includes
-display and startup, resources, disk capacity and shared files. Devices contains
+display and startup, resources, disk capacity, shared files and the apps on this
+computer that Omarchy may open. Devices contains
 microphone/camera access, audio choices and clipboard permission where available.
 Advanced contains display scale, keyboard layout, rendering, network and SSH.
 Switching pages keeps your edits. The product header, page navigation, Save and
@@ -198,6 +199,26 @@ The full explanation appears above the current page's controls, ready to read.
 Your remaining edits stay in the form. Fix the folder's permissions or free
 space, then Save again. Cancel closes the form without saving further changes;
 it does not undo groups that were already saved.
+
+## Apps on this computer
+
+**Apps on this computer** on the General page lets Omarchy open apps installed
+on your Linux desktop. Pick an app under **Add an app**, choose **Allow this
+app**, and Save. It appears in Omarchy's app launcher as **Host: name** within
+half a minute, and opens on this computer, outside Omarchy. **Remove** takes it
+out of the launcher again after you Save.
+
+Omarchy can start only the apps on this list, at most once a second, and
+cannot pass them files or options. It never sees where an app is installed.
+The list offers what your desktop's own launcher shows; apps that run in a
+terminal are left out. You can allow up to 16 apps. If you uninstall an allowed
+app, its entry stays until you remove it, and choosing it in Omarchy shows a
+notice instead.
+
+The list is saved as `approved-host-apps.json` beside your VM's settings. It is
+left out of backups, so a restored copy starts with no allowed apps. This
+needs an Omarchy system image with compatibility revision 46 or later; older
+ones show no host apps.
 
 ## Audio devices
 

@@ -33,8 +33,8 @@ private files or unreviewed diagnostic bundles.
    unavailable-location message, then reconnect and reattach it.
 
 Report each step as passed, failed or not tested, with the exact trigger for a
-failure and a screenshot where useful. Gestures, USB, bridged networking,
-host-app launching and host authentication are not in the Linux app yet.
+failure and a screenshot where useful. Gestures, USB, bridged networking and
+host authentication are not in the Linux app yet.
 
 ## Live audio
 

@@ -2,9 +2,11 @@
 input() otherwise, and fixed answers when running unattended."""
 
 import os
+import getpass
 import shutil
 import subprocess
 import sys
+import warnings
 
 from .system import find_tool, system_environment
 
@@ -154,6 +156,17 @@ class UI:
             for token in answer.replace(",", " ").split():
                 if token.isdigit() and 1 <= int(token) <= len(state):
                     state[int(token) - 1] = not state[int(token) - 1]
+
+    def password(self, prompt):
+        if not self.interactive:
+            raise Cancelled()
+        try:
+            with warnings.catch_warnings():
+                # Never fall back to an echoed password when terminal setup fails.
+                warnings.simplefilter("error", getpass.GetPassWarning)
+                return getpass.getpass(one_line(prompt), stream=self.stream)
+        except (EOFError, KeyboardInterrupt, getpass.GetPassWarning):
+            raise Cancelled() from None
 
     def _input(self, prompt):
         try:

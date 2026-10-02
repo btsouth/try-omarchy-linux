@@ -37,6 +37,26 @@ class CliCase(unittest.TestCase):
 
 
 class CliTests(CliCase):
+    def test_unattended_protected_keyring_stops_before_settings_or_profile_writes(self):
+        path = ".local/share/keyrings/Default_keyring.keyring"
+        (self.trial_home / path).write_bytes(b"protected-source")
+        before = (self.home / ".config/hypr/bindings.lua").read_bytes()
+        status, _ = self.main("--yes", "--select", "settings,browser")
+        self.assertEqual(status, 1)
+        self.assertEqual((self.home / ".config/hypr/bindings.lua").read_bytes(), before)
+        self.assertFalse((self.home / ".local/state/try-omarchy-import").exists())
+
+    def test_protected_keyring_dry_run_never_unlocks_or_exposes_content(self):
+        from omarchy_import import keyring
+        path = ".local/share/keyrings/Default_keyring.keyring"
+        (self.trial_home / path).write_bytes(b"protected-source-private-content")
+        with mock.patch.object(keyring, "_operate") as native:
+            status, output = self.main("--dry-run", "--json", "--select", "browser")
+        native.assert_not_called()
+        self.assertEqual(status, 0)
+        self.assertIn("unlock-keyring", output)
+        self.assertNotIn("private-content", output)
+
     def test_missing_indexes_stop_selected_apps_before_copying_any_files(self):
         self.runner.failing.add("pacman -Sl")
         before = (self.home / ".config/hypr/bindings.lua").read_bytes()

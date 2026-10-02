@@ -44,6 +44,10 @@ LIST_FILES = {
 KEYRING_DIRECTORY = ".local/share/keyrings"
 
 
+def is_keyring(relative):
+    return relative.startswith(KEYRING_DIRECTORY + "/") and relative.endswith(".keyring")
+
+
 def is_text(data):
     if data is None or len(data) > TEXT_LIMIT or b"\0" in data:
         return False

@@ -4,12 +4,15 @@ The importer that brings a Try Omarchy trial into an installed Omarchy. It
 runs on the new Omarchy install, not in the guest and not on Windows. User
 instructions are in [docs/MIGRATION.md](../docs/MIGRATION.md).
 
-It only uses the Python standard library (Omarchy ships Python for uwsm, ufw
+The main importer uses the Python standard library (Omarchy ships Python for uwsm, ufw
 and Flatpak), plus tools every Omarchy install has: util-linux (`lsblk`,
 `losetup`, `mount`), `dmsetup`, git (for three-way merges), gum (prompts) and
 sudo. Commands are only taken from the system folders (`/usr/bin`,
 `/usr/share/omarchy/bin` and the like) and run with a PATH of just those, so
 a script the import puts in `~/.local/bin` never runs in a tool's place.
+Password-protected GNOME keyrings also need python-gobject, libsecret,
+gnome-keyring and dbus. These are available on Omarchy; the importer reports
+missing dependencies before copying files.
 
 ## How it works
 
@@ -53,6 +56,11 @@ a script the import puts in `~/.local/bin` never runs in a tool's place.
      `name (from Try Omarchy).ext`.
    - List files (shell history, `known_hosts`, Files bookmarks) and the login
      keyring are merged entry by entry.
+   - Protected keyrings are unlocked after confirmation, before destination
+     writes. A private D-Bus and GNOME Keyring daemon operate on copies under
+     a private temporary home in `/run/user/<uid>`. Passwords and item values
+     pass through pipes. The destination's protection is retained, unrelated
+     secrets stay, and selected browsers get their trial decryption keys.
    - Paths into the trial's home (`/home/omarchy/...`) are rewritten to the new
      home in text files and symlinks.
 5. **Apply** (`apply.py`, `safefs.py`). Destination paths are reached from a
@@ -65,6 +73,8 @@ a script the import puts in `~/.local/bin` never runs in a tool's place.
    recognise its own work: it resumes after an interruption, never brings
    back a file the user deleted, never overwrites a later edit, and picks up
    files the user changed in the trial since the last import.
+   Keyrings are written before browser profiles. A failed keyring write keeps
+   the selected browser profiles untouched so the import can be retried.
 6. **Finish.** Unmount the trial, then reinstall added packages (pacman, then
    yay for the AUR, without the home folder's yay, makepkg and git settings)
    and Flatpak apps. Package and app names are only passed on when they are
@@ -91,6 +101,7 @@ programs, so it does not make an untrusted trial safe.
 | `classify.py` | Which group a path belongs to, and what stays behind |
 | `plan.py` | Inventory and the per-path decisions |
 | `textmerge.py` | Try block stripping, path rewriting, three-way and list merges, keyring merge |
+| `keyring.py` | Password prompts and protected-keyring merging through a private Secret Service |
 | `safefs.py` | No-follow destination access |
 | `apply.py` | Backups, journal, applying a plan |
 | `packages.py` | Packages, Flatpak, mise, theme and background |
@@ -111,6 +122,18 @@ The tests use synthetic trial roots and home directories and need git. They
 cover the policy above, interrupted imports (a real SIGKILL mid-import), a Git
 workspace with staged, modified and untracked files, and the mount steps with
 a fake command runner.
+
+The opt-in native keyring tests require an isolated desktop with GNOME
+Keyring and libsecret. From `migrate/`, run them through omabox:
+
+```sh
+omabox run -- python3 -m tests.native_keyring -v
+```
+
+They cover different passwords, protected/plaintext combinations, binary
+secret bytes, browser-key conflicts, destination-only entries, backups,
+repeat imports, cancellation and unattended refusal. They use disposable
+credentials and never connect to the desktop's existing Secret Service.
 
 `build.py` writes a reproducible `try-omarchy-import.pyz` and
 `try-omarchy-import.sh`, the bootstrap behind the curl command. The bootstrap

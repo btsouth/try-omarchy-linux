@@ -16,7 +16,7 @@ from pathlib import Path
 import time
 import uuid
 
-from . import safefs
+from . import safefs, textmerge
 
 JOURNAL_NAME = "journal.jsonl"
 STATE_DIRECTORY = ".local/state/try-omarchy-import"
@@ -110,6 +110,8 @@ class Applier:
         self.report = Report(self.run_id, str(Path(destination.home) / self.backup_root))
 
     def apply(self, plan):
+        if any(action.action == "unlock-keyring" for action in plan.actions):
+            raise ValueError("unlock selected keyrings before applying the import")
         journal = Journal(self.destination.home, self.run_id)
         try:
             self._cleanup(plan)
@@ -120,13 +122,26 @@ class Applier:
             # A browser profile that could not be moved aside must not be
             # mixed with the trial's: everything under it is skipped.
             blocked = []
-            for action in plan.actions:
+            # Install decryption keys before replacing their browser profiles.
+            # A failed keyring must leave those profiles untouched and resumable.
+            actions = sorted(plan.actions, key=lambda action: 0 if
+                action.relative == textmerge.KEYRING_DIRECTORY or
+                action.relative.startswith(textmerge.KEYRING_DIRECTORY + "/") else 1)
+            keyring_failed = False
+            for action in actions:
+                if keyring_failed and plan.keyring_apps and action.group.startswith("browser/"):
+                    troubled_groups.add(action.group)
+                    self.report.add(action.relative, action.action, "skipped",
+                                    "the browser's keyring could not be imported; run the import again")
+                    continue
                 if action.action == "profile-complete":
                     self._profile_complete(action, journal, troubled_groups)
                     continue
                 if action.action not in steps:
                     if action.action == "skip":
                         troubled_groups.add(action.group)
+                        if textmerge.is_keyring(action.relative):
+                            keyring_failed = True
                     continue
                 done += 1
                 if self.progress:
@@ -160,6 +175,8 @@ class Applier:
                                     error.strerror or str(error))
                 if any(result.status != "done" for result in self.report.results[before:]):
                     troubled_groups.add(action.group)
+                    if action.relative == textmerge.KEYRING_DIRECTORY or textmerge.is_keyring(action.relative):
+                        keyring_failed = True
         finally:
             journal.close()
             os.sync()
@@ -231,8 +248,12 @@ class Applier:
             self.report.add(relative, action.action, "done")
             return
 
-        file_mode = entry.mode if entry is not None else 0o644
+        file_mode = 0o600 if textmerge.is_keyring(action.relative) else (entry.mode if entry is not None else 0o644)
         mtime_ns = entry.mtime_ns if entry is not None and action.action != "merge" else None
+        if textmerge.is_keyring(action.relative) and action.expected is not None:
+            # GNOME's file tracker compares whole seconds. Even a keyring
+            # created moments ago must reload before the next secret write.
+            mtime_ns = max(time.time_ns(), (action.expected.mtime_ns // 1_000_000_000 + 1) * 1_000_000_000)
         backup = None
         if mode == "replace" and action.backup:
             backup = self._backup(action)

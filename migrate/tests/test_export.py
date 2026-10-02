@@ -52,6 +52,32 @@ class ExportCase(unittest.TestCase):
 
 
 class ExportTests(ExportCase):
+    def test_archive_is_private_while_writing_and_after_completion(self):
+        original = export.Writer.data
+        def data(writer, *args, **kwargs):
+            partial, = self.dest.glob(".*partial")
+            self.assertEqual(partial.stat().st_mode & 0o777, 0o600)
+            return original(writer, *args, **kwargs)
+        mask = os.umask(0)
+        try:
+            with mock.patch.object(export.Writer, "data", data):
+                archive = self.export("all")
+        finally:
+            os.umask(mask)
+        self.assertEqual(archive.stat().st_mode & 0o777, 0o600)
+
+    def test_two_exports_in_one_second_keep_both_archives(self):
+        with mock.patch.object(export.time, "strftime", return_value="20261002-000000"), \
+                mock.patch.object(export.time, "time_ns", side_effect=[1, 2]):
+            first = self.export()
+            content = first.read_bytes()
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = export.main(["--root", str(self.root), "--yes", "--select", "settings",
+                                      str(self.dest)])
+        self.assertEqual(status, 0)
+        self.assertEqual(len(list(self.dest.glob("omarchy-export-*.tar.gz"))), 2)
+        self.assertEqual(first.read_bytes(), content)
+
     def test_only_changes_and_their_defaults_are_packed(self):
         names = self.names(self.export())
         home = "trial-root/home/omarchy"

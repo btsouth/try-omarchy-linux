@@ -344,6 +344,10 @@ def run(args, ui, runner, stack, state):
                                "Everything checked comes along. Press Enter to continue.",
                                [plain_label(row[1]) for row in rows], [row[2] for row in rows])
         chosen = {row[0] for row, pick in zip(rows, picks) if pick}
+    if "packages" in chosen and package_plan.pending and not args.dry_run:
+        raise Stop("This installation's package repository indexes are not ready. "
+                   "Run Update > Omarchy from the Omarchy menu (or omarchy update), "
+                   "then run this import again. Nothing was imported yet.")
     group_ids = [row[0] for row in rows if row[0] in chosen and row[0] in inventory.groups]
 
     context = Context(
@@ -456,10 +460,12 @@ def _install_packages(ui, runner, plan):
     if plan.aur:
         ui.say(by_count(len(plan.aur), "Installing 1 AUR package", "Installing {n} AUR packages")
                + f": {' '.join(plan.aur)}")
-        steps.append(packages.install_aur(runner, plan.aur, plan.has_yay))
+        steps.append(packages.install_aur(runner, plan.aur, runner.which("yay") is not None))
     if plan.flatpaks:
         ui.say(by_count(len(plan.flatpaks), "Installing 1 Flatpak app", "Installing {n} Flatpak apps"))
-        steps.append(packages.install_flatpaks(runner, plan.flatpaks, plan.has_flatpak))
+        # Installing the selected packages may just have installed Flatpak.
+        steps.append(packages.install_flatpaks(runner, plan.flatpaks,
+                                              runner.which("flatpak") is not None))
     return steps
 
 
@@ -467,6 +473,9 @@ def _notes(plan, account):
     notes = []
     if plan is None:
         return notes
+    if plan.pending:
+        notes.append("Update Omarchy's system packages before importing apps; the repository "
+                     "indexes are not ready on this installation.")
     if plan.invalid == 1:
         notes.append("Left out 1 entry in the trial's package list that is not a valid package "
                      "name.")
@@ -487,6 +496,6 @@ def _notes(plan, account):
 def _packages_json(plan):
     if plan is None:
         return None
-    return {"repo": plan.repo, "aur": plan.aur, "installed": plan.installed,
+    return {"repo": plan.repo, "aur": plan.aur, "pending": plan.pending, "installed": plan.installed,
             "flatpaks": [list(item) for item in plan.flatpaks], "services": plan.services,
             "groups": plan.groups}

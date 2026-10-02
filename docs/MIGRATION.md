@@ -23,6 +23,25 @@ Copy the archive out of the trial before replacing your Linux installation.
 Use the shared folder, Files, or a USB drive. Check that the copy exists on
 the host or USB drive. Shared host folders themselves are not exported.
 
+## Install Omarchy
+
+Download the ISO from [omarchy.org](https://omarchy.org/), verify its checksum,
+and follow the [official installation guide](https://omarchy.org/manual/getting-started/).
+Back up your existing Linux files too. A full-disk installation erases the
+selected drive, including any Try Omarchy data stored there. Keep your export
+on a separate drive if you will erase this one.
+
+To keep your current Linux installation, use the installer's free-space option
+and read the [dual-boot guide](https://omarchy.org/manual/dual-boot-install/).
+Prepare unallocated space first and confirm the target drive before installing.
+
+On the new Omarchy desktop, run **Update > Omarchy** (or `omarchy update`)
+before importing apps.
+Fresh ISO installations may not have their online package indexes yet. The
+importer asks you to update first when those indexes are missing.
+
+## Import the archive
+
 After installing Omarchy, extract the archive and run the `import.sh` inside
 it as your normal account. It shows what it can bring over, lets you choose,
 and asks before changing anything. Add `--dry-run` to inspect the plan first.

@@ -147,7 +147,8 @@ func linuxMigrationState() linuxSetupState {
 		Sections: []linuxSection{{Rows: []linuxRow{
 			{Title: "1. Export inside the trial", Detail: "Launch Omarchy, open a terminal and run:\ntry-omarchy-export\nChoose which settings, apps and files to bring over. Browser profiles, keys and sign-ins are off by default."},
 			{Title: "2. Keep the archive outside the trial", Detail: "The command saves omarchy-export-<date>.tar.gz in your shared host folder, or in the trial's home if no shared folder is available. Copy it to the host or a USB drive and check that the copy exists before installing. Keep it private."},
-			{Title: "3. Import on installed Omarchy", Detail: "Extract the archive and run ./import.sh as your normal account. Use ./import.sh --dry-run to inspect the plan first. It asks before changing files and backs up replaced settings. Older guest images include restore.sh instead; use that script for those archives. Log out and back in when finished."},
+			{Title: "3. Install Omarchy", Detail: "Download the ISO from omarchy.org and follow the official installation guide linked in the full instructions below. Back up your current Linux files too. Full-disk installation erases the selected drive; keep your export on a separate drive. To keep Linux, prepare unallocated space and choose the installer's free-space option."},
+			{Title: "4. Import on installed Omarchy", Detail: "Run Update > Omarchy on the new desktop before importing apps. Extract the archive and run ./import.sh as your normal account. Use ./import.sh --dry-run to inspect the plan first. It asks before changing files and backs up replaced settings. Older guest images include restore.sh instead; use that script for those archives. Log out and back in when finished."},
 		}}},
 		HelpURL: "https://github.com/btsouth/try-omarchy-linux/blob/master/docs/MIGRATION.md",
 		Actions: []linuxAction{{Label: "Back", Reply: "close"}}}

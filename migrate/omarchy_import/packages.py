@@ -32,6 +32,7 @@ class PackagePlan:
     repo: list = field(default_factory=list)
     aur: list = field(default_factory=list)
     installed: list = field(default_factory=list)
+    pending: list = field(default_factory=list)
     flatpaks: list = field(default_factory=list)
     services: list = field(default_factory=list)
     groups: list = field(default_factory=list)
@@ -41,7 +42,7 @@ class PackagePlan:
     invalid: int = 0
 
     def empty(self):
-        return not (self.repo or self.aur or self.flatpaks)
+        return not (self.repo or self.aur or self.pending or self.flatpaks)
 
 
 def _lines(runner, argv):
@@ -65,6 +66,10 @@ def plan_packages(trial, runner):
     for name in added:
         if name in installed:
             plan.installed.append(name)
+        elif not available:
+            # Fresh ISO installs have no online repository indexes yet. An
+            # empty listing cannot tell us which packages came from the AUR.
+            plan.pending.append(name)
         elif name in available:
             plan.repo.append(name)
         else:
@@ -172,8 +177,11 @@ def install_flatpaks(runner, apps, has_flatpak):
         if not ids:
             continue
         try:
+            runner.run(["flatpak", "remote-add", "--if-not-exists", f"--{scope}", "--",
+                        "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+                       sudo=scope == "system", capture=False)
             runner.run(["flatpak", "install", "--noninteractive", "-y", f"--{scope}", "--",
-                        "flathub", *ids], capture=False)
+                        "flathub", *ids], sudo=scope == "system", capture=False)
         except CommandError:
             failed.extend(ids)
     if failed:

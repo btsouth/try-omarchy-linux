@@ -42,8 +42,14 @@ func TestLinuxRecoveryMigrationReturnsToRecoveryWithoutChangingVM(t *testing.T) 
 			t.Fatalf("unexpected prompt: %+v", sent)
 		}
 		if prompt == "migration" {
-			for _, want := range []string{"try-omarchy-export", "copy exists before installing", "./import.sh --dry-run", "restore.sh", "normal account"} {
-				if !bytes.Contains(lines[i], []byte(want)) {
+			var guidance string
+			for _, section := range sent.Sections {
+				for _, row := range section.Rows {
+					guidance += row.Detail + "\n"
+				}
+			}
+			for _, want := range []string{"try-omarchy-export", "copy exists before installing", "erases the selected drive", "free-space option", "Update > Omarchy", "./import.sh --dry-run", "restore.sh", "normal account"} {
+				if !strings.Contains(guidance, want) {
 					t.Errorf("migration guidance missing %q", want)
 				}
 			}

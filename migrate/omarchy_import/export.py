@@ -250,16 +250,20 @@ def run(args, ui):
                 "file can use them, so keep it private.")
 
     defaults = TrialDefaults(trial.skel, baseline)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 10**9:09d}"
     name = f"omarchy-export-{stamp}"
     final = destination / f"{name}.tar.gz"
-    partial = destination / f".{name}.tar.gz.partial"
+    # Create privately before writing any bytes, irrespective of the user's
+    # umask. A new temporary file also cannot follow a pre-existing symlink.
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".partial", dir=destination)
+    partial = Path(temporary)
     account = trial.account
     home_prefix = f"trial-root/{account.home.lstrip('/')}"
     written = 0
     included = 0
     try:
-        with tarfile.open(partial, "w:gz", compresslevel=6) as tar:
+        with os.fdopen(descriptor, "wb") as stream, \
+                tarfile.open(fileobj=stream, mode="w:gz", compresslevel=6) as tar:
             out = Writer(tar, name)
             out.data("import.sh", IMPORT_SH.encode(), 0o755)
             out.data("try-omarchy-import.pyz", importer_archive(), 0o755)

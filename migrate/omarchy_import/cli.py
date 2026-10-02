@@ -9,7 +9,7 @@ from pathlib import Path
 import signal
 import sys
 
-from . import VERSION, attach, classify, locate, packages, report, textmerge
+from . import VERSION, attach, classify, locate, packages, report, textmerge, keyring
 from .apply import Applier, load_journal
 from .plan import Context, Planner, scan
 from .safefs import Destination
@@ -398,6 +398,12 @@ def run(args, ui, runner, stack, state):
             raise Cancelled()
         ui.pager(report.plan_details(plan))
 
+    try:
+        keyring.prepare(plan, destination, ui, runner)
+    except keyring.KeyringError as error:
+        raise Stop(str(error)) from None
+    if plan.bytes_needed() > free_bytes(home) - RESERVE_BYTES // 4:
+        raise Stop("Not enough free space after preparing the keyrings. Nothing was imported.")
     state.started = True
     applier = Applier(destination, progress=lambda done, total, action: ui.progress(
         done, total, action.relative))

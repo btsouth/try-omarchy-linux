@@ -100,10 +100,17 @@ to review; they are never enabled automatically.
 Close your browser before importing its profile. The importer brings its
 keyring entries along so saved passwords and sessions can still be read. It
 preserves unrelated entries already on this computer. If either keyring is
-protected by a password, those entries cannot be merged automatically; saved
-sign-ins may need to be restored separately or entered again. Use your
-browser or password manager's own export before installing if you need it,
-and keep that export private too.
+protected by a password, the importer asks for that keyring's password in
+the terminal. Passwords are hidden. You may need both the trial's keyring
+password and this computer's, which can differ from your login passwords.
+Cancelling or failing to unlock a keyring stops the import before any files
+are copied. Protected keyrings require an interactive import; `--yes` and
+`--json` cannot supply their passwords.
+
+Keyrings with the same filename are combined. This computer's keyring keeps
+its existing password protection; a new keyring keeps the trial's password.
+If you renamed keyrings or changed your browser's password storage backend,
+use your browser or password manager's own export as well. Keep it private.
 
 Run the import again after an interruption. It skips completed work, keeps
 later edits and deletions, and can pick up new changes from the trial.

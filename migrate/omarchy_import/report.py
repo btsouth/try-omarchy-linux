@@ -8,6 +8,7 @@ DESCRIPTIONS = {
     "create": "copy",
     "replace": "replace",
     "merge": "merge",
+    "unlock-keyring": "unlock and merge",
     "conflict": "changed here too",
     "mkdir": "new folder",
     "replace-profile": "replace profile",
@@ -29,6 +30,10 @@ def plan_summary(plan):
     if merged:
         lines.append(by_count(merged, "1 file will combine your changes with this computer's",
                               "{n} files will combine your changes with this computer's"))
+    protected = counts.get("unlock-keyring", 0)
+    if protected:
+        lines.append(by_count(protected, "1 protected keyring needs a password before importing",
+                              "{n} protected keyrings need passwords before importing"))
     conflicts = plan.conflicts()
     if conflicts:
         if plan.resolution == "trial":
@@ -58,7 +63,7 @@ def plan_summary(plan):
     if left:
         lines.append(by_count(left, "1 Try-only, cache or unsafe item stays behind",
                               "{n} Try-only, cache or unsafe items stay behind"))
-    if not (copies or replaced or merged or conflicts or counts.get("mkdir")
+    if not (copies or replaced or merged or protected or conflicts or counts.get("mkdir")
             or counts.get("replace-profile")):
         lines.append("Nothing new to bring over")
     return lines
@@ -66,7 +71,7 @@ def plan_summary(plan):
 
 def plan_details(plan):
     lines = []
-    order = ("replace-profile", "create", "replace", "merge", "conflict", "mkdir", "skip")
+    order = ("replace-profile", "create", "replace", "merge", "unlock-keyring", "conflict", "mkdir", "skip")
     for kind in order:
         for action in plan.actions:
             if action.action != kind:

@@ -35,6 +35,17 @@ class PrintableTests(unittest.TestCase):
 
 
 class ChoiceTests(unittest.TestCase):
+    def test_password_prompt_refuses_an_echoing_fallback(self):
+        import getpass
+        import warnings
+        ui = UI(interactive=False, stream=io.StringIO())
+        ui.interactive = True
+        def fallback(*args, **kwargs):
+            warnings.warn("cannot hide password", getpass.GetPassWarning)
+            self.fail("would have read an echoed password")
+        with mock.patch.object(getpass, "getpass", fallback), self.assertRaises(ui_module.Cancelled):
+            ui.password("Password: ")
+
     def test_labels_are_single_distinct_lines(self):
         # A folder named after another row, with a line break, must not
         # select that row too.

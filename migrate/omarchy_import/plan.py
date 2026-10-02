@@ -110,6 +110,7 @@ class Plan:
     skipped: list
     groups: list
     resolution: str
+    keyring_apps: set = field(default_factory=set)
 
     def counts(self):
         result = {}
@@ -123,7 +124,7 @@ class Plan:
     def bytes_needed(self):
         total = 0
         for action in self.actions:
-            if action.action in ("create", "replace", "merge", "conflict"):
+            if action.action in ("create", "replace", "merge", "conflict", "unlock-keyring"):
                 total += action.size
             if action.backup and action.expected is not None:
                 total += action.expected.size
@@ -379,7 +380,7 @@ class Planner:
                                           f"could not be read ({error.strerror or error})",
                                           entry=entry))
         actions = self._prune_directories(actions)
-        return Plan(actions, list(inventory.skipped), [group.id for group in wanted], self.resolution)
+        return Plan(actions, list(inventory.skipped), [group.id for group in wanted], self.resolution, set(self.keyring_apps))
 
     def _journal_state(self, relative, metadata):
         record = self.context.journal.get(relative)
@@ -484,7 +485,7 @@ class Planner:
         if group.kind in CHANGED_ONLY_KINDS and self._trial_default(relative, entry, raw):
             action.action = "default"
             return action
-        if relative.startswith(textmerge.KEYRING_DIRECTORY + "/") and relative.endswith(".keyring"):
+        if textmerge.is_keyring(relative):
             return self._plan_keyring(group, entry, action, metadata, raw)
         content = self._prepare(group.kind, relative, raw) if raw is not None else None
         action.content = content if content is not None and content != raw else None
@@ -612,17 +613,28 @@ class Planner:
         raise RuntimeError(f"too many earlier copies of {relative}")
 
     def _plan_keyring(self, group, entry, action, metadata, raw):
-        if raw is None or textmerge.keyring_is_encrypted(raw):
+        if raw is None:
             action.action = "skip"
-            action.reason = "this keyring is protected by the trial's password"
+            action.reason = "the keyring is too large or could not be read"
+            return action
+        if metadata is not None and safefs.kind_of(metadata) != "file":
+            action.action = "skip"
+            action.reason = "a folder or link is in this keyring's place"
+            return action
+        current = self.destination.read(entry.relative, textmerge.TEXT_LIMIT) if metadata else None
+        if metadata is not None and current is None:
+            action.action = "skip"
+            action.reason = "this computer's keyring is too large or could not be read"
+            return action
+        if textmerge.keyring_is_encrypted(raw) or (current is not None and textmerge.keyring_is_encrypted(current)):
+            action.action = "unlock-keyring"
+            action.reason = "needs a keyring password before anything is imported"
+            action.content = raw
+            action.backup = metadata is not None
             return action
         if metadata is None:
             action.action = "create"
             return action
-        current = self.destination.read(entry.relative, textmerge.TEXT_LIMIT)
-        if current is None or textmerge.keyring_is_encrypted(current):
-            return self._conflict(action, "this computer's keyring is protected by a password",
-                                  beside=True)
         try:
             merged = textmerge.merge_keyrings(raw, current, self.keyring_apps)
         except (ValueError, UnicodeDecodeError):
@@ -696,7 +708,7 @@ class Planner:
         """Only create folders that will hold something, or that the user made."""
         needed = set()
         for action in actions:
-            if action.action in ("create", "replace", "merge", "conflict") and action.kind != "directory":
+            if action.action in ("create", "replace", "merge", "conflict", "unlock-keyring") and action.kind != "directory":
                 parent = action.relative.rpartition("/")[0]
                 while parent:
                     needed.add(parent)

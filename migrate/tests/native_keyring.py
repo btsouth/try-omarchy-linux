@@ -99,18 +99,19 @@ class NativeKeyringTests(ImportCase):
         cls.source_extra = item("Another credential", "other-app", b"source-only-key")
         cls.current_extra = copy.deepcopy(cls.source_extra)
         cls.current_extra["value"] = base64.b64encode(b"destination-wins").decode()
+        # Map protection flags to keyring bytes, not passwords to secrets.
         cls.sources = {}
         cls.targets = {}
         for password in ("", "trial-password"):
-            cls.sources[password] = keyring._operate(cls.runner, None if password else fixtures.KEYRING_EMPTY, password,
+            cls.sources[bool(password)] = keyring._operate(cls.runner, None if password else fixtures.KEYRING_EMPTY, password,
                                                     [cls.trial_item, cls.source_extra])
         for password in ("", "target-password"):
-            cls.targets[password] = keyring._operate(cls.runner, None if password else fixtures.KEYRING_EMPTY, password,
+            cls.targets[bool(password)] = keyring._operate(cls.runner, None if password else fixtures.KEYRING_EMPTY, password,
                 [cls.old_browser, cls.unrelated, cls.current_extra])
 
     def seed(self, source_password, target_password):
-        fixtures.write(self.trial_home / self.path, self.sources[source_password], fixtures.TRIAL_EDIT, 0o600)
-        fixtures.write(self.home / self.path, self.targets[target_password], fixtures.HOME_EDIT, 0o600)
+        fixtures.write(self.trial_home / self.path, self.sources[bool(source_password)], fixtures.TRIAL_EDIT, 0o600)
+        fixtures.write(self.home / self.path, self.targets[bool(target_password)], fixtures.HOME_EDIT, 0o600)
         return self.plan(("browser/chromium",))
 
     def check_merge(self, source_password, target_password):
@@ -130,7 +131,7 @@ class NativeKeyringTests(ImportCase):
         self.assertEqual(backup.read_bytes(), before)
         self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.home / self.path).stat().st_mode & 0o777, 0o600)
-        self.assertEqual((self.trial_home / self.path).read_bytes(), self.sources[source_password])
+        self.assertEqual((self.trial_home / self.path).read_bytes(), self.sources[bool(source_password)])
         again = self.plan(("browser/chromium",))
         with patch.object(keyring, "_operate") as native:
             keyring.prepare(again, self.destination, PasswordUI([]), self.runner)
@@ -166,30 +167,30 @@ class NativeKeyringTests(ImportCase):
         keyring.prepare(plan, self.destination, ui, self.runner)
         self.assertIn("did not unlock", ui.stream.getvalue())
         self.assertNotIn("wrong-password", ui.stream.getvalue())
-        self.assertEqual((self.home / self.path).read_bytes(), self.targets["target-password"])
+        self.assertEqual((self.home / self.path).read_bytes(), self.targets[True])
 
     def test_cancelling_destination_prompt_writes_nothing(self):
         plan = self.seed("trial-password", "target-password")
         with self.assertRaises(Cancelled):
             keyring.prepare(plan, self.destination, PasswordUI(["trial-password", Cancelled()]), self.runner)
-        self.assertEqual((self.home / self.path).read_bytes(), self.targets["target-password"])
+        self.assertEqual((self.home / self.path).read_bytes(), self.targets[True])
         self.assertFalse((self.home / ".local/state/try-omarchy-import").exists())
 
     def test_unattended_import_writes_nothing(self):
         plan = self.seed("trial-password", "target-password")
         with self.assertRaises(keyring.KeyringError):
             keyring.prepare(plan, self.destination, UI(interactive=False, stream=io.StringIO()), self.runner)
-        self.assertEqual((self.home / self.path).read_bytes(), self.targets["target-password"])
+        self.assertEqual((self.home / self.path).read_bytes(), self.targets[True])
         self.assertFalse((self.home / ".local/state/try-omarchy-import").exists())
 
     def test_native_repeat_merge_preserves_ciphertext(self):
-        data = keyring._operate(self.runner, self.targets["target-password"], "target-password",
+        data = keyring._operate(self.runner, self.targets[True], "target-password",
                                [self.trial_item], {"chromium"})
         again = keyring._operate(self.runner, data, "target-password", [self.trial_item], {"chromium"})
         self.assertEqual(again, data)
 
     def test_live_daemon_reloads_and_keeps_entries_on_its_next_write(self):
-        merged = keyring._operate(self.runner, self.targets["target-password"], "target-password",
+        merged = keyring._operate(self.runner, self.targets[True], "target-password",
                                  [self.trial_item], {"chromium"})
         with tempfile.TemporaryDirectory(dir=keyring._runtime_directory()) as home:
             env = system_environment()
@@ -202,7 +203,8 @@ class NativeKeyringTests(ImportCase):
             directory = Path(env["XDG_DATA_HOME"]) / "keyrings"
             directory.mkdir(parents=True, mode=0o700)
             path = directory / "login.keyring"
-            path.write_bytes(self.targets["target-password"])
+            self.assertTrue(textmerge.keyring_is_encrypted(self.targets[True]))
+            path.write_bytes(self.targets[True])
             path.chmod(0o600)
             (directory / "default").write_text("login\n")
             package = str(Path(keyring.__file__).parent.parent)

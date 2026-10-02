@@ -14,7 +14,6 @@ import (
 	"strings"
 )
 
-const approvedAppsFilename = "approved-windows-apps.json"
 const maximumApprovedApps = 16
 const maximumApprovedAppsBytes = 128 << 10
 

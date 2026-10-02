@@ -711,3 +711,119 @@ func TestNativeAccountEnter(t *testing.T) {
 		})
 	})
 }
+
+// Allowing and removing apps changes only the window's own list until Save,
+// which sends back the desktop IDs still allowed.
+func TestNativeSettingsHostApps(t *testing.T) {
+	if os.Getenv("TRYOMARCHY_UI_TEST") != "1" {
+		t.Skip("requires an isolated native GTK desktop")
+	}
+	r, w := io.Pipe()
+	updates := make(chan state, 1)
+	go func() {
+		defer w.Close()
+		for s := range updates {
+			if json.NewEncoder(w).Encode(s) != nil {
+				return
+			}
+		}
+	}()
+	installed := []hostApp{{"calc.desktop", "Calculator"}, {"editor.desktop", "Editor"}, {"zed.desktop", "Zed"}}
+	updates <- state{Request: 701, Prompt: "settings", Settings: &settingsForm{ResourceProfile: "balanced", CPUMax: 8,
+		HostApps: []hostApp{{"zed.desktop", "Zed"}}, HostAppChoices: installed, HostAppsNote: "Listing note"}}
+	var output bytes.Buffer
+	phase, ticks := 0, 0
+	runUI(r, &output, func(window *adw.ApplicationWindow) {
+		glib.TimeoutAdd(250, func() bool {
+			ticks++
+			if ticks > 60 {
+				t.Error("approved apps inspection timed out")
+				close(updates)
+				return false
+			}
+			var allow, save *gtk.Button
+			var removes []*gtk.Button
+			var choice *gtk.DropDown
+			labels := map[string]bool{}
+			var walk func(*gtk.Widget)
+			walk = func(widget *gtk.Widget) {
+				switch control := widget.Object.Cast().(type) {
+				case *gtk.Button:
+					switch control.Label() {
+					case "Allow this app":
+						allow = control
+					case "Remove":
+						removes = append(removes, control)
+					case "Save settings":
+						if control.Mapped() {
+							save = control
+						}
+					}
+				case *gtk.DropDown:
+					if model, ok := control.Model().Cast().(*gtk.StringList); ok && (model.String(0) == "Calculator" || model.String(0) == "Zed" || model.String(0) == noHostAppsLabel) {
+						choice = control
+					}
+				case *gtk.Label:
+					if control.Mapped() {
+						labels[control.Text()] = true
+					}
+				}
+				for child := widget.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+					walk(gtk.BaseWidget(child))
+				}
+			}
+			walk(&window.Window.Widget)
+			if allow == nil || save == nil || choice == nil {
+				return true
+			}
+			offered := choice.Model().Cast().(*gtk.StringList)
+			switch phase {
+			case 0:
+				if len(removes) != 1 || !labels["Zed"] || !labels["Listing note"] || offered.NItems() != 2 || !allow.Sensitive() {
+					t.Errorf("initial card: %d removes, %d offers, labels %v", len(removes), offered.NItems(), labels)
+				}
+				choice.SetSelected(1)
+				allow.Emit("clicked")
+			case 1:
+				if len(removes) != 2 || !labels["Editor"] || offered.NItems() != 1 || offered.String(0) != "Calculator" {
+					t.Errorf("after allowing Editor: %d removes, %d offers", len(removes), offered.NItems())
+				}
+				removes[0].Emit("clicked")
+			case 2:
+				if len(removes) != 1 || labels["Zed"] || offered.NItems() != 2 || offered.String(1) != "Zed" {
+					t.Errorf("after removing Zed: %d removes, %d offers", len(removes), offered.NItems())
+				}
+				allow.Emit("clicked")
+			case 3:
+				allow.Emit("clicked")
+			case 4:
+				if len(removes) != 3 || offered.String(0) != noHostAppsLabel || allow.Sensitive() || choice.Sensitive() {
+					t.Errorf("with every app allowed: %d removes, first offer %q", len(removes), offered.String(0))
+				}
+				removes[1].Emit("clicked")
+			case 5:
+				save.Emit("clicked")
+				close(updates)
+				return false
+			}
+			phase++
+			return true
+		})
+	})
+	var saved *settingsForm
+	for _, line := range bytes.Split(output.Bytes(), []byte("\n")) {
+		var event struct {
+			Event string `json:"event"`
+			Value string `json:"value"`
+		}
+		if json.Unmarshal(line, &event) == nil && event.Event == "reply" {
+			saved = &settingsForm{}
+			if err := json.Unmarshal([]byte(event.Value), saved); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if saved == nil || len(saved.HostApps) != 2 || saved.HostApps[0].ID != "editor.desktop" || saved.HostApps[1].ID != "zed.desktop" || len(saved.HostAppChoices) != 0 {
+		t.Fatalf("saved apps: %+v", saved)
+	}
+}

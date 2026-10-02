@@ -167,3 +167,46 @@ func forwardsHelpText(live bool) string {
 
 // reclaimHelpText states what a reclaim pass costs, beside its button.
 const reclaimHelpText = "Deleting files inside Omarchy does not shrink its disk on this drive. Each pass prepares up to 8 GB of Omarchy's free space and keeps at least 4 GB free here. When it is ready, shut Omarchy down; the space comes back during shutdown. Your files are not changed."
+
+// The launcher's limit on approved apps; it checks the saved list again.
+const maximumHostApps = 16
+
+const noHostAppsLabel = "No more apps to add"
+
+func withoutHostApp(apps []hostApp, id string) []hostApp {
+	kept := make([]hostApp, 0, len(apps))
+	for _, app := range apps {
+		if app.ID != id {
+			kept = append(kept, app)
+		}
+	}
+	return kept
+}
+
+// hostAppOffersFor lists the installed apps not allowed yet, with the labels
+// their dropdown shows. Two apps with one name get their desktop file ID.
+func hostAppOffersFor(allowed, installed []hostApp) (labels []string, offers []hostApp) {
+	taken := map[string]bool{}
+	for _, app := range allowed {
+		taken[app.ID] = true
+	}
+	names := map[string]int{}
+	for _, app := range installed {
+		names[app.Name]++
+	}
+	for _, app := range installed {
+		if taken[app.ID] {
+			continue
+		}
+		label := app.Name
+		if names[app.Name] > 1 {
+			label += " (" + strings.TrimSuffix(app.ID, ".desktop") + ")"
+		}
+		labels = append(labels, label)
+		offers = append(offers, app)
+	}
+	if len(offers) == 0 {
+		labels = []string{noHostAppsLabel}
+	}
+	return labels, offers
+}

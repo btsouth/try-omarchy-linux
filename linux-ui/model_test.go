@@ -113,3 +113,23 @@ func TestSettingsTimingNamesWhatAppliesOnSave(t *testing.T) {
 		t.Fatalf("forward help does not follow the running VM")
 	}
 }
+
+// TestHostAppOffersLeaveOutAllowedAppsAndTellTwinsApart pins what the Add an
+// app dropdown lists.
+func TestHostAppOffersLeaveOutAllowedAppsAndTellTwinsApart(t *testing.T) {
+	installed := []hostApp{{"calc.desktop", "Calculator"}, {"org.example.Files.desktop", "Files"}, {"nemo.desktop", "Files"}, {"zed.desktop", "Zed"}}
+	labels, offers := hostAppOffersFor([]hostApp{{"zed.desktop", "Zed"}, {"gone.desktop", "Uninstalled"}}, installed)
+	if want := []string{"Calculator", "Files (org.example.Files)", "Files (nemo)"}; !reflect.DeepEqual(labels, want) {
+		t.Fatalf("labels %q, want %q", labels, want)
+	}
+	if !reflect.DeepEqual(offers, installed[:3]) {
+		t.Fatalf("offers %+v", offers)
+	}
+	labels, offers = hostAppOffersFor(installed, installed)
+	if len(offers) != 0 || !reflect.DeepEqual(labels, []string{noHostAppsLabel}) {
+		t.Fatalf("nothing left: %q %+v", labels, offers)
+	}
+	if kept := withoutHostApp(installed, "nemo.desktop"); len(kept) != 3 || kept[2].ID != "zed.desktop" {
+		t.Fatalf("kept %+v", kept)
+	}
+}

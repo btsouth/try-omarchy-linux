@@ -108,6 +108,16 @@ type settingsForm struct {
 	CPUMax             int           `json:"cpuMax"`
 	ClipboardShare     bool          `json:"clipboardShare"`
 	ClipboardAvailable bool          `json:"clipboardAvailable"`
+	HostApps           []hostApp     `json:"hostApps"`
+	HostAppChoices     []hostApp     `json:"hostAppChoices,omitempty"`
+	HostAppsNote       string        `json:"hostAppsNote,omitempty"`
+}
+
+// hostApp is an app installed on this computer, by desktop file ID. The
+// launcher checks every ID the window sends back against its own list.
+type hostApp struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // reclaimInfo is the running VM's unused-space state. The launcher decides
@@ -593,6 +603,59 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		chooseShare := gtk.NewButtonWithLabel("Choose a shared folder...")
 		groupContent.Append(chooseShare)
 		formHelp("Omarchy can read, change and delete files in the folder you share. Access changes apply on the next launch.")
+		beginGroup("Apps on this computer", "General")
+		hostAppRows := gtk.NewBox(gtk.OrientationVertical, 6)
+		groupContent.Append(hostAppRows)
+		hostAppChoice := gtk.NewDropDownFromStrings([]string{noHostAppsLabel})
+		named(hostAppChoice, "App to allow")
+		formField("Add an app", hostAppChoice)
+		hostAppAdd := gtk.NewButtonWithLabel("Allow this app")
+		hostAppAdd.SetHAlign(gtk.AlignStart)
+		groupContent.Append(hostAppAdd)
+		hostAppsNote := formHelp("")
+		formHelp("Allowed apps appear in Omarchy's app launcher as \"Host: name\" and open on this computer, outside Omarchy. Omarchy can start only the apps listed here, and cannot pass them files or options.")
+		var hostApps, hostAppChoices, hostAppOffers []hostApp
+		var showHostApps func()
+		showHostApps = func() {
+			clearChildren(hostAppRows)
+			for _, app := range hostApps {
+				id := app.ID
+				name := gtk.NewLabel(app.Name)
+				name.SetWrap(true)
+				name.SetWrapMode(pango.WrapWordChar)
+				name.SetXAlign(0)
+				name.SetSizeRequest(160, -1)
+				remove := gtk.NewButtonWithLabel("Remove")
+				remove.SetHExpand(true)
+				named(remove, "Remove "+app.Name)
+				remove.ConnectClicked(func() {
+					hostApps = withoutHostApp(hostApps, id)
+					showHostApps()
+				})
+				row := newResponsiveRow(name, remove)
+				row.AddCSSClass("setting-field")
+				hostAppRows.Append(row)
+			}
+			if len(hostApps) == 0 {
+				none := gtk.NewLabel("No apps are allowed.")
+				none.SetXAlign(0)
+				none.AddCSSClass("dim-label")
+				hostAppRows.Append(none)
+			}
+			var labels []string
+			labels, hostAppOffers = hostAppOffersFor(hostApps, hostAppChoices)
+			hostAppChoice.SetModel(gtk.NewStringList(labels))
+			hostAppChoice.SetSelected(0)
+			canAdd := len(hostAppOffers) > 0 && len(hostApps) < maximumHostApps
+			hostAppChoice.SetSensitive(canAdd)
+			hostAppAdd.SetSensitive(canAdd)
+		}
+		hostAppAdd.ConnectClicked(func() {
+			if index := int(hostAppChoice.Selected()); index < len(hostAppOffers) && len(hostApps) < maximumHostApps {
+				hostApps = append(hostApps, hostAppOffers[index])
+				showHostApps()
+			}
+		})
 		reclaimGroup := beginGroup("Disk space", "General")
 		reclaimStatus := gtk.NewLabel("")
 		reclaimStatus.SetWrap(true)
@@ -910,7 +973,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
@@ -1399,6 +1462,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							audioInput.SetSelected(inputIndex)
 							clipboardShare.SetActive(next.Settings.ClipboardShare)
 							clipboardGroup.SetVisible(next.Settings.ClipboardAvailable)
+							hostApps = append([]hostApp(nil), next.Settings.HostApps...)
+							hostAppChoices = next.Settings.HostAppChoices
+							hostAppsNote.SetText(next.Settings.HostAppsNote)
+							hostAppsNote.SetVisible(next.Settings.HostAppsNote != "")
+							showHostApps()
 							clipboardShare.SetVisible(next.Settings.ClipboardAvailable)
 							clipboardHelp.SetVisible(next.Settings.ClipboardAvailable)
 							setSharedFolder(next.Settings.Share, next.Settings.ShareDisplay)

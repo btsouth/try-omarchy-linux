@@ -100,6 +100,13 @@ in `/etc/ssh/sshd_config.d`, and compatibility revision 44 adds it once to
 existing quick-start disks. Own-account disks keep password logins. The
 first-desktop notice now calls it the quick-start login and points to `passwd`.
 
+Patch 0114 names approved apps for the host they open on. The Linux launcher
+passes `tryomarchy.host=linux`; with it the launcher entries read `Host: name`
+and the failure notices point at Try Omarchy Settings on that computer. Agent
+version 5 tells a Linux launcher the guest does this, so older guests receive
+no list. Compatibility revision 46 delivers the scripts to existing disks.
+Windows launchers pass no flag and keep the `Windows: name` entries.
+
 The second command needs Docker and currently takes about ten minutes. Release
 CI also boots the resulting factory image with `scripts/release/smoke-guest.py`
 before it uploads anything.

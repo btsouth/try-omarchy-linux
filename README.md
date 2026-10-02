@@ -98,12 +98,14 @@ Answer no if Flatpak offers to delete the app's data. Then install the new relea
 - **Keep your work.** The guest disk persists. Take named snapshots and roll back to one, back it up, restore a backup or snapshot as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app. After deleting files inside Omarchy, Reclaim gives that space back to your drive.
 - **Make it yours.** Choose memory, processors, rendering, fullscreen launch, audio and camera devices, and SSH and port forwards in Settings.
 
-The Flatpak does not get access to your home folder. Folders and files reach the app through the desktop's file chooser and document portal.
+Folders and files reach the app through the desktop's file chooser and document portal; the Flatpak has no direct access to your home folder. It does have permission to start programs on this computer as you, outside its sandbox. Try Omarchy uses that only to list your installed apps in Settings and to open the ones you allow there, but the permission itself is not limited to those.
 
 ## Current limits
 
-Touchpad gestures, bridged/LAN networking, USB passthrough, opening host apps from
-the guest, and host biometric authentication are not in the Linux app yet.
+Touchpad gestures, bridged/LAN networking, USB passthrough and host biometric
+authentication are not in the Linux app yet. Apps on this computer that you
+allow in Settings open from Omarchy's launcher; they need the next Omarchy
+system image, which is not released yet.
 Playback and microphone devices and local port forwards change from Settings
 while Omarchy runs. Camera capture uses the desktop's camera permission portal,
 only while an app inside Omarchy opens the camera.

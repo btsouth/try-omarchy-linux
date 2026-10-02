@@ -22,6 +22,9 @@ finish-args:
   - --socket=pulseaudio
   - --filesystem=xdg-run/pipewire-0
   - --talk-name=org.kde.StatusNotifierWatcher
+  # Starts the apps approved in Settings on this computer, outside the sandbox,
+  # and reads the desktop entries Settings offers for approval.
+  - --talk-name=org.freedesktop.Flatpak
 cleanup:
   - /include
   - /lib/pkgconfig

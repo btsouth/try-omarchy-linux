@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ import (
 //   guest -> host: "hello <version>"       the agent connected
 //   guest -> host: "zero-fill done|failed" the fill finished
 //   guest -> host: "open-settings"     one-shot request on a separate connection
-//   guest -> host: "launch-app <approved ID>" one-shot allowlisted Windows app request
+//   guest -> host: "launch-app <approved ID>" one-shot allowlisted host app request
 //   guest -> host: "drop-drag <ticket ID> <x> <y>" one-shot: drag a drop into the app (see drop_drag.go)
 // The host sends the time on connect, every few minutes, and after Windows
 // resumes from sleep, when the guest clock is the thing most likely to be wrong.
@@ -28,15 +29,19 @@ const agentTimeInterval = 5 * time.Minute
 const agentBatteryInterval = 30 * time.Second
 
 type guestAgent struct {
-	mu            sync.Mutex
-	conn          net.Conn
-	now           func() time.Time
-	openSettings  func() bool
-	batteryLine   func() (string, error)
-	appsDir       string
-	launchApp     func(string) error
-	dropDrag      func(id string, x, y int) error
-	lastAppLaunch time.Time
+	mu           sync.Mutex
+	conn         net.Conn
+	now          func() time.Time
+	openSettings func() bool
+	batteryLine  func() (string, error)
+	appsDir      string
+	// appsMinVersion, when set, holds the approved app list back from a guest
+	// agent older than this, which would label the entries for another host.
+	appsMinVersion int
+	helloVersion   int
+	launchApp      func(string) error
+	dropDrag       func(id string, x, y int) error
+	lastAppLaunch  time.Time
 	// zeroFilled is set when the guest reports that it zero-filled its free
 	// space, so the launcher compacts disk.raw after the guest powers off.
 	zeroFilled      bool
@@ -124,6 +129,7 @@ func (a *guestAgent) serve(c net.Conn) {
 		a.zeroFillPending = false
 		a.zeroFillStatus = "Preparation interrupted by a guest reconnect. Try again."
 	}
+	a.helloVersion, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(first, "hello ")))
 	a.mu.Unlock()
 	logf("agent: guest agent connected (%s)", strings.TrimSpace(strings.TrimPrefix(first, "hello ")))
 	a.sendTime("connect")
@@ -134,12 +140,12 @@ func (a *guestAgent) serve(c net.Conn) {
 
 func (a *guestAgent) requestAppLaunch(id string) error {
 	if !validApprovedAppID(id) || a.launchApp == nil {
-		return fmt.Errorf("invalid or unavailable Windows app")
+		return fmt.Errorf("invalid or unavailable app")
 	}
 	a.mu.Lock()
 	if !a.lastAppLaunch.IsZero() && a.now().Sub(a.lastAppLaunch) < time.Second {
 		a.mu.Unlock()
-		return fmt.Errorf("Windows app launch rate limit")
+		return fmt.Errorf("app launch rate limit")
 	}
 	a.lastAppLaunch = a.now()
 	a.mu.Unlock()
@@ -150,9 +156,15 @@ func (a *guestAgent) sendApprovedApps() bool {
 	if a.appsDir == "" {
 		return false
 	}
+	a.mu.Lock()
+	tooOld := a.helloVersion < a.appsMinVersion
+	a.mu.Unlock()
+	if tooOld {
+		return false
+	}
 	prefs, err := loadApprovedWindowsApps(a.appsDir)
 	if err != nil {
-		logf("agent: could not read approved Windows apps: %v", err)
+		logf("agent: could not read approved apps: %v", err)
 		prefs = approvedAppPreferences{SchemaVersion: 1}
 	}
 	line, err := approvedAppsLine(prefs)

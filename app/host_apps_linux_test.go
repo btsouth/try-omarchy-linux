@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -53,7 +54,7 @@ func TestLinuxHostAppsFollowsTheDesktopLauncher(t *testing.T) {
 		desktopFile("removed.desktop", "Name=Removed\nExec=removed\nHidden=true\n"),
 		// The same ID later in the search path stays hidden behind the first one.
 		desktopFile("removed.desktop", "Name=Removed\nExec=removed\n"),
-		desktopFile("terminal.desktop", "Name=Terminal Tool\nExec=tool\nTerminal=true\n"),
+		desktopFile("terminal.desktop", "Name=Terminal Tool\nExec=tool\nTerminal = true \n"),
 		desktopFile("link.desktop", "Name=Link\nExec=link\n"),
 		desktopFile("kde-apps.desktop", "Name=apps\nExec=apps\n"),
 		desktopFile("noexec.desktop", "Name=Bus Only\nDBusActivatable=true\n"),
@@ -131,6 +132,23 @@ func TestReadNativeHostDesktopFilesHonorsPrecedenceAndLimits(t *testing.T) {
 	want := []string{"linked.desktop=editor", "editor.desktop=my-editor", "kde-viewer.desktop=viewer"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// exec copies a command's output with io.Copy, which uses ReadFrom when the
+// writer has one. The limit must hold on that path too.
+func TestLimitedBufferStopsACopyAtItsLimit(t *testing.T) {
+	out := &limitedBuffer{limit: 1000}
+	if _, ok := any(out).(io.ReaderFrom); ok {
+		t.Fatal("a ReadFrom method would let a copy skip the limit")
+	}
+	if n, err := io.Copy(out, strings.NewReader(strings.Repeat("a", 5000))); err == nil || out.data.Len() > 1000 {
+		t.Fatalf("copied %d bytes past the limit, kept %d, %v", n, out.data.Len(), err)
+	}
+	cmd := exec.Command("sh", "-c", "head -c 5000 /dev/zero")
+	cmd.Stdout = &limitedBuffer{limit: 1000}
+	if err := cmd.Run(); err == nil {
+		t.Fatal("a command with too much output succeeded")
 	}
 }
 
@@ -229,16 +247,22 @@ func TestStartLinuxHostCommandDetachesTheApp(t *testing.T) {
 		t.Skip("would start the command outside this sandbox")
 	}
 	marker := filepath.Join(t.TempDir(), "started")
-	if err := startLinuxHostCommand([]string{"sh", "-c", `printf '%s %s' "$1" "$PWD" > "$0"`, marker, "two words"}); err != nil {
+	// Field 6 of /proc/PID/stat is the session; a session leader's is its own PID.
+	script := `arg=$1; set -- $(cat /proc/$$/stat); test "$6" = "$1" && leads=leader; printf '%s %s %s' "$arg" "$PWD" "$leads" > "$0.part" && mv "$0.part" "$0"`
+	if err := startLinuxHostCommand([]string{"sh", "-c", script, marker, "two words"}); err != nil {
 		t.Fatal(err)
 	}
 	home, _ := os.UserHomeDir()
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		if data, err := os.ReadFile(marker); err == nil && string(data) == "two words "+home {
+		data, err := os.ReadFile(marker)
+		if err == nil {
+			if string(data) != "two words "+home+" leader" {
+				t.Fatalf("command ran as %q, want its argument, the home folder and its own session", data)
+			}
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("command did not run with its argument in the home folder")
+			t.Fatal("command did not run")
 		}
 	}
 	if err := startLinuxHostCommand([]string{filepath.Join(t.TempDir(), "missing")}); err == nil {

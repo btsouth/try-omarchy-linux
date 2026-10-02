@@ -98,7 +98,7 @@ Answer no if Flatpak offers to delete the app's data. Then install the new relea
 - **Keep your work.** The guest disk persists. Take named snapshots and roll back to one, back it up, restore a backup or snapshot as a separate copy, move or reset it while retaining the original, attach an existing VM folder, or delete the app's own VM from the app. After deleting files inside Omarchy, Reclaim gives that space back to your drive.
 - **Make it yours.** Choose memory, processors, rendering, fullscreen launch, audio and camera devices, and SSH and port forwards in Settings.
 
-The Flatpak does not get access to your home folder. Folders and files reach the app through the desktop's file chooser and document portal. It can ask Flatpak to start programs on this computer, which it uses to list your installed apps in Settings and to open the ones you allow there.
+Folders and files reach the app through the desktop's file chooser and document portal; the Flatpak has no direct access to your home folder. It does have permission to start programs on this computer as you, outside its sandbox. Try Omarchy uses that only to list your installed apps in Settings and to open the ones you allow there, but the permission itself is not limited to those.
 
 ## Current limits
 

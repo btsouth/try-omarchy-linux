@@ -99,13 +99,12 @@ done
 func readLinuxHostDesktopFiles(ctx context.Context) ([]hostDesktopFile, error) {
 	if inFlatpak() {
 		cmd := exec.CommandContext(ctx, "flatpak-spawn", "--host", "sh", "-c", hostDesktopScript)
-		var out limitedBuffer
-		out.limit = maximumHostDesktopBytes
-		cmd.Stdout = &out
+		out := &limitedBuffer{limit: maximumHostDesktopBytes}
+		cmd.Stdout = out
 		if err := cmd.Run(); err != nil {
 			return nil, fmt.Errorf("list apps on this computer: %w", err)
 		}
-		return parseHostDesktopStream(out.Bytes()), nil
+		return parseHostDesktopStream(out.data.Bytes()), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -148,17 +147,18 @@ func readLinuxHostDesktopFiles(ctx context.Context) ([]hostDesktopFile, error) {
 	return files, nil
 }
 
-// limitedBuffer keeps a host command's output within a fixed size.
+// limitedBuffer keeps a host command's output within a fixed size. It has
+// only Write, so a copy into it cannot go around the limit.
 type limitedBuffer struct {
-	bytes.Buffer
+	data  bytes.Buffer
 	limit int
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > b.limit {
+	if b.data.Len()+len(p) > b.limit {
 		return 0, fmt.Errorf("too much output")
 	}
-	return b.Buffer.Write(p)
+	return b.data.Write(p)
 }
 
 func parseHostDesktopStream(stream []byte) []hostDesktopFile {
@@ -227,7 +227,7 @@ func desktopEntryValues(data []byte) map[string]string {
 		}
 		key = strings.TrimSpace(key)
 		if _, seen := values[key]; !seen {
-			values[key] = strings.TrimLeft(value, " \t")
+			values[key] = strings.TrimSpace(value)
 		}
 	}
 	return values

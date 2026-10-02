@@ -20,6 +20,16 @@ func rejectMoveLink(path string, info os.FileInfo) error {
 func rejectAncestorLink(path string, info os.FileInfo) error {
 	if info.Mode()&os.ModeSymlink != 0 && runtime.GOOS == "linux" {
 		target, err := os.Readlink(path)
+		if err == nil && linuxAtomicHomeAncestor(path, target) {
+			// Atomic desktops and Flatpak use this system alias. Validate its
+			// destination too; links within the user's data remain forbidden.
+			if err := validateMovePath("/var/home"); err != nil {
+				return err
+			}
+			if home, err := os.Stat("/var/home"); err == nil && home.IsDir() {
+				return nil
+			}
+		}
 		if err == nil && linuxPortalMountAncestor(path, target, os.Getuid()) {
 			if mount, err := os.Stat("/run/flatpak/doc"); err == nil && mount.IsDir() {
 				return nil
@@ -27,6 +37,13 @@ func rejectAncestorLink(path string, info os.FileInfo) error {
 		}
 	}
 	return rejectMoveLink(path, info)
+}
+
+// Fedora Atomic desktops (including Bazzite) put home directories in /var/home.
+// Flatpak preserves /home -> var/home inside its sandbox. Only this exact system
+// ancestor is allowed, never a selected move target or a link within user data.
+func linuxAtomicHomeAncestor(path, target string) bool {
+	return path == "/home" && filepath.Clean(filepath.Join("/", target)) == "/var/home"
 }
 
 // Flatpak's document portal places this one link in the private runtime tree.

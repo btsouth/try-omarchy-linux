@@ -49,6 +49,11 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.1" date="2026-10-02" type="stable">
+      <description>
+        <p>Fix startup on Bazzite and other Fedora Atomic desktops that store home directories under /var/home.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-09-30" type="stable">
       <description>
         <p>First release of Try Omarchy for Linux.</p>

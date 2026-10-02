@@ -23,6 +23,7 @@ concurrency:
 
 jobs:
   deploy:
+    timeout-minutes: 20
     name: Deploy
     runs-on: ubuntu-latest
     environment:

@@ -136,10 +136,12 @@ class SDLScrollTests(pinch.VirtioPinchTests):
         # Integer SDL fields are zero for each sub-detent movement.
         inject(0.25, 0.125, False, [(2, 12, 30), (2, 11, 15)])
         inject(-0.25, -0.125, False, [(2, 12, -30), (2, 11, -15)])
-        inject(0.25, 0.5, True, [(2, 12, -30), (2, 11, -60)])
-        inject(-0.25, -0.5, True, [(2, 12, 30), (2, 11, 60)])
-        # Whole notches retain legacy events; positive horizontal is right.
+        # Linux's FLIPPED values already reflect the host scroll preference.
+        inject(0.25, 0.5, True, [(2, 12, 30), (2, 11, 60)])
+        inject(-0.25, -0.5, True, [(2, 12, -30), (2, 11, -60)])
+        # Whole notches retain delivered signs in both hi-res and legacy events.
         inject(2, -3, False, [(2, 12, 240), (2, 6, 2), (2, 11, -360), (2, 8, -3)])
+        inject(2, -3, True, [(2, 12, 240), (2, 6, 2), (2, 11, -360), (2, 8, -3)])
         # Sub-unit fractions accumulate rather than disappearing between frames.
         for value in (3, 4, 4, 4):
             inject(0, 0.03125, False, [(2, 11, value)])

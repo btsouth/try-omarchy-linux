@@ -2,7 +2,9 @@ sdl2: preserve precise wheel movement through virtio input
 
 Port the Windows runtime's 0018 patch to QEMU 11.1.1. Its internal
 QemuInputEvent uses inline fields rather than QAPI event pointers.
-SDL positive X means right; normalize SDL_MOUSEWHEEL_FLIPPED once.
+SDL positive X means right and positive Y means up. Preserve delivered
+values for SDL_MOUSEWHEEL_FLIPPED too: Linux compositors already apply the
+host scroll preference. Ignore direction as upstream QEMU does.
 Keep PS/2 and USB on accumulated whole-detent buttons.
 
 diff --git a/hw/input/virtio-input-hid.c b/hw/input/virtio-input-hid.c
@@ -350,7 +352,7 @@ index 885f17a..19ef295 100644
      if (scon->winctx) {
          SDL_GL_DeleteContext(scon->winctx);
          scon->winctx = NULL;
-@@ -827,32 +828,67 @@ static void handle_mousebutton(SDL_Event *ev)
+@@ -827,32 +828,65 @@ static void handle_mousebutton(SDL_Event *ev)
      }
  }
  
@@ -397,10 +399,8 @@ index 885f17a..19ef295 100644
 +    x = wev->x;
 +    y = wev->y;
 +#endif
-+    if (wev->direction == SDL_MOUSEWHEEL_FLIPPED) {
-+        x = -x;
-+        y = -y;
-+    }
++    /* Preserve the host's scroll preference, including FLIPPED events,
++     * by ignoring direction as upstream QEMU does. */
 +    dx = sdl_scroll_axis(x, &scon->scroll.x);
 +    dy = sdl_scroll_axis(y, &scon->scroll.y);
 +    if (qemu_input_has_wheel(scon->dcl.con)) {
@@ -433,7 +433,7 @@ index 885f17a..19ef295 100644
  }
  
  static void handle_windowevent(SDL_Event *ev)
-@@ -928,6 +964,7 @@ static void handle_windowevent(SDL_Event *ev)
+@@ -928,6 +962,7 @@ static void handle_windowevent(SDL_Event *ev)
          }
          break;
      case SDL_WINDOWEVENT_FOCUS_LOST:
@@ -441,7 +441,7 @@ index 885f17a..19ef295 100644
          if (gui_grab && !gui_fullscreen) {
              sdl_grab_end(scon);
          }
-@@ -1035,6 +1072,7 @@ void sdl2_poll_events(struct sdl2_console *scon)
+@@ -1035,6 +1070,7 @@ void sdl2_poll_events(struct sdl2_console *scon)
  
      if (scon->last_vm_running != runstate_is_running()) {
          scon->last_vm_running = runstate_is_running();

@@ -6,8 +6,11 @@ import subprocess
 import tempfile
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--preserve-delivered-direction', action='store_true',
+                    help='Linux: ignore SDL direction, preserving host scroll preference')
 parser.add_argument('source', type=Path, help='patched QEMU source directory')
-root = parser.parse_args().source
+args = parser.parse_args()
+root = args.source
 source = (root / 'ui/sdl2.c').read_text()
 handler = source[source.index('static void sdl_send_wheel_buttons('):
                  source.index('static void handle_windowevent(')]
@@ -15,6 +18,7 @@ harness = r'''
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "sdl2-scroll.h"
 #ifndef PRECISE
@@ -22,6 +26,7 @@ harness = r'''
 #endif
 #define SDL_VERSION_ATLEAST(a,b,c) PRECISE
 #define SDL_MOUSEWHEEL_FLIPPED 1
+#define FLIPPED_SIGN (PRESERVE_DELIVERED_DIRECTION ? 1 : -1)
 #if PRECISE
 typedef struct { unsigned windowID, direction; int x,y; float preciseX,preciseY; } SDL_MouseWheelEvent;
 #else
@@ -68,7 +73,7 @@ int main(void) {
     assert(count==2 && syncs==1 && axes[0]==INPUT_AXIS_HWHEEL && values[0]==30);
     assert(axes[1]==INPUT_AXIS_WHEEL && values[1]==15);
     clear(); wheel(11,0.25f,0.5f,SDL_MOUSEWHEEL_FLIPPED);
-    assert(count==2 && values[0]==-30 && values[1]==-60);
+    assert(count==2 && values[0]==FLIPPED_SIGN*30 && values[1]==FLIPPED_SIGN*60);
     clear(); for(int i=0;i<4;i++) wheel(11,0,0.03125f,0);
     assert(count==4 && values[0]+values[1]+values[2]+values[3]==15);
     assert(consoles[0].scroll.y==0);
@@ -78,6 +83,10 @@ int main(void) {
 #endif
     clear(); wheel(11,2,-3,0);
     assert(count==2 && values[0]==240 && values[1]==-360 && syncs==1);
+    printf("SDL precise=%d NORMAL whole detents -> horizontal=%d vertical=%d\n", PRECISE, values[0], values[1]);
+    clear(); wheel(11,2,-3,SDL_MOUSEWHEEL_FLIPPED);
+    assert(count==2 && values[0]==FLIPPED_SIGN*240 && values[1]==FLIPPED_SIGN*-360 && syncs==1);
+    printf("SDL precise=%d FLIPPED whole detents -> horizontal=%d vertical=%d\n", PRECISE, values[0], values[1]);
     /* No hires device: accumulate whole notches and release every button. */
     clear(); hires=false;
 #if PRECISE
@@ -88,8 +97,11 @@ int main(void) {
 #endif
     clear(); wheel(11,2,-3,0);
     assert(count==0 && clicks[INPUT_BUTTON_WHEEL_RIGHT]==2 && clicks[INPUT_BUTTON_WHEEL_DOWN]==3 && syncs==10);
+    printf("SDL precise=%d NORMAL fallback -> right=%d down=%d\n", PRECISE, clicks[INPUT_BUTTON_WHEEL_RIGHT], clicks[INPUT_BUTTON_WHEEL_DOWN]);
     clear(); wheel(11,1,-1,SDL_MOUSEWHEEL_FLIPPED);
-    assert(clicks[INPUT_BUTTON_WHEEL_LEFT]==1 && clicks[INPUT_BUTTON_WHEEL_UP]==1);
+    assert(clicks[PRESERVE_DELIVERED_DIRECTION ? INPUT_BUTTON_WHEEL_RIGHT : INPUT_BUTTON_WHEEL_LEFT]==1);
+    assert(clicks[PRESERVE_DELIVERED_DIRECTION ? INPUT_BUTTON_WHEEL_DOWN : INPUT_BUTTON_WHEEL_UP]==1);
+    printf("SDL precise=%d FLIPPED fallback -> right=%d left=%d down=%d up=%d\n", PRECISE, clicks[INPUT_BUTTON_WHEEL_RIGHT], clicks[INPUT_BUTTON_WHEEL_LEFT], clicks[INPUT_BUTTON_WHEEL_DOWN], clicks[INPUT_BUTTON_WHEEL_UP]);
     double remainder=0;
     assert(sdl_scroll_axis(NAN,&remainder)==0 && remainder==0);
     assert(sdl_scroll_axis(INFINITY,&remainder)==0 && remainder==0);
@@ -104,6 +116,7 @@ with tempfile.TemporaryDirectory(prefix='tryomarchy-sdl-scroll-') as directory:
     for precise in (1, 0):
         subprocess.run(['gcc', '-std=gnu11', '-Wall', '-Wextra', '-Werror',
                         f'-DPRECISE={precise}', '-I', str(root / 'include/ui'),
+                        f'-DPRESERVE_DELIVERED_DIRECTION={int(args.preserve_delivered_direction)}',
                         str(work / 'test.c'), '-o', str(work / 'test')], check=True)
         subprocess.run([str(work / 'test')], check=True)
 print('ok - precise/old SDL, fractional axes, flipped direction, detents, per-window remainders and fallback')

@@ -1,0 +1,918 @@
+From 6f4573b054628401c81e77abceb7f9013c63d5e5 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 4 Oct 2026 01:26:06 -0400
+Subject: [PATCH 133/133] Name a Linux host in guest notices
+
+Compatibility revision 55 delivers Linux host wording, flag-selected desktop labels, and the Linux-only digest-gated clock repair from Linux patches 0116 and 0117. Windows desktop labels, time-zone protocol, and service behavior stay unchanged.
+---
+ .../etc/initcpio/hooks/tryomarchy_compat      | 17 +++++
+ .../try-omarchy-linux-clock.service           |  1 +
+ .../system/try-omarchy-host-locale.service    |  1 +
+ .../system/try-omarchy-linux-clock.service    | 12 +++
+ .../usr/local/bin/file-transfer-window        | 15 +++-
+ .../usr/local/bin/try-omarchy-drop            | 14 +++-
+ .../usr/local/bin/try-omarchy-host-settings   | 16 +++-
+ .../usr/local/bin/try-omarchy-timezone        | 19 ++++-
+ .../usr/local/bin/try-omarchy-windows-app     | 10 ++-
+ .../local/lib/try-omarchy/apply-host-locale   | 13 +++-
+ .../local/lib/try-omarchy/apply-host-names    | 27 +++++++
+ .../usr/local/lib/try-omarchy/catch-up        | 20 ++++-
+ .../lib/try-omarchy/repair-clock-timezone     | 19 +++++
+ .../linux/try-omarchy-file-transfers.desktop  |  8 ++
+ .../linux/try-omarchy-follow-timezone.desktop |  8 ++
+ .../linux/try-omarchy-host-settings.desktop   |  8 ++
+ .../try-omarchy-file-transfers.desktop        |  8 ++
+ .../try-omarchy-follow-timezone.desktop       |  8 ++
+ .../windows/try-omarchy-host-settings.desktop |  8 ++
+ guest/scripts/finalize-rootfs.sh              | 12 ++-
+ guest/spec.json                               | 28 +++----
+ guest/tests/test_file_drop_target.py          | 15 ++++
+ guest/tests/test_host_names.py                | 42 +++++++++++
+ guest/tests/test_kernel_module_delivery.py    | 18 +++++
+ guest/tests/test_overlay_scripts.py           | 50 +++++++++++++
+ guest/tests/test_timezone.py                  | 74 +++++++++++++++++++
+ guest/tests/verify.py                         | 10 ++-
+ 27 files changed, 441 insertions(+), 40 deletions(-)
+ create mode 120000 guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
+ create mode 100644 guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service
+ create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+ create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/repair-clock-timezone
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-file-transfers.desktop
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-follow-timezone.desktop
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-host-settings.desktop
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-file-transfers.desktop
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-follow-timezone.desktop
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-host-settings.desktop
+ create mode 100644 guest/tests/test_host_names.py
+
+diff --git a/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat b/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
+index 6ce51a3..80f4a7e 100755
+--- a/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
++++ b/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
+@@ -12,6 +12,23 @@ run_latehook() {
+         return 0
+     fi
+ 
++    previous=$(cat "$marker" 2>/dev/null)
++    previous_revision=${previous%%:*}
++    case $previous_revision in
++        ''|*[!0-9]*) ;;
++        *)
++            if [ "$previous_revision" -lt 50 ]; then
++                lineage="$root/var/lib/try-omarchy/guest-series-origin"
++                if [ ! -e "$lineage" ]; then
++                    origin=windows
++                    [ ! -f "$root/usr/local/lib/try-omarchy/host-window" ] || origin=linux
++                    mkdir -p "$(dirname "$lineage")" || return 1
++                    printf '%s:%s\n' "$origin" "$previous_revision" >"$lineage" || return 1
++                fi
++            fi
++            ;;
++    esac
++
+     echo ":: Updating Try Omarchy launcher integration"
+     if ! tar -xf /tryomarchy-compat-overlay.tar -C "$root"; then
+         echo "ERROR: Try Omarchy launcher integration update failed" >&2
+diff --git a/guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service b/guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
+new file mode 120000
+index 0000000..e65fd96
+--- /dev/null
++++ b/guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
+@@ -0,0 +1 @@
++../try-omarchy-linux-clock.service
+\ No newline at end of file
+diff --git a/guest/factory-overlay/etc/systemd/system/try-omarchy-host-locale.service b/guest/factory-overlay/etc/systemd/system/try-omarchy-host-locale.service
+index 9b9ff68..d59e8f5 100644
+--- a/guest/factory-overlay/etc/systemd/system/try-omarchy-host-locale.service
++++ b/guest/factory-overlay/etc/systemd/system/try-omarchy-host-locale.service
+@@ -7,6 +7,7 @@ Before=sysinit.target display-manager.service systemd-vconsole-setup.service
+ [Service]
+ Type=oneshot
+ ExecStart=/usr/local/lib/try-omarchy/apply-host-locale
++ExecStartPost=-/usr/local/lib/try-omarchy/apply-host-names
+ 
+ [Install]
+ WantedBy=sysinit.target
+diff --git a/guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service b/guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service
+new file mode 100644
+index 0000000..b017c3e
+--- /dev/null
++++ b/guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service
+@@ -0,0 +1,12 @@
++[Unit]
++Description=Repair the shipped clock widget for Linux host time-zone following
++ConditionKernelCommandLine=tryomarchy.host=linux
++Before=display-manager.service try-omarchy-timezone.service
++After=local-fs.target
++
++[Service]
++Type=oneshot
++ExecStart=/usr/local/lib/try-omarchy/repair-clock-timezone
++
++[Install]
++WantedBy=multi-user.target
+diff --git a/guest/factory-overlay/usr/local/bin/file-transfer-window b/guest/factory-overlay/usr/local/bin/file-transfer-window
+index 23686d2..ee1ab91 100755
+--- a/guest/factory-overlay/usr/local/bin/file-transfer-window
++++ b/guest/factory-overlay/usr/local/bin/file-transfer-window
+@@ -13,6 +13,15 @@ gi.require_version('Gdk', '4.0')
+ from gi.repository import Gdk, Gio, GLib, Gtk
+ 
+ 
++def host_name():
++    '''Windows, unless the Linux launcher names itself on the kernel command line.'''
++    try:
++        words = Path(os.environ.get('TRY_OMARCHY_CMDLINE', '/proc/cmdline')).read_text().split()
++    except OSError:
++        return 'Windows'
++    return 'the host computer' if 'tryomarchy.host=linux' in words else 'Windows'
++
++
+ class Transfers(Gtk.Application):
+     def __init__(self):
+         super().__init__(application_id='org.omarchy.FileTransfers', flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+@@ -65,9 +74,9 @@ class Transfers(Gtk.Application):
+         if self.window:
+             self.window.present()
+             return
+-        self.window = Gtk.ApplicationWindow(application=self, title='Files between Windows and Omarchy', default_width=560, default_height=400)
++        self.window = Gtk.ApplicationWindow(application=self, title=f'Files between {host_name()} and Omarchy', default_width=560, default_height=400)
+         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=20, margin_bottom=20, margin_start=20, margin_end=20)
+-        box.append(Gtk.Label(label='Drop files here to send them to Windows.\nDrag received files below into Files or another application.', wrap=True))
++        box.append(Gtk.Label(label=f'Drop files here to send them to {host_name()}.\nDrag received files below into Files or another application.', wrap=True))
+         target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+         target.connect('drop', self.drop)
+         box.add_controller(target)
+@@ -90,7 +99,7 @@ class Transfers(Gtk.Application):
+             self.window.present()
+ 
+     def choose(self, *_):
+-        dialog = Gtk.FileDialog(title='Send files to Windows')
++        dialog = Gtk.FileDialog(title=f'Send files to {host_name()}')
+         def selected(dialog, result):
+             try:
+                 files = dialog.open_multiple_finish(result)
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-drop b/guest/factory-overlay/usr/local/bin/try-omarchy-drop
+index 1a14250..98184ad 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-drop
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-drop
+@@ -4,6 +4,7 @@
+ from __future__ import annotations
+ 
+ import json
++import os
+ import subprocess
+ import sys
+ from pathlib import Path
+@@ -211,6 +212,15 @@ def downloads_folder():
+     return path
+ 
+ 
++def host_name():
++    '''Windows, unless the Linux launcher names itself on the kernel command line.'''
++    try:
++        words = Path(os.environ.get('TRY_OMARCHY_CMDLINE', '/proc/cmdline')).read_text().split()
++    except OSError:
++        return 'Windows'
++    return 'the host computer' if 'tryomarchy.host=linux' in words else 'Windows'
++
++
+ def notify(title, message):
+     # This runs in a background receiver, never on a GTK/UI thread.
+     try:
+@@ -265,11 +275,11 @@ def receive_ticket(ticket_path, point):
+             # stay in Downloads either way.
+             delivered = deliver_to_app(paths, dict(found, ticket=ticket['id']))
+         if fallback and not delivered:
+-            notify('Files saved to Downloads', f'{len(paths)} item(s) received from Windows.')
++            notify('Files saved to Downloads', f'{len(paths)} item(s) received from {host_name()}.')
+         print(json.dumps({'paths': [str(p) for p in paths], 'fallback': fallback,
+                           'delivered': delivered}), flush=True)
+     except Exception as error:
+-        notify('Could not copy files', str(error)[:250] + '. Original files are still on Windows.')
++        notify('Could not copy files', str(error)[:250] + f'. Original files are still on {host_name()}.')
+         raise
+     finally:
+         ticket_path.unlink(missing_ok=True)
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings b/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings
+index ee5804a..1f5fe7e 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings
+@@ -1,12 +1,22 @@
+ #!/bin/bash
+-# Open the native Windows settings window through the local host agent.
++# Open the host's Try Omarchy settings window through the local host agent.
++# The host is Windows unless the Linux launcher names itself on the kernel
++# command line.
+ set -u
++unavailable='Try Omarchy settings are unavailable. Start Omarchy from Windows and try again.'
++refused='Could not open Try Omarchy settings on Windows.'
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*)
++    unavailable='Try Omarchy settings are unavailable. Start Omarchy from Try Omarchy on the host computer and try again.'
++    refused='Could not open Try Omarchy settings on the host computer.'
++    ;;
++esac
+ host=${TRY_OMARCHY_AGENT_HOST:-10.0.2.2}
+ port=${TRY_OMARCHY_AGENT_PORT:-4451}
+ if ! { exec 3<>"/dev/tcp/$host/$port"; } 2>/dev/null; then
+-  message='Try Omarchy settings are unavailable. Start Omarchy from Windows and try again.'
++  message=$unavailable
+ elif ! printf 'open-settings\n' >&3 || ! IFS= read -r -t 5 response <&3 || [[ $response != ok ]]; then
+-  message='Could not open Try Omarchy settings on Windows.'
++  message=$refused
+ else
+   exec 3>&-
+   exit 0
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-timezone b/guest/factory-overlay/usr/local/bin/try-omarchy-timezone
+index 1f8be18..24db443 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-timezone
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-timezone
+@@ -19,6 +19,17 @@ LOCALTIME = Path(os.environ.get("TRY_OMARCHY_LOCALTIME", "/etc/localtime"))
+ ZONEINFO = Path(os.environ.get("TRY_OMARCHY_ZONEINFO", "/usr/share/zoneinfo"))
+ HOST_ZONE = Path(os.environ.get("TRY_OMARCHY_HOST_ZONE", "/run/try-omarchy/host-timezone"))
+ 
++CMDLINE = Path(os.environ.get("TRY_OMARCHY_CMDLINE", "/proc/cmdline"))
++
++
++def host_name(cmdline=CMDLINE):
++    """Windows, unless the Linux launcher names itself on the kernel command line."""
++    try:
++        words = cmdline.read_text().split()
++    except OSError:
++        return "Windows"
++    return "the host computer" if "tryomarchy.host=linux" in words else "Windows"
++
+ 
+ def zone_path(zone, zoneinfo=ZONEINFO):
+     if (not isinstance(zone, str) or not 0 < len(zone) <= 128
+@@ -94,7 +105,7 @@ def synchronize(zone, state_path=STATE, localtime=LOCALTIME, zoneinfo=ZONEINFO,
+     else:
+         apply(target)
+     save_state({"mode": "auto", "zone": zone, "fingerprint": fingerprint(localtime)}, state_path)
+-    print(f"Following Windows time zone: {zone}", flush=True)
++    print(f"Following {host_name()} time zone: {zone}", flush=True)
+     return True
+ 
+ 
+@@ -152,10 +163,10 @@ def main():
+         # Early sysinit precedes timedated. Only change the symlink here.
+         follow(sys.argv[2], initialize=True)
+         return
+-    if sys.argv[1:] == ["--follow-windows"]:
++    if sys.argv[1:] in (["--follow-host"], ["--follow-windows"]):
+         if follow(force=True):
+             refresh_desktops()
+-        print("Time zone will now follow Windows.", flush=True)
++        print(f"Time zone will now follow {host_name()}.", flush=True)
+         return
+     if sys.argv[1:]:
+         raise ValueError("unexpected arguments")
+@@ -165,7 +176,7 @@ def main():
+         while True:
+             line = port.readline(4097)
+             if not line:
+-                raise OSError("Windows time zone channel disconnected")
++                raise OSError(f"{host_name()} time zone channel disconnected")
+             if len(line) > 4096 or not line.endswith(b"\n"):
+                 raise ValueError("oversized time zone message")
+             try:
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app b/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app
+index 28f64b2..37eaf15 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app
+@@ -3,18 +3,20 @@
+ # Windows unless the Linux launcher names itself on the kernel command line.
+ set -u
+ id=${1:-}
+-if [[ ! $id =~ ^[0-9a-f]{32}$ || $# -ne 1 ]]; then
+-  echo 'Invalid approved app.' >&2
+-  exit 2
+-fi
++invalid="Invalid approved Windows app."
+ unavailable='Windows app launch is unavailable. Start Omarchy from Windows and try again.'
+ refused='That Windows app is no longer approved or could not start. Check Try Omarchy Settings on Windows.'
+ case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
+   *" tryomarchy.host=linux "*)
++    invalid='Invalid approved app.'
+     unavailable='Host app launch is unavailable. Start Omarchy from Try Omarchy and try again.'
+     refused='That app is no longer allowed or could not start. Check Apps on this computer in Try Omarchy Settings.'
+     ;;
+ esac
++if [[ ! $id =~ ^[0-9a-f]{32}$ || $# -ne 1 ]]; then
++  echo "$invalid" >&2
++  exit 2
++fi
+ host=${TRY_OMARCHY_AGENT_HOST:-10.0.2.2}
+ port=${TRY_OMARCHY_AGENT_PORT:-4451}
+ if ! { exec 3<>"/dev/tcp/$host/$port"; } 2>/dev/null; then
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale
+index 8717164..89d8a53 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale
+@@ -18,6 +18,11 @@ locale_conf=${TRY_OMARCHY_LOCALE_CONF:-/etc/locale.conf}
+ locale_sources=${TRY_OMARCHY_LOCALE_SOURCES:-/usr/share/i18n/locales}
+ locale_gen_cmd=${TRY_OMARCHY_LOCALE_GEN_CMD:-locale-gen}
+ 
++host_name=Windows
++case " $(cat "$cmdline_file" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*) host_name="the host computer" ;;
++esac
++
+ zone=""
+ keyboard=""
+ locale=""
+@@ -37,7 +42,7 @@ apply_zone() {
+     if "$helper" --initialize "$zone"; then
+       printf '%s\n' "$zone" >"$marker"
+     else
+-      echo "Could not follow the Windows time zone; keeping the guest selection" >&2
++      echo "Could not follow the $host_name time zone; keeping the guest selection" >&2
+     fi
+     return 0
+   fi
+@@ -49,7 +54,7 @@ apply_zone() {
+   fi
+   ln -sfn "$zoneinfo/$zone" "$localtime"
+   printf '%s\n' "$zone" >"$marker"
+-  echo "time zone set to $zone from Windows"
++  echo "time zone set to $zone from $host_name"
+ }
+ 
+ apply_keyboard() {
+@@ -71,7 +76,7 @@ apply_keyboard() {
+   chmod 0644 "$tmp"
+   mv -f "$tmp" "$vconsole"
+   printf '%s\n' "$spec" >"$marker"
+-  echo "keyboard layout set to $spec from Windows"
++  echo "keyboard layout set to $spec from $host_name"
+ }
+ 
+ # apply_locale generates the Windows display language's UTF-8 locale and
+@@ -100,7 +105,7 @@ apply_locale() {
+   chmod 0644 "$tmp"
+   mv -f "$tmp" "$locale_conf"
+   printf '%s\n' "$name" >"$marker"
+-  echo "language set to $full from Windows"
++  echo "language set to $full from $host_name"
+ }
+ 
+ [[ -z $zone ]] || apply_zone "$zone"
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+new file mode 100755
+index 0000000..6145586
+--- /dev/null
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+@@ -0,0 +1,27 @@
++#!/usr/bin/python3 -I
++"""Select host desktop labels without changing custom or symlinked entries."""
++import os
++from pathlib import Path
++
++cmdline = Path(os.environ.get("TRY_OMARCHY_CMDLINE", "/proc/cmdline"))
++try:
++    linux = "tryomarchy.host=linux" in cmdline.read_text().split()
++except OSError:
++    linux = False
++entries = Path(os.environ.get("TRY_OMARCHY_APPLICATIONS", "/usr/share/applications"))
++seeds = Path(os.environ.get("TRY_OMARCHY_HOST_APPLICATIONS", "/usr/share/try-omarchy/host-applications"))
++for name in ("try-omarchy-file-transfers.desktop", "try-omarchy-host-settings.desktop", "try-omarchy-follow-timezone.desktop"):
++    path = entries / name
++    if path.is_symlink() or not path.is_file():
++        continue
++    windows = (seeds / "windows" / name).read_bytes()
++    other = (seeds / "linux" / name).read_bytes()
++    current = path.read_bytes()
++    wanted = other if linux else windows
++    if current in (windows, other) and current != wanted:
++        temporary = path.with_name(path.name + ".try-omarchy")
++        # Refuse a pre-existing temporary file, including a symlink.
++        with temporary.open("xb") as output:
++            output.write(wanted)
++        temporary.chmod(0o644)
++        temporary.replace(path)
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up b/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up
+index c3950f7..a9a5323 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up
+@@ -32,15 +32,27 @@ previous_revision=$(cat "$marker" 2>/dev/null || true)
+ [[ "$previous_revision" != "$revision" ]] || exit 0
+ mkdir -p "$state_dir"
+ 
++# The old Linux fork used revisions 40-48 for different payloads. Only a
++# pre-overlay lineage record identifies those disks; a Linux boot flag alone
++# must not reinterpret a Windows disk whose owner removed its SSH rule.
++legacy_linux=0
++case "$(cat "$state_dir/guest-series-origin" 2>/dev/null || true)" in
++  linux:*)
++    if [[ $previous_revision =~ ^[0-9]+$ ]] && (( previous_revision < 50 )); then
++      legacy_linux=1
++    fi
++    ;;
++esac
++
+ # Install reviewed system defaults and missing input-method profiles once per
+ # revision. The installer keeps customized files and linked directories intact.
+ qol_installer=${TRY_OMARCHY_QOL_INSTALLER:-/usr/local/lib/try-omarchy/install-guest-qol}
+-if [[ -x $qol_installer ]] && { [[ ! $previous_revision =~ ^[0-9]+$ ]] || (( previous_revision < 47 )); }; then
++if [[ -x $qol_installer ]] && { [[ ! $previous_revision =~ ^[0-9]+$ ]] || (( previous_revision < 47 || legacy_linux )); }; then
+   "$qol_installer" --homes "$homes"
+ fi
+ 
+ battery_installer=${TRY_OMARCHY_BATTERY_INSTALLER:-/usr/local/lib/try-omarchy/update-battery-dkms}
+-if [[ -x $battery_installer ]] && { [[ ! $previous_revision =~ ^[0-9]+$ ]] || (( previous_revision < 48 )); }; then
++if [[ -x $battery_installer ]] && { [[ ! $previous_revision =~ ^[0-9]+$ ]] || (( previous_revision < 48 || legacy_linux )); }; then
+   "$battery_installer"
+ fi
+ 
+@@ -183,7 +195,9 @@ secure_quick_start_ssh() {
+   # A disk that already ran catch-up at 42 or later either got the rule then
+   # or created its quick-start account with it, and has no record to show it.
+   local record=$state_dir/quick-start-sshd
+-  [[ ! $previous_revision =~ ^[0-9]+$ ]] || (( previous_revision < 42 )) || return 0
++  local first_secure_revision=42
++  (( legacy_linux == 0 )) || first_secure_revision=44
++  [[ ! $previous_revision =~ ^[0-9]+$ ]] || (( previous_revision < first_secure_revision )) || return 0
+   [[ "$(cat "$state_dir/provision-mode" 2>/dev/null || true)" == instant-trial ]] || return 0
+   [[ -f $quick_start_sshd && ! -e $record ]] || return 0
+   install -Dm644 "$quick_start_sshd" "$sshd_config_dir/90-try-omarchy-quick-start.conf"
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/repair-clock-timezone b/guest/factory-overlay/usr/local/lib/try-omarchy/repair-clock-timezone
+new file mode 100755
+index 0000000..e110e62
+--- /dev/null
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/repair-clock-timezone
+@@ -0,0 +1,19 @@
++#!/bin/bash
++# Repair only the clock widget shipped by earlier Try Omarchy images, so a
++# followed host time zone shows without restarting the shell. An Omarchy
++# upgrade or a user's edit must never be replaced with an older file.
++set -euo pipefail
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*) ;;
++  *) exit 0 ;;
++esac
++path=${TRY_OMARCHY_CLOCK_WIDGET:-/usr/share/omarchy/shell/plugins/panels/clock/BarWidget.qml}
++replacement=${TRY_OMARCHY_CLOCK_REPLACEMENT:-/usr/share/try-omarchy/clock-timezone-refresh.qml}
++[[ -f $path && -f $replacement && ! -L $path ]] || exit 0
++read -r digest _ < <(sha256sum "$path")
++case $digest in
++  cfcdaeedc4ae5832b37271a84bb92ee762301022e2443a0f769992fa792acf28)
++    install -m 0644 "$replacement" "$path.try-omarchy"
++    mv -f -- "$path.try-omarchy" "$path"
++    ;;
++esac
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-file-transfers.desktop b/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-file-transfers.desktop
+new file mode 100644
+index 0000000..7a43fed
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-file-transfers.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Files between the host computer and Omarchy
++Comment=Drop files to send them to the host computer or receive files from it
++Exec=file-transfer-window
++Icon=folder-remote
++Terminal=false
++Categories=Utility;FileTools;
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-follow-timezone.desktop b/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-follow-timezone.desktop
+new file mode 100644
+index 0000000..d334aba
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-follow-timezone.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Follow Host Time Zone
++Comment=Use the host computer's time-zone changes again after choosing a guest zone
++Exec=sudo /usr/local/bin/try-omarchy-timezone --follow-host
++Terminal=true
++Icon=preferences-system-time
++Categories=Settings;
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-host-settings.desktop b/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-host-settings.desktop
+new file mode 100644
+index 0000000..71e6940
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-host-settings.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Try Omarchy Settings
++Comment=Change Try Omarchy settings on the host computer
++Exec=try-omarchy-host-settings
++Icon=preferences-system
++Categories=Settings;System;
++Terminal=false
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-file-transfers.desktop b/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-file-transfers.desktop
+new file mode 100644
+index 0000000..7d8b6c9
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-file-transfers.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Files between Windows and Omarchy
++Comment=Drop files to send them to Windows or receive files from Windows
++Exec=file-transfer-window
++Icon=folder-remote
++Terminal=false
++Categories=Utility;FileTools;
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-follow-timezone.desktop b/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-follow-timezone.desktop
+new file mode 100644
+index 0000000..736d038
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-follow-timezone.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Follow Windows Time Zone
++Comment=Use Windows time-zone changes again after choosing a guest zone
++Exec=sudo /usr/local/bin/try-omarchy-timezone --follow-windows
++Terminal=true
++Icon=preferences-system-time
++Categories=Settings;
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-host-settings.desktop b/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-host-settings.desktop
+new file mode 100644
+index 0000000..2601cd2
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-host-settings.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Try Omarchy Settings
++Comment=Change Windows host settings for Try Omarchy
++Exec=try-omarchy-host-settings
++Icon=preferences-system
++Categories=Settings;System;
++Terminal=false
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 219d573..8d45a25 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -75,7 +75,16 @@ UPDATE_MANIFEST
+ # Carry the exact patched idle service for a digest-gated repair on old disks.
+ install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/share/try-omarchy/host-window-idle.qml
+ 
++# Carry the already patched clock for a Linux-only digest-gated old-disk repair.
++install -m 0644 /usr/share/omarchy/shell/plugins/panels/clock/BarWidget.qml /usr/share/try-omarchy/clock-timezone-refresh.qml
++
+ compat_paths=(
++  usr/local/lib/try-omarchy/apply-host-names
++  usr/share/try-omarchy/host-applications
++  usr/local/lib/try-omarchy/repair-clock-timezone
++  usr/share/try-omarchy/clock-timezone-refresh.qml
++  etc/systemd/system/try-omarchy-linux-clock.service
++  etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
+   usr/local/bin/mpv
+   usr/local/bin/omarchy-native-screensaver-text
+   usr/local/lib/try-omarchy/install-guest-qol
+@@ -238,7 +247,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 52 follows Linux host display scale while preserving explicit user scale.
+ # Revision 53 reports Linux desktop readiness after the Omarchy shell starts.
+ # Revision 54 names approved apps for Linux and reports agent version 5 there.
+-compat_revision=54
++# Revision 55 names Linux hosts in notices and repairs their shipped clock widget.
++compat_revision=55
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/spec.json b/guest/spec.json
+index a0cbd30..61f0730 100644
+--- a/guest/spec.json
++++ b/guest/spec.json
+@@ -141,6 +141,20 @@
+           }
+         ]
+       },
++      {
++        "id": "host-window-idle",
++        "description": "Guest integration: temporarily inhibit automatic idle while the host window lease is active.",
++        "reference": "guest/factory-overlay/usr/local/lib/try-omarchy/host-window",
++        "patch": "patches/omarchy/host-window-idle.patch",
++        "patchSha256": "faa26f4c7acd4043faf08a808e554d3745510287afa32f4467c077bdc4e70efa",
++        "targets": [
++          {
++            "path": "shell/plugins/services/idle/Service.qml",
++            "beforeSha256": "02512cc96ecb82005b82e947ed891549d1721cbefad14fdb2eca9ab50e88c9eb",
++            "afterSha256": "815579bfb4ed4d0d87587927d8d10cb018cc055e2cafe4919d97427750e4f242"
++          }
++        ]
++      },
+       {
+         "id": "setup-host-timezone",
+         "description": "Select the validated Windows time-zone hint in the first-boot personal setup form.",
+@@ -239,20 +253,6 @@
+             "afterSha256": "c9b9519df8ecfae51f3073c15c1c1ef5481973d5ac8d941190e75fcb57246b65"
+           }
+         ]
+-      },
+-      {
+-        "id": "host-window-idle",
+-        "description": "Guest integration: temporarily inhibit automatic idle while the host window lease is active.",
+-        "reference": "guest/factory-overlay/usr/local/lib/try-omarchy/host-window",
+-        "patch": "patches/omarchy/host-window-idle.patch",
+-        "patchSha256": "faa26f4c7acd4043faf08a808e554d3745510287afa32f4467c077bdc4e70efa",
+-        "targets": [
+-          {
+-            "path": "shell/plugins/services/idle/Service.qml",
+-            "beforeSha256": "02512cc96ecb82005b82e947ed891549d1721cbefad14fdb2eca9ab50e88c9eb",
+-            "afterSha256": "815579bfb4ed4d0d87587927d8d10cb018cc055e2cafe4919d97427750e4f242"
+-          }
+-        ]
+       }
+     ],
+     "requiredPaths": [
+diff --git a/guest/tests/test_file_drop_target.py b/guest/tests/test_file_drop_target.py
+index 917d337..41f9844 100644
+--- a/guest/tests/test_file_drop_target.py
++++ b/guest/tests/test_file_drop_target.py
+@@ -93,6 +93,21 @@ class DropTargetTests(unittest.TestCase):
+     def test_a_refused_app_drag_still_reports_downloads(self):
+         self.receive_onto_app(False).assert_called_once_with('Files saved to Downloads', '1 item(s) received from Windows.')
+ 
++    def test_notices_name_a_linux_host(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            cmdline = Path(tmp) / 'cmdline'
++            for words, name in (('root=/dev/vda rw tryomarchy.host=linux quiet', 'the host computer'),
++                                ('root=/dev/vda rw', 'Windows')):
++                cmdline.write_text(words + '\n')
++                with patch.dict(os.environ, {'TRY_OMARCHY_CMDLINE': str(cmdline)}):
++                    self.assertEqual(module.host_name(), name)
++            with patch.dict(os.environ, {'TRY_OMARCHY_CMDLINE': str(Path(tmp) / 'missing')}):
++                self.assertEqual(module.host_name(), 'Windows')
++            cmdline.write_text('tryomarchy.host=linux\n')
++            with patch.dict(os.environ, {'TRY_OMARCHY_CMDLINE': str(cmdline)}):
++                self.receive_onto_app(False).assert_called_once_with(
++                    'Files saved to Downloads', '1 item(s) received from the host computer.')
++
+     def test_tablet_position_follows_scale_and_monitor_size(self):
+         monitor = {'width': 2560, 'height': 1440, 'scale': 2, 'x': 0, 'y': 0}
+         self.assertEqual(module.tablet_position(0, 0, monitor), (0, 0))
+diff --git a/guest/tests/test_host_names.py b/guest/tests/test_host_names.py
+new file mode 100644
+index 0000000..fb4c35c
+--- /dev/null
++++ b/guest/tests/test_host_names.py
+@@ -0,0 +1,42 @@
++"""Exercise both host defaults and preservation of personal launcher entries."""
++import os
++from pathlib import Path
++import shutil
++import subprocess
++import tempfile
++import unittest
++
++OVERLAY = Path(__file__).resolve().parents[1] / 'factory-overlay'
++HELPER = OVERLAY / 'usr/local/lib/try-omarchy/apply-host-names'
++SEEDS = OVERLAY / 'usr/share/try-omarchy/host-applications'
++
++
++class HostNamesTests(unittest.TestCase):
++    def test_defaults_switch_both_ways_and_custom_entries_survive(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            entries = root / 'applications'
++            shutil.copytree(SEEDS / 'windows', entries)
++            cmdline = root / 'cmdline'
++            env = dict(os.environ, TRY_OMARCHY_CMDLINE=str(cmdline),
++                       TRY_OMARCHY_APPLICATIONS=str(entries), TRY_OMARCHY_HOST_APPLICATIONS=str(SEEDS))
++            def apply(words):
++                cmdline.write_text(words + '\n')
++                subprocess.run([str(HELPER)], env=env, check=True)
++            for words, host in [('root=/dev/vda', 'windows'), ('tryomarchy.host=linux', 'linux'),
++                                ('tryomarchy.host=linuxish', 'windows')]:
++                apply(words)
++                for path in entries.iterdir():
++                    self.assertEqual(path.read_bytes(), (SEEDS / host / path.name).read_bytes())
++            paths = sorted(entries.iterdir())
++            paths[0].write_text('personal launcher\n')
++            paths[1].unlink()
++            target = root / 'personal.desktop'
++            target.write_text('linked launcher\n')
++            paths[2].unlink()
++            paths[2].symlink_to(target)
++            apply('tryomarchy.host=linux')
++            self.assertEqual(paths[0].read_text(), 'personal launcher\n')
++            self.assertFalse(paths[1].exists())
++            self.assertTrue(paths[2].is_symlink())
++            self.assertEqual(target.read_text(), 'linked launcher\n')
+diff --git a/guest/tests/test_kernel_module_delivery.py b/guest/tests/test_kernel_module_delivery.py
+index c65376d..2cbd50d 100644
+--- a/guest/tests/test_kernel_module_delivery.py
++++ b/guest/tests/test_kernel_module_delivery.py
+@@ -61,6 +61,24 @@ class ModuleDeliveryTests(unittest.TestCase):
+         (self.root / 'modules.tar').unlink()
+         self.assertEqual(self.run_hook().returncode, 0)
+ 
++    def test_records_legacy_lineage_before_overlay_and_preserves_it_on_retry(self):
++        marker = self.guest / 'usr/share/try-omarchy/compat-version'
++        marker.parent.mkdir(parents=True)
++        marker.write_text('48:old-kernel\n')
++        helper = self.guest / 'usr/local/lib/try-omarchy/host-window'
++        helper.parent.mkdir(parents=True)
++        self.archive('overlay.tar', {'usr/local/lib/try-omarchy/host-window': 'linux helper'})
++        prefix = 'tar() { case "$*" in *modules.tar*) return 1;; esac; command tar "$@"; }'
++        self.assertNotEqual(self.run_hook(prefix).returncode, 0)
++        lineage = self.guest / 'var/lib/try-omarchy/guest-series-origin'
++        self.assertEqual(lineage.read_text(), 'windows:48\n')
++        self.assertEqual(self.run_hook().returncode, 0)
++        self.assertEqual(lineage.read_text(), 'windows:48\n')
++        lineage.unlink()
++        marker.write_text('43:old-linux-kernel\n')
++        self.assertEqual(self.run_hook().returncode, 0)
++        self.assertEqual(lineage.read_text(), 'linux:43\n')
++
+     def test_failed_extraction_preserves_files_and_retries(self):
+         prefix = '''tar() {
+ case "$*" in *modules.tar*) return 1;; esac
+diff --git a/guest/tests/test_overlay_scripts.py b/guest/tests/test_overlay_scripts.py
+index c33436f..4771349 100644
+--- a/guest/tests/test_overlay_scripts.py
++++ b/guest/tests/test_overlay_scripts.py
+@@ -463,6 +463,23 @@ class AgentTests(OverlayCase):
+                 self.assertEqual(received.result(timeout=5), f"launch-app {app_id}\n".encode())
+                 self.assertEqual(result.returncode, 1)
+ 
++    def test_host_settings_names_a_linux_host(self) -> None:
++        cmdline = self.root / "cmdline"
++        with socket.socket() as server:
++            server.bind(("127.0.0.1", 0))
++            port = server.getsockname()[1]
++        for words, message in (("root=/dev/vda rw tryomarchy.host=linux quiet", "Try Omarchy on the host computer"),
++                               ("root=/dev/vda rw tryomarchy.host=linuxish", "Start Omarchy from Windows")):
++            with self.subTest(words=words):
++                cmdline.write_text(words + "\n")
++                env = dict(self.env, TRY_OMARCHY_AGENT_HOST="127.0.0.1", TRY_OMARCHY_AGENT_PORT=str(port),
++                           TRY_OMARCHY_CMDLINE=str(cmdline))
++                result = subprocess.run([str(HOST_SETTINGS)], env=env, capture_output=True, text=True, timeout=10)
++                self.assertEqual(result.returncode, 1)
++                self.assertIn(message, result.stderr)
++        desktop = (OVERLAY / "usr/share/applications/try-omarchy-host-settings.desktop").read_text()
++        self.assertIn("Change Windows host settings", desktop)
++
+     def test_host_settings_request_and_failure(self) -> None:
+         with socket.socket() as server:
+             server.bind(("127.0.0.1", 0))
+@@ -647,6 +664,39 @@ class CatchUpTests(OverlayCase):
+         self.assertFalse(dropin.exists())
+         self.assertEqual((self.state / "catch-up-revision").read_text().strip(), "45")
+ 
++    def test_legacy_linux_revisions_use_their_ssh_cutoff(self) -> None:
++        self.state.mkdir(parents=True)
++        (self.state / "provision-mode").write_text("instant-trial\n")
++        (self.state / "guest-series-origin").write_text("linux:43\n")
++        self.version.write_text("55:test-kernel\n")
++        dropin = self.root / "sshd_config.d/90-try-omarchy-quick-start.conf"
++        for previous, installed in ((43, True), (44, False), (48, False), (50, False)):
++            with self.subTest(previous=previous):
++                dropin.unlink(missing_ok=True)
++                (self.state / "quick-start-sshd").unlink(missing_ok=True)
++                (self.state / "catch-up-revision").write_text(f"{previous}\n")
++                self.assertEqual(self.run_catch_up().returncode, 0)
++                self.assertEqual(dropin.exists(), installed)
++
++    def test_legacy_linux_gets_missing_windows_payloads_once(self) -> None:
++        self.state.mkdir(parents=True)
++        (self.state / "guest-series-origin").write_text("linux:48\n")
++        (self.state / "catch-up-revision").write_text("48\n")
++        self.version.write_text("55:test-kernel\n")
++        log = self.root / "installed"
++        fake = self.root / "installer"
++        fake.write_text(f'#!/bin/sh\necho installed >> "{log}"\n')
++        fake.chmod(0o755)
++        self.env.update(TRY_OMARCHY_QOL_INSTALLER=str(fake), TRY_OMARCHY_BATTERY_INSTALLER=str(fake))
++        self.assertEqual(self.run_catch_up().returncode, 0)
++        self.assertEqual(log.read_text().splitlines(), ["installed", "installed"])
++        self.assertEqual(self.run_catch_up().returncode, 0)
++        self.assertEqual(len(log.read_text().splitlines()), 2)
++        (self.state / "guest-series-origin").write_text("windows:48\n")
++        (self.state / "catch-up-revision").write_text("48\n")
++        self.assertEqual(self.run_catch_up().returncode, 0)
++        self.assertEqual(len(log.read_text().splitlines()), 2)
++
+     def test_own_account_disk_keeps_its_ssh_settings(self) -> None:
+         self.assertEqual(self.run_catch_up().returncode, 0)
+         self.assertFalse((self.root / "sshd_config.d").exists())
+diff --git a/guest/tests/test_timezone.py b/guest/tests/test_timezone.py
+index 510d399..f18e24f 100644
+--- a/guest/tests/test_timezone.py
++++ b/guest/tests/test_timezone.py
+@@ -42,6 +42,17 @@ class TimeZoneTests(unittest.TestCase):
+             self.replace(target)
+         return helper.synchronize(zone, self.state, self.local, self.zones, apply, **kw)
+ 
++    def test_host_wording_follows_the_launcher(self):
++        cmdline = self.root / 'cmdline'
++        for words, name in (('root=/dev/vda rw tryomarchy.host=linux quiet', 'the host computer'),
++                            ('root=/dev/vda rw tryomarchy.host=linuxish', 'Windows')):
++            cmdline.write_text(words + '\n')
++            self.assertEqual(helper.host_name(cmdline), name)
++        self.assertEqual(helper.host_name(self.root / 'missing'), 'Windows')
++        desktop = (GUEST / 'factory-overlay/usr/share/try-omarchy/host-applications/linux/try-omarchy-follow-timezone.desktop').read_text()
++        self.assertIn('--follow-host', desktop)
++        self.assertNotIn('Windows', desktop)
++
+     def test_changes_and_repeated_snapshot(self):
+         self.assertTrue(self.sync('America/Chicago'))
+         self.assertFalse(self.sync('America/Chicago'))
+@@ -126,3 +137,66 @@ class TimeZoneTests(unittest.TestCase):
+ 
+ if __name__ == '__main__':
+     unittest.main()
++
++
++class ClockRepairTests(unittest.TestCase):
++    """Disks that receive revision 55 also get the clock's time-zone refresh."""
++    REPAIR = GUEST / 'factory-overlay/usr/local/lib/try-omarchy/repair-clock-timezone'
++
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        root = Path(self.tmp.name)
++        self.widget = root / 'BarWidget.qml'
++        self.replacement = root / 'clock-timezone-refresh.qml'
++        self.replacement.write_text('patched\n')
++        cmdline = root / 'cmdline'
++        cmdline.write_text('tryomarchy.host=linux\n')
++        self.env = dict(os.environ, TRY_OMARCHY_CMDLINE=str(cmdline), TRY_OMARCHY_CLOCK_WIDGET=str(self.widget), TRY_OMARCHY_CLOCK_REPLACEMENT=str(self.replacement))
++        self.shipped = self.shipped_widget()
++
++    def shipped_widget(self):
++        """The digest of the unpatched widget that earlier images installed."""
++        spec = json.loads((GUEST / 'spec.json').read_text())
++        backport = next(b for b in spec['authenticity']['backports'] if b['id'] == 'clock-timezone-refresh')
++        return backport['targets'][0]['beforeSha256']
++
++    def repair(self):
++        subprocess.run([str(self.REPAIR)], env=self.env, check=True)
++
++    def test_repairs_only_the_shipped_widget(self):
++        script = self.REPAIR.read_text()
++        self.assertIn(self.shipped, script)
++        # An edited or newer widget is left alone.
++        self.widget.write_text('user edit\n')
++        self.repair()
++        self.assertEqual(self.widget.read_text(), 'user edit\n')
++        # A symlink is never followed.
++        self.widget.unlink()
++        target = Path(self.tmp.name) / 'elsewhere.qml'
++        target.write_text('user edit\n')
++        self.widget.symlink_to(target)
++        self.repair()
++        self.assertTrue(self.widget.is_symlink())
++        self.assertEqual(target.read_text(), 'user edit\n')
++        # A missing widget or replacement is not an error.
++        self.widget.unlink()
++        self.repair()
++        self.assertFalse(self.widget.exists())
++
++    def test_windows_does_not_repair_the_widget(self):
++        self.widget.write_text('shipped\n')
++        Path(self.env['TRY_OMARCHY_CMDLINE']).write_text('root=/dev/vda\n')
++        self.repair()
++        self.assertEqual(self.widget.read_text(), 'shipped\n')
++
++    def test_replaces_a_widget_with_the_shipped_digest(self):
++        fake = Path(self.tmp.name) / 'bin'
++        fake.mkdir()
++        (fake / 'sha256sum').write_text(f'#!/bin/sh\necho "{self.shipped}  $1"\n')
++        (fake / 'sha256sum').chmod(0o755)
++        self.widget.write_text('shipped\n')
++        env = dict(self.env, PATH=f'{fake}:{os.environ["PATH"]}')
++        subprocess.run([str(self.REPAIR)], env=env, check=True)
++        self.assertEqual(self.widget.read_text(), 'patched\n')
++        self.assertFalse(self.widget.with_name('BarWidget.qml.try-omarchy').exists())
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 4cd1a69..0a82365 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -67,7 +67,7 @@ def main() -> None:
+     backports = authenticity["backports"]
+     check(
+         [backport.get("id") for backport in backports]
+-        == ["notification-hover-close", "notification-screen-privacy", "setup-host-timezone", "clock-timezone-refresh", "screensaver-terminal-fit", "update-free-space-message", "first-run-update-notification", "windows-power-profile", "host-window-idle"],
++        == ["notification-hover-close", "notification-screen-privacy", "host-window-idle", "setup-host-timezone", "clock-timezone-refresh", "screensaver-terminal-fit", "update-free-space-message", "first-run-update-notification", "windows-power-profile"],
+         "Omarchy backports are explicitly ordered and identified",
+     )
+     for backport in backports:
+@@ -326,10 +326,16 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=54" in finalize_rootfs
++        "compat_revision=55" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/host-window" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-host-window" in compat_paths
+         and "usr/share/try-omarchy/host-window-idle.qml" in compat_paths
++        and "usr/local/lib/try-omarchy/apply-host-names" in compat_paths
++        and "usr/share/try-omarchy/host-applications" in compat_paths
++        and "usr/local/lib/try-omarchy/repair-clock-timezone" in compat_paths
++        and "usr/share/try-omarchy/clock-timezone-refresh.qml" in compat_paths
++        and "etc/systemd/system/try-omarchy-linux-clock.service" in compat_paths
++        and "etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service" in compat_paths
+         and "usr/local/bin/mpv" in compat_paths
+         and "usr/share/dkms/modules_to_force_install/try-omarchy" in compat_paths
+         and "usr/local/lib/try-omarchy/try-omarchy-import.pyz" in compat_paths
+-- 
+2.56.0
+

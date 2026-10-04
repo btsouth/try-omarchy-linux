@@ -98,8 +98,8 @@ func (l *forwardList) Set(value string) error {
 }
 
 func (l *forwardList) add(f portForward) error {
-	if f.proto == "tcp" && f.hostPort >= qmpToolsPort && f.hostPort <= timeZoneBridgePort {
-		return uiError(uiTextWith("error.forward.reserved", map[string]string{"port": fmt.Sprint(f.hostPort), "first": fmt.Sprint(qmpToolsPort), "last": fmt.Sprint(timeZoneBridgePort)}), nil)
+	if f.proto == "tcp" && f.hostPort >= qmpToolsPort && f.hostPort <= lastReservedPort {
+		return uiError(uiTextWith("error.forward.reserved", map[string]string{"port": fmt.Sprint(f.hostPort), "first": fmt.Sprint(qmpToolsPort), "last": fmt.Sprint(lastReservedPort)}), nil)
 	}
 	for _, existing := range *l {
 		if existing.proto == f.proto && existing.hostPort == f.hostPort && (existing.address() == f.address() || existing.address() == "0.0.0.0" || f.address() == "0.0.0.0") {

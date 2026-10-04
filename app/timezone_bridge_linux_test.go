@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -172,4 +173,11 @@ func TestLinuxTimeZoneBridgeNoticesAClosedPeerWithoutAZone(t *testing.T) {
 	listener.conns <- host
 	guest.Close()
 	host.waitClosed(t, "bridge kept a closed connection")
+}
+
+func TestLinuxForwardsMayUseTheTimeZoneBridgeTCPPort(t *testing.T) {
+	var l forwardList
+	if err := l.Set(fmt.Sprintf("tcp:%d:80", timeZoneBridgePort)); err != nil {
+		t.Fatalf("tcp:%d rejected on Linux: %v", timeZoneBridgePort, err)
+	}
 }

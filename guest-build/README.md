@@ -298,7 +298,7 @@ guest disks.
 
 Patches 0001 through 0126 remain the Windows series unchanged. Patch 0126
 already uses compatibility revision 49, so the Linux additions use revisions
-50 through 55. Linux behavior is gated by `tryomarchy.host=linux`,
+50 through 56. Linux behavior is gated by `tryomarchy.host=linux`,
 `tryomarchy.host-scale=1`, or `tryomarchy.vulkan-present=cpu`. Windows launchers
 pass none of these flags and retain their existing behavior and wording.
 
@@ -311,6 +311,7 @@ pass none of these flags and retain their existing behavior and wording.
 | 0131 | 0107 | 53 | Report `desktop-ready` after a monitor, Quickshell, background and bar surfaces are stable. The user service runs only on a Linux host; system `ready` still serves image rollback. |
 | 0132 | 0114 | 54 | Name approved Linux apps `Host: name` and report agent version 5 only to Linux. Windows retains its app labels and agent version 4. |
 | 0133 | 0115, differences from 0116 and 0117 | 55 | Name the Linux host in Settings, file transfer, locale, time-zone notices and power menus. Select desktop labels at boot, preserving custom, missing and symlinked entries. Repair only the shipped clock widget, on Linux, before the display manager starts. |
+| 0135 | Linux guest fixes | 56 | Accept custom bar namespaces when Omarchy IPC responds and visible shell surfaces share the background process. Restore Linux host labels after runtime package installation or upgrade. |
 
 Linux patch 0109 is covered by Windows 0107 and 0117, including preserving a
 removed quick-start SSH rule. Linux 0111 has the same exporter behavior as

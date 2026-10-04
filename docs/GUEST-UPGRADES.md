@@ -19,6 +19,13 @@ the runtime's package release goes up, so the next update installs it on disks
 created by older images. Apps a user removed on purpose are not on that list
 and stay removed. System configuration shipped by the runtime uses pacman's backup
 handling, so local edits can be retained with a `.pacnew` file for review.
+Compatibility revision 56 also delivers the custom-bar readiness probe and a
+post-transaction pacman hook to existing disks. After installing or upgrading
+`try-omarchy-runtime`, the hook reapplies the recognized host labels only when
+`tryomarchy.host=linux` is present, so **Update > Omarchy** retains Linux power
+wording without waiting for a reboot. Customized and symlinked files retain the
+existing preservation rules.
+
 Personal files stay on the existing disk. The launcher continues to supply the
 external kernel and matching modules; the guest's linux package stays held.
 

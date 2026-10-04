@@ -105,6 +105,12 @@ passes `tryomarchy.host=linux`; with it the launcher entries read `Host: name`
 and the failure notices point at Try Omarchy Settings on that computer. Agent
 version 5 tells a Linux launcher the guest does this, so older guests receive
 no list. Compatibility revision 46 delivers the scripts to existing disks.
+
+Patch 0115 names a Linux host in the rest of the guest's notices. With
+`tryomarchy.host=linux`, the Try Omarchy Settings launcher, file drop notices
+and the file transfer window speak of the host computer instead of Windows.
+The Settings and file transfer desktop entries use wording that fits either
+host. Compatibility revision 47 delivers the scripts to existing disks.
 Windows launchers pass no flag and keep the `Windows: name` entries.
 
 The second command needs Docker and currently takes about ten minutes. Release

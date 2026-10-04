@@ -1,41 +1,43 @@
-From 392855726a84213fddaec328407d5b8f75ea303b Mon Sep 17 00:00:00 2001
+From 1eb904f5f567a6af79737cbaed1dc91f47f0b198 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Sun, 4 Oct 2026 01:26:06 -0400
 Subject: [PATCH 133/133] Name a Linux host in guest notices
 
 Compatibility revision 55 delivers Linux host wording, flag-selected desktop labels, and the Linux-only digest-gated clock repair from Linux patches 0116 and 0117. Windows desktop labels and time-zone protocol stay unchanged. Record legacy lineage atomically before extraction, validate it on retries, and use the stricter SSH cutoff for ambiguous revisions. Select host power wording after catch-up without changing the Windows payloads.
 ---
- .../etc/initcpio/hooks/tryomarchy_compat      |  48 +++++++
+ .../etc/initcpio/hooks/tryomarchy_compat      |  52 ++++
  .../try-omarchy-linux-clock.service           |   1 +
  .../system/try-omarchy-catch-up.service       |   1 +
  .../system/try-omarchy-host-locale.service    |   1 +
- .../system/try-omarchy-linux-clock.service    |  12 ++
+ .../system/try-omarchy-linux-clock.service    |  12 +
  .../usr/local/bin/file-transfer-window        |  15 +-
  .../usr/local/bin/try-omarchy-drop            |  14 +-
- .../usr/local/bin/try-omarchy-host-settings   |  16 ++-
- .../usr/local/bin/try-omarchy-timezone        |  19 ++-
+ .../usr/local/bin/try-omarchy-host-settings   |  16 +-
+ .../usr/local/bin/try-omarchy-timezone        |  19 +-
  .../usr/local/bin/try-omarchy-windows-app     |  10 +-
  .../local/lib/try-omarchy/apply-host-locale   |  13 +-
- .../local/lib/try-omarchy/apply-host-names    |  60 ++++++++
- .../usr/local/lib/try-omarchy/catch-up        |  28 +++-
- .../lib/try-omarchy/repair-clock-timezone     |  19 +++
- .../linux/try-omarchy-file-transfers.desktop  |   8 ++
- .../linux/try-omarchy-follow-timezone.desktop |   8 ++
- .../linux/try-omarchy-host-settings.desktop   |   8 ++
- .../try-omarchy-file-transfers.desktop        |   8 ++
- .../try-omarchy-follow-timezone.desktop       |   8 ++
- .../windows/try-omarchy-host-settings.desktop |   8 ++
+ .../local/lib/try-omarchy/apply-host-names    |  60 +++++
+ .../usr/local/lib/try-omarchy/catch-up        |  28 ++-
+ .../lib/try-omarchy/repair-clock-timezone     |  19 ++
+ .../linux/try-omarchy-file-transfers.desktop  |   8 +
+ .../linux/try-omarchy-follow-timezone.desktop |   8 +
+ .../linux/try-omarchy-host-settings.desktop   |   8 +
+ .../try-omarchy-file-transfers.desktop        |   8 +
+ .../try-omarchy-follow-timezone.desktop       |   8 +
+ .../windows/try-omarchy-host-settings.desktop |   8 +
  guest/scripts/finalize-rootfs.sh              |  12 +-
- guest/spec.json                               |  28 ++--
+ guest/spec.json                               |  28 +--
+ .../tests/fixtures/legacy-linux-lineage.json  | 175 ++++++++++++++
  guest/tests/test_battery_details.py           |   2 +-
  guest/tests/test_file_drop_target.py          |  15 ++
+ guest/tests/test_guest_lineage_contract.py    |  93 ++++++++
  guest/tests/test_guest_qol.py                 |   2 +-
- guest/tests/test_host_names.py                |  87 +++++++++++
- guest/tests/test_kernel_module_delivery.py    | 136 ++++++++++++++++++
- guest/tests/test_overlay_scripts.py           |  67 +++++++++
- guest/tests/test_timezone.py                  |  74 ++++++++++
+ guest/tests/test_host_names.py                |  87 +++++++
+ guest/tests/test_kernel_module_delivery.py    | 223 ++++++++++++++++++
+ guest/tests/test_overlay_scripts.py           |  67 ++++++
+ guest/tests/test_timezone.py                  |  74 ++++++
  guest/tests/verify.py                         |  10 +-
- 30 files changed, 695 insertions(+), 43 deletions(-)
+ 32 files changed, 1054 insertions(+), 43 deletions(-)
  create mode 120000 guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
  create mode 100644 guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service
  create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
@@ -46,13 +48,15 @@ Compatibility revision 55 delivers Linux host wording, flag-selected desktop lab
  create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-file-transfers.desktop
  create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-follow-timezone.desktop
  create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-applications/windows/try-omarchy-host-settings.desktop
+ create mode 100644 guest/tests/fixtures/legacy-linux-lineage.json
+ create mode 100644 guest/tests/test_guest_lineage_contract.py
  create mode 100644 guest/tests/test_host_names.py
 
 diff --git a/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat b/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
-index 6ce51a3..2fcbed2 100755
+index 6ce51a3..28011f9 100755
 --- a/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
 +++ b/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
-@@ -7,11 +7,59 @@ run_latehook() {
+@@ -7,11 +7,63 @@ run_latehook() {
      kernel=$(uname -r)
      modules_marker="$root/usr/lib/modules/$kernel/.tryomarchy-complete"
      [ -d "$root" ] || return 0
@@ -79,21 +83,25 @@ index 6ce51a3..2fcbed2 100755
 +            if [ "$previous_revision" -lt 50 ] && [ ! -e "$lineage" ]; then
 +                origin=windows
 +                # These paths/content shipped only in the old Linux fork:
-+                # 0103 Vulkan env, 0104 host lease, 0106 display scale,
++                # 0103 Vulkan flag, 0104 host lease, 0106 display scale,
 +                # 0107 readiness, 0114 app labels, 0115 host notices.
-+                if [ -f "$root/usr/local/lib/try-omarchy/vulkan-env" ] ||
++                if grep -Fq 'tryomarchy.vulkan-present=cpu' "$root/usr/local/lib/try-omarchy/vulkan-env" 2>/dev/null ||
 +                   [ -f "$root/usr/local/lib/try-omarchy/host-window" ] ||
 +                   [ -f "$root/etc/systemd/user/try-omarchy-desktop-ready.service" ] ||
 +                   [ -f "$root/usr/local/lib/try-omarchy/desktop-ready" ] ||
-+                   grep -q 'OMARCHY_DISPLAY_SYNC_HOST_SCALE' "$root/usr/local/bin/omarchy-native-display-sync" 2>/dev/null ||
-+                   grep -q 'def host_is_linux' "$root/usr/local/lib/try-omarchy/approved-apps-sync" 2>/dev/null ||
-+                   grep -q 'Host app launch is unavailable' "$root/usr/local/bin/try-omarchy-windows-app" 2>/dev/null ||
-+                   grep -q 'def host_name' "$root/usr/local/bin/file-transfer-window" 2>/dev/null; then
++                   grep -Fq 'OMARCHY_DISPLAY_SYNC_HOST_SCALE' "$root/usr/local/bin/omarchy-native-display-sync" 2>/dev/null ||
++                   grep -Fq 'def host_is_linux' "$root/usr/local/lib/try-omarchy/approved-apps-sync" 2>/dev/null ||
++                   grep -Fq 'Host app launch is unavailable' "$root/usr/local/bin/try-omarchy-windows-app" 2>/dev/null ||
++                   grep -Fq 'def host_name' "$root/usr/local/bin/file-transfer-window" 2>/dev/null; then
 +                    origin=linux
-+                elif [ "$previous_revision" -ge 40 ] && [ "$previous_revision" -le 48 ] &&
-+                     [ ! -f "$root/usr/share/try-omarchy/guest-qol/manifest.json" ] &&
-+                     [ ! -f "$root/usr/local/lib/try-omarchy/update-battery-dkms" ]; then
-+                    # Windows 0122/0124 are absent from the old Linux fork.
++                elif grep -Fq 'configured_scale()' "$root/usr/local/bin/omarchy-native-display-sync" 2>/dev/null ||
++                     [ -f "$root/etc/systemd/system/service.d/10-try-omarchy-watchdog.conf" ] ||
++                     [ -f "$root/usr/share/try-omarchy/guest-qol/manifest.json" ] ||
++                     [ -f "$root/usr/local/lib/try-omarchy/update-battery-dkms" ]; then
++                    # Windows 0103 (revision 40), 0104 (41), 0122 (47), and
++                    # 0124 (48) shipped these; the old Linux fork never did.
++                    origin=windows
++                elif [ "$previous_revision" -ge 40 ] && [ "$previous_revision" -le 48 ]; then
 +                    # With neither lineage proven, prefer Linux's stricter SSH
 +                    # cutoff and retry missing payloads over exposing a password.
 +                    origin=ambiguous
@@ -716,6 +724,187 @@ index a0cbd30..61f0730 100644
        }
      ],
      "requiredPaths": [
+diff --git a/guest/tests/fixtures/legacy-linux-lineage.json b/guest/tests/fixtures/legacy-linux-lineage.json
+new file mode 100644
+index 0000000..2481df0
+--- /dev/null
++++ b/guest/tests/fixtures/legacy-linux-lineage.json
+@@ -0,0 +1,175 @@
++{
++  "revision": "fad17c6cdcceed83b48d3e37915851477c3c4d6b",
++  "patchCount": 118,
++  "patchTargets": [
++    "guest/Containerfile",
++    "guest/README.md",
++    "guest/build.sh",
++    "guest/factory-overlay/etc/UPower/UPower.conf.d/90-try-omarchy.conf",
++    "guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat",
++    "guest/factory-overlay/etc/initcpio/install/tryomarchy_compat",
++    "guest/factory-overlay/etc/mkinitcpio.conf.d/90-try-omarchy.conf",
++    "guest/factory-overlay/etc/modprobe.d/90-try-omarchy-camera.conf",
++    "guest/factory-overlay/etc/modules-load.d/90-try-omarchy-camera.conf",
++    "guest/factory-overlay/etc/modules-load.d/95-try-omarchy-battery.conf",
++    "guest/factory-overlay/etc/profile.d/try-omarchy-vulkan.sh",
++    "guest/factory-overlay/etc/systemd/system/mnt-host.mount",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/mnt-host.mount",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-agent.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-browser-policy.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-catch-up.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-lock-pam.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-pinch-ready.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-ready.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-reboot-notify.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-sshd.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-timezone.service",
++    "guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-update-repository.service",
++    "guest/factory-overlay/etc/systemd/system/omarchy-provision-owner.service.d/20-try-omarchy.conf",
++    "guest/factory-overlay/etc/systemd/system/sysinit.target.wants/try-omarchy-host-locale.service",
++    "guest/factory-overlay/etc/systemd/system/sysinit.target.wants/try-omarchy-pacman-lock.service",
++    "guest/factory-overlay/etc/systemd/system/sysinit.target.wants/try-omarchy-system-ownership.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-agent.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-browser-policy.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-catch-up.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-host-locale.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-lock-pam.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-onepassword-hello@.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-pacman-lock.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-pinch-ready.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-ready.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-reboot-notify.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-sshd.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-system-ownership.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-timezone.service",
++    "guest/factory-overlay/etc/systemd/system/try-omarchy-update-repository.service",
++    "guest/factory-overlay/etc/systemd/user/clipboard-bridge.service",
++    "guest/factory-overlay/etc/systemd/user/default.target.wants/omarchy-windows-camera-bridge.service",
++    "guest/factory-overlay/etc/systemd/user/default.target.wants/try-omarchy-share-link.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/clipboard-bridge.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/omarchy-windows-audio-bridge.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/omarchy-windows-camera-bridge.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-factory-update-notice.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-share-link.service",
++    "guest/factory-overlay/etc/systemd/user/graphical-session.target.wants/try-omarchy-welcome.service",
++    "guest/factory-overlay/etc/systemd/user/omarchy-fcitx5.service.d/10-try-omarchy.conf",
++    "guest/factory-overlay/etc/systemd/user/try-omarchy-desktop-ready.service",
++    "guest/factory-overlay/etc/systemd/user/try-omarchy-factory-update-notice.service",
++    "guest/factory-overlay/etc/systemd/user/try-omarchy-share-link.service",
++    "guest/factory-overlay/etc/systemd/user/try-omarchy-welcome.service",
++    "guest/factory-overlay/etc/udev/rules.d/70-try-omarchy-audio.rules",
++    "guest/factory-overlay/etc/udev/rules.d/70-try-omarchy-authentication.rules",
++    "guest/factory-overlay/etc/udev/rules.d/70-try-omarchy-camera.rules",
++    "guest/factory-overlay/etc/udev/rules.d/70-try-omarchy-pinch.rules",
++    "guest/factory-overlay/etc/udev/rules.d/94-try-omarchy-camera.rules",
++    "guest/factory-overlay/etc/udev/rules.d/96-try-omarchy-timezone.rules",
++    "guest/factory-overlay/usr/lib/systemd/user/omarchy-windows-audio-bridge.service",
++    "guest/factory-overlay/usr/lib/systemd/user/omarchy-windows-camera-bridge.service",
++    "guest/factory-overlay/usr/local/bin/clipboard-bridge",
++    "guest/factory-overlay/usr/local/bin/clipboard-files",
++    "guest/factory-overlay/usr/local/bin/file-transfer",
++    "guest/factory-overlay/usr/local/bin/file-transfer-window",
++    "guest/factory-overlay/usr/local/bin/omarchy-windows-audio-bridge",
++    "guest/factory-overlay/usr/local/bin/omarchy-windows-camera-bridge",
++    "guest/factory-overlay/usr/local/bin/try-omarchy-drop",
++    "guest/factory-overlay/usr/local/bin/try-omarchy-export",
++    "guest/factory-overlay/usr/local/bin/try-omarchy-host-settings",
++    "guest/factory-overlay/usr/local/bin/try-omarchy-timezone",
++    "guest/factory-overlay/usr/local/bin/try-omarchy-windows-app",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/agent",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/approved-apps-sync",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/battery-apply",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/catch-up",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/clear-stale-pacman-lock",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/drop-drag",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/guest-ready",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/host-window",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/keep-autologin",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/onepassword-hello-agent",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/onepassword-password-dialog",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/pinch-ready",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/provision-instant-trial",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/provision-owner",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/publish-update-repository",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/reboot-notify",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/repair-browser-policy",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/repair-clock-timezone",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/repair-host-window",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/repair-icon-names",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/repair-lock-pam",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/repair-system-ownership",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/request-sshd",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/share-link",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/show-factory-update-notice",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/show-welcome",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/vulkan-env",
++    "guest/factory-overlay/usr/local/lib/try-omarchy/windows-hello-broker",
++    "guest/factory-overlay/usr/local/sbin/try-omarchy-windows-hello",
++    "guest/factory-overlay/usr/share/applications/try-omarchy-file-transfers.desktop",
++    "guest/factory-overlay/usr/share/applications/try-omarchy-follow-timezone.desktop",
++    "guest/factory-overlay/usr/share/applications/try-omarchy-host-settings.desktop",
++    "guest/factory-overlay/usr/share/try-omarchy/quick-start-sshd.conf",
++    "guest/factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-input-pinch.append.lua",
++    "guest/factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua",
++    "guest/factory-overlay/usr/share/uwsm/env.d/20-try-omarchy-vulkan",
++    "guest/factory-overlay/usr/src/try-omarchy-battery-1.0.0/Makefile",
++    "guest/factory-overlay/usr/src/try-omarchy-battery-1.0.0/dkms.conf",
++    "guest/factory-overlay/usr/src/try-omarchy-battery-1.0.0/try-omarchy-battery.c",
++    "guest/fragments/hypr-input-pinch.append.lua",
++    "guest/fragments/hypr-monitors-qemu.append.lua",
++    "guest/keys/omarchy-pkgs.asc",
++    "guest/native-overlay/usr/local/bin/omarchy-native-display-sync",
++    "guest/native-overlay/usr/share/pipewire/pipewire.conf.d/90-try-omarchy-quantum.conf",
++    "guest/native-overlay/usr/share/try-omarchy/pinch-input.lua",
++    "guest/packages.lock.json",
++    "guest/packages.txt",
++    "guest/pacman-x86_64.conf",
++    "guest/patches/omarchy/clock-timezone-refresh.patch",
++    "guest/patches/omarchy/host-window-idle.patch",
++    "guest/patches/omarchy/notification-hover-close.patch",
++    "guest/patches/omarchy/notification-screen-privacy.patch",
++    "guest/patches/omarchy/setup-host-timezone.patch",
++    "guest/scripts/apply-omarchy-backports.py",
++    "guest/scripts/configure-rootfs.sh",
++    "guest/scripts/fetch-source.sh",
++    "guest/scripts/finalize-rootfs.sh",
++    "guest/scripts/materialize-omarchy.sh",
++    "guest/scripts/pack-image.sh",
++    "guest/scripts/register-omarchy-runtime.sh",
++    "guest/scripts/runtime-ownership.install",
++    "guest/scripts/write-provenance.py",
++    "guest/spec.json",
++    "guest/tests/test_apply_omarchy_backports.py",
++    "guest/tests/test_camera_bridge.py",
++    "guest/tests/test_clipboard.py",
++    "guest/tests/test_clipboard_files.py",
++    "guest/tests/test_desktop_ready.py",
++    "guest/tests/test_file_drop_target.py",
++    "guest/tests/test_file_transfer.py",
++    "guest/tests/test_file_transfer_window.py",
++    "guest/tests/test_host_window.py",
++    "guest/tests/test_icon_names.py",
++    "guest/tests/test_kernel_module_delivery.py",
++    "guest/tests/test_lock_pam.py",
++    "guest/tests/test_onepassword_hello_agent.py",
++    "guest/tests/test_overlay_scripts.py",
++    "guest/tests/test_pack_lock.py",
++    "guest/tests/test_pacman_lock_recovery.py",
++    "guest/tests/test_runtime_ownership_install.py",
++    "guest/tests/test_runtime_package.py",
++    "guest/tests/test_system_ownership.py",
++    "guest/tests/test_timezone.py",
++    "guest/tests/test_update_repository.py",
++    "guest/tests/test_vulkan_env.py",
++    "guest/tests/test_windows_audio_bridge.py",
++    "guest/tests/test_windows_hello_broker.py",
++    "guest/tests/test_write_provenance.py",
++    "guest/tests/verify.py"
++  ],
++  "absentStrings": [
++    "configured_scale()"
++  ]
++}
 diff --git a/guest/tests/test_battery_details.py b/guest/tests/test_battery_details.py
 index e52a1e0..4462eda 100644
 --- a/guest/tests/test_battery_details.py
@@ -755,6 +944,105 @@ index 917d337..41f9844 100644
      def test_tablet_position_follows_scale_and_monitor_size(self):
          monitor = {'width': 2560, 'height': 1440, 'scale': 2, 'x': 0, 'y': 0}
          self.assertEqual(module.tablet_position(0, 0, monitor), (0, 0))
+diff --git a/guest/tests/test_guest_lineage_contract.py b/guest/tests/test_guest_lineage_contract.py
+new file mode 100644
+index 0000000..4ee8bfc
+--- /dev/null
++++ b/guest/tests/test_guest_lineage_contract.py
+@@ -0,0 +1,93 @@
++"""Check lineage evidence against both historical patch series."""
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++import unittest
++
++GUEST = Path(__file__).resolve().parents[1]
++HOOK = GUEST / 'factory-overlay/etc/initcpio/hooks/tryomarchy_compat'
++LEGACY = GUEST / 'tests/fixtures/legacy-linux-lineage.json'
++
++
++def markers(checks):
++    paths = [('path', path) for path in re.findall(r'\[ -f "\$root/([^"]+)" \]', checks)]
++    strings = [('string', text) for text in re.findall(r"grep -Fq '([^']+)'", checks)]
++    return paths + strings
++
++
++def lineage_markers():
++    checks = HOOK.read_text().split('# These paths/content', 1)[1]
++    linux, checks = checks.split('origin=linux', 1)
++    windows = checks.split('origin=windows', 1)[0]
++    return markers(linux), markers(windows)
++
++
++class LineageContractTests(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls):
++        # The release helper provides the outer series, not the patched guest's
++        # upstream git history. Standalone upstream guest tests have no series.
++        series = os.environ.get('TRY_OMARCHY_PATCH_SERIES')
++        if not series:
++            raise unittest.SkipTest('requires the release patch series')
++        cls.series = Path(series)
++        cls.windows = {int(path.name[:4]): path.read_text()
++                       for path in cls.series.glob('*.patch') if int(path.name[:4]) <= 126}
++        cls.snapshot = json.loads(LEGACY.read_text())
++        result = subprocess.run(['git', '-C', str(cls.series.parent), 'ls-tree', '-r',
++                                 '--name-only', cls.snapshot['revision'], 'guest-build'],
++                                capture_output=True, text=True)
++        cls.old_linux = None
++        if result.returncode == 0:
++            names = [name for name in result.stdout.splitlines() if name.endswith('.patch')]
++            cls.old_linux = {name: subprocess.check_output(
++                ['git', '-C', str(cls.series.parent), 'show', f"{cls.snapshot['revision']}:{name}"],
++                text=True) for name in names}
++
++    def test_linux_markers_are_absent_from_every_windows_patch(self):
++        linux, _ = lineage_markers()
++        self.assertEqual(len(linux), 8)
++        self.assertEqual(len(self.windows), 126)
++        for kind, marker in linux:
++            with self.subTest(kind=kind, marker=marker):
++                # Whole-patch matching is stricter than checking only creations:
++                # shared paths and strings in modifications also fail this gate.
++                hits = [number for number, patch in self.windows.items() if marker in patch]
++                self.assertEqual(hits, [], f'Linux marker collides with Windows patches: {hits}')
++
++    def test_windows_markers_are_absent_from_old_linux_and_cover_every_collision(self):
++        _, windows = lineage_markers()
++        introductions = {
++            ('string', 'configured_scale()'): (103, 40),
++            ('path', 'etc/systemd/system/service.d/10-try-omarchy-watchdog.conf'): (104, 41),
++            ('path', 'usr/share/try-omarchy/guest-qol/manifest.json'): (122, 47),
++            ('path', 'usr/local/lib/try-omarchy/update-battery-dkms'): (124, 48),
++        }
++        self.assertEqual(set(windows), set(introductions))
++        for kind, marker in windows:
++            with self.subTest(kind=kind, marker=marker):
++                patch, _ = introductions[kind, marker]
++                hits = [number for number, text in self.windows.items() if marker in text]
++                self.assertEqual(min(hits), patch)
++                if self.old_linux is not None:
++                    self.assertEqual([name for name, text in self.old_linux.items() if marker in text], [])
++                elif kind == 'path':
++                    self.assertFalse(any(marker in path for path in self.snapshot['patchTargets']))
++                else:
++                    # Shallow builds accept only explicitly audited absent strings.
++                    self.assertIn(marker, self.snapshot['absentStrings'])
++        for revision in range(40, 49):
++            with self.subTest(revision=revision):
++                self.assertTrue(any(40 <= first <= revision for _, first in introductions.values()))
++
++    def test_shallow_checkout_inventory_matches_available_old_linux_history(self):
++        if self.old_linux is None:
++            return  # The two exclusion tests still enforce the checked-in inventory.
++        targets = sorted({path for patch in self.old_linux.values()
++                          for path in re.findall(r'^diff --git a/\S+ b/(\S+)$', patch, re.M)})
++        self.assertEqual(len(self.old_linux), self.snapshot['patchCount'])
++        self.assertEqual(targets, self.snapshot['patchTargets'])
++        for marker in self.snapshot['absentStrings']:
++            self.assertTrue(all(marker not in patch for patch in self.old_linux.values()))
 diff --git a/guest/tests/test_guest_qol.py b/guest/tests/test_guest_qol.py
 index 2a5acab..444dd43 100644
 --- a/guest/tests/test_guest_qol.py
@@ -862,16 +1150,108 @@ index 0000000..85579a9
 +        service = (OVERLAY / 'etc/systemd/system/try-omarchy-catch-up.service').read_text()
 +        self.assertIn('ExecStartPost=/usr/local/lib/try-omarchy/apply-host-names', service)
 diff --git a/guest/tests/test_kernel_module_delivery.py b/guest/tests/test_kernel_module_delivery.py
-index c65376d..59ee1bf 100644
+index c65376d..fbaf1f9 100644
 --- a/guest/tests/test_kernel_module_delivery.py
 +++ b/guest/tests/test_kernel_module_delivery.py
-@@ -61,6 +61,142 @@ class ModuleDeliveryTests(unittest.TestCase):
+@@ -10,6 +10,14 @@ import unittest
+ GUEST = Path(__file__).resolve().parents[1]
+ HOOKS = GUEST / 'factory-overlay/etc/initcpio'
+ 
++WINDOWS_MARKERS = {
++    40: ('usr/local/bin/omarchy-native-display-sync', 'configured_scale() {'),
++    41: ('etc/systemd/system/service.d/10-try-omarchy-watchdog.conf', '[Service]\nWatchdogSec=0\n'),
++    47: ('usr/share/try-omarchy/guest-qol/manifest.json', '[]'),
++    48: ('usr/local/lib/try-omarchy/update-battery-dkms', '#!/bin/bash'),
++}
++
++
+ class ModuleDeliveryTests(unittest.TestCase):
+     def setUp(self):
+         self.tmp = tempfile.TemporaryDirectory()
+@@ -61,6 +69,221 @@ class ModuleDeliveryTests(unittest.TestCase):
          (self.root / 'modules.tar').unlink()
          self.assertEqual(self.run_hook().returncode, 0)
  
++    def seed_windows_vulkan(self):
++        # Actual Windows 0064 payload: this path never proved Linux lineage.
++        file = self.guest / 'usr/local/lib/try-omarchy/vulkan-env'
++        file.parent.mkdir(parents=True, exist_ok=True)
++        file.write_text("""case ",${VN_PERF-}," in
++  *,no_async_present,*) ;;
++  *) VN_PERF="${VN_PERF:+${VN_PERF},}no_async_present" ;;
++esac
++export VN_PERF
++: "${VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING:=1}"
++export VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING
++""")
++
++    def seed_windows(self, revision):
++        self.seed_windows_vulkan()
++        for first_revision, (name, content) in WINDOWS_MARKERS.items():
++            if revision >= first_revision:
++                file = self.guest / name
++                file.parent.mkdir(parents=True, exist_ok=True)
++                file.write_text(content)
++
++    def test_each_windows_marker_identifies_its_first_revision(self):
++        for revision, (name, content) in WINDOWS_MARKERS.items():
++            with self.subTest(revision=revision):
++                case = ModuleDeliveryTests()
++                case.setUp()
++                try:
++                    case.seed_windows_vulkan()
++                    marker = case.guest / 'usr/share/try-omarchy/compat-version'
++                    marker.parent.mkdir(parents=True, exist_ok=True)
++                    marker.write_text(f'{revision}:old-kernel\n')
++                    file = case.guest / name
++                    file.parent.mkdir(parents=True, exist_ok=True)
++                    file.write_text(content)
++                    self.assertEqual(case.run_hook().returncode, 0)
++                    self.assertEqual((case.guest / 'var/lib/try-omarchy/guest-series-origin').read_text(), f'windows:{revision}\n')
++                finally:
++                    case.doCleanups()
++
++    def test_windows_owner_removed_ssh_rule_revision_matrix(self):
++        from test_overlay_scripts import CatchUpTests
++        for revision in range(40, 49):
++            with self.subTest(revision=revision):
++                hook = ModuleDeliveryTests()
++                hook.setUp()
++                catchup = CatchUpTests()
++                catchup.setUp()
++                try:
++                    hook.seed_windows(revision)
++                    marker = hook.guest / 'usr/share/try-omarchy/compat-version'
++                    marker.parent.mkdir(parents=True, exist_ok=True)
++                    marker.write_text(f'{revision}:old-kernel\n')
++                    (hook.root / 'version').write_text('55:test-kernel\n')
++                    self.assertEqual(hook.run_hook().returncode, 0)
++                    catchup.state = hook.guest / 'var/lib/try-omarchy'
++                    self.assertEqual((catchup.state / 'guest-series-origin').read_text(), f'windows:{revision}\n')
++                    (catchup.state / 'catch-up-revision').write_text(f'{revision}\n')
++                    (catchup.state / 'provision-mode').write_text('instant-trial\n')
++                    # Before revision 42 the Windows rule had not shipped. An
++                    # owner who installed then removed it has its delivery record.
++                    # At 42+ omit that record to exercise Windows 0117's guard.
++                    if revision < 42:
++                        (catchup.state / 'quick-start-sshd').write_text('key-only\n')
++                    catchup.version = marker
++                    dropin = catchup.root / 'sshd_config.d/90-try-omarchy-quick-start.conf'
++                    dropin.parent.mkdir(parents=True)
++                    dropin.write_text('owner removed this rule\n')
++                    dropin.unlink()
++                    for _ in range(2):
++                        result = catchup.run_catch_up()
++                        self.assertEqual(result.returncode, 0, result.stderr)
++                        self.assertFalse(dropin.exists())
++                    self.assertEqual((catchup.state / 'catch-up-revision').read_text(), '55\n')
++                finally:
++                    hook.doCleanups()
++                    catchup.doCleanups()
++
 +    def test_records_legacy_lineage_before_overlay_and_preserves_it_on_retry(self):
 +        marker = self.guest / 'usr/share/try-omarchy/compat-version'
-+        marker.parent.mkdir(parents=True)
++        marker.parent.mkdir(parents=True, exist_ok=True)
 +        marker.write_text('48:old-kernel\n')
 +        helper = self.guest / 'usr/local/lib/try-omarchy/host-window'
 +        helper.parent.mkdir(parents=True)
@@ -889,7 +1269,7 @@ index c65376d..59ee1bf 100644
 +
 +    def test_missing_helper_detects_each_legacy_linux_marker(self):
 +        markers = {
-+            'usr/local/lib/try-omarchy/vulkan-env': 'linux Vulkan env',  # old 0103
++            'usr/local/lib/try-omarchy/vulkan-env': 'tryomarchy.vulkan-present=cpu',  # old 0103
 +            'usr/local/bin/omarchy-native-display-sync': 'OMARCHY_DISPLAY_SYNC_HOST_SCALE',  # 0106
 +            'etc/systemd/user/try-omarchy-desktop-ready.service': 'readiness unit',  # 0107
 +            'usr/local/lib/try-omarchy/desktop-ready': 'readiness helper',  # 0107
@@ -904,7 +1284,7 @@ index c65376d..59ee1bf 100644
 +                    case.setUp()
 +                    try:
 +                        marker = case.guest / 'usr/share/try-omarchy/compat-version'
-+                        marker.parent.mkdir(parents=True)
++                        marker.parent.mkdir(parents=True, exist_ok=True)
 +                        marker.write_text(f'{revision}:old-kernel\n')
 +                        file = case.guest / name
 +                        file.parent.mkdir(parents=True, exist_ok=True)
@@ -916,7 +1296,7 @@ index c65376d..59ee1bf 100644
 +                        case.doCleanups()
 +
 +    def test_pre_overlay_lineage_and_catch_up_revision_matrix(self):
-+        # The original 19 cases plus markerless collisions and missing helpers.
++        # Include the shared Windows Vulkan file even on markerless disks.
 +        from test_overlay_scripts import CatchUpTests
 +        cases = [('linux', rev) for rev in range(40, 49)]
 +        cases += [('windows', rev) for rev in range(40, 50)]
@@ -930,19 +1310,21 @@ index c65376d..59ee1bf 100644
 +                catchup.setUp()
 +                try:
 +                    marker = hook.guest / 'usr/share/try-omarchy/compat-version'
-+                    marker.parent.mkdir(parents=True)
++                    marker.parent.mkdir(parents=True, exist_ok=True)
 +                    marker.write_text(f'{revision}:old-kernel\n')
++                    hook.seed_windows_vulkan()
 +                    if origin == 'linux':
 +                        file = hook.guest / 'usr/local/lib/try-omarchy/host-window'
 +                    elif origin == 'linux-no-helper':
 +                        file = hook.guest / 'usr/local/lib/try-omarchy/vulkan-env'
 +                    elif origin == 'windows':
-+                        file = hook.guest / 'usr/share/try-omarchy/guest-qol/manifest.json'
++                        hook.seed_windows(revision)
++                        file = None
 +                    else:
 +                        file = None
 +                    if file:
-+                        file.parent.mkdir(parents=True)
-+                        file.write_text('legacy payload')
++                        file.parent.mkdir(parents=True, exist_ok=True)
++                        file.write_text('tryomarchy.vulkan-present=cpu' if origin == 'linux-no-helper' else 'legacy payload')
 +                    (hook.root / 'version').write_text('55:test-kernel\n')
 +                    self.assertEqual(hook.run_hook().returncode, 0)
 +                    catchup.state = hook.guest / 'var/lib/try-omarchy'
@@ -974,7 +1356,7 @@ index c65376d..59ee1bf 100644
 +
 +    def test_lineage_write_or_rename_failure_keeps_old_revision_and_retries(self):
 +        marker = self.guest / 'usr/share/try-omarchy/compat-version'
-+        marker.parent.mkdir(parents=True)
++        marker.parent.mkdir(parents=True, exist_ok=True)
 +        marker.write_text('48:old-linux-kernel\n')
 +        lineage = self.guest / 'var/lib/try-omarchy/guest-series-origin'
 +        for prefix in ('mktemp() { return 1; }',
@@ -991,7 +1373,7 @@ index c65376d..59ee1bf 100644
 +
 +    def test_invalid_existing_lineage_blocks_overlay_even_on_completed_retry(self):
 +        marker = self.guest / 'usr/share/try-omarchy/compat-version'
-+        marker.parent.mkdir(parents=True)
++        marker.parent.mkdir(parents=True, exist_ok=True)
 +        lineage = self.guest / 'var/lib/try-omarchy/guest-series-origin'
 +        lineage.parent.mkdir(parents=True)
 +        for value in ('', 'broken\n', 'linux:garbage\n', 'windows:50\n', 'linux:48\nwindows:48\n'):

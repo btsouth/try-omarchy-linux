@@ -321,18 +321,32 @@ No additional packages or lock refresh are required by these patches.
 
 The initramfs records old disk lineage before extracting the compatibility
 overlay, preserving that record if extraction needs a retry. It recognizes
-Linux-only files from old patches 0103 (`usr/local/lib/try-omarchy/vulkan-env`),
-0104 (`usr/local/lib/try-omarchy/host-window`) and 0107
-(`etc/systemd/user/try-omarchy-desktop-ready.service` or
-`usr/local/lib/try-omarchy/desktop-ready`). Shared paths are checked for Linux
-content: old 0106's `OMARCHY_DISPLAY_SYNC_HOST_SCALE` in
-`usr/local/bin/omarchy-native-display-sync`, old 0114's `host_is_linux` in
-`usr/local/lib/try-omarchy/approved-apps-sync` or Linux launch message in
-`usr/local/bin/try-omarchy-windows-app`, and old 0115's `host_name` in
-`usr/local/bin/file-transfer-window`. Linux evidence takes precedence. Windows
-0122's `usr/share/try-omarchy/guest-qol/manifest.json` and 0124's
-`usr/local/lib/try-omarchy/update-battery-dkms` prove Windows lineage when no
-Linux marker remains.
+Linux-only files from old patches 0104 (`usr/local/lib/try-omarchy/host-window`)
+and 0107 (`etc/systemd/user/try-omarchy-desktop-ready.service` or
+`usr/local/lib/try-omarchy/desktop-ready`). The shared `vulkan-env` path alone
+is not evidence: Windows 0064 created it. Shared paths are checked for Linux
+content: old 0103's `tryomarchy.vulkan-present=cpu` in
+`usr/local/lib/try-omarchy/vulkan-env`, old 0106's
+`OMARCHY_DISPLAY_SYNC_HOST_SCALE` in `usr/local/bin/omarchy-native-display-sync`,
+old 0114's `def host_is_linux` in `usr/local/lib/try-omarchy/approved-apps-sync`
+or `Host app launch is unavailable` in `usr/local/bin/try-omarchy-windows-app`,
+and old 0115's `def host_name` in `usr/local/bin/file-transfer-window`.
+Linux evidence takes precedence.
+
+Windows 0103's `configured_scale()` in `usr/local/bin/omarchy-native-display-sync`
+proves Windows lineage from revision 40 onward. Windows 0104's
+`etc/systemd/system/service.d/10-try-omarchy-watchdog.conf` adds evidence from
+revision 41, 0122's `usr/share/try-omarchy/guest-qol/manifest.json` from 47,
+and 0124's `usr/local/lib/try-omarchy/update-battery-dkms` from 48. None of
+these markers shipped in the old Linux fork. Each colliding revision 40-48
+therefore has Windows evidence from a payload delivered by that revision.
+
+Contract tests audit every Linux marker against all Windows patches 0001-0126
+and every Windows marker against the old Linux patch series at `fad17c6`.
+Shallow checkouts use the checked-in old Linux patch target inventory and
+explicitly audited absent content strings; when history is available, the
+same tests verify that inventory against it. Windows lineage fixtures include
+the shared Vulkan payload and the markers available at their actual revision.
 
 A disk at a colliding revision 40-48 with neither marker set is recorded as
 `ambiguous`. It receives Linux's stricter SSH cutoff and missing payload
@@ -354,6 +368,6 @@ panel and command text to "Managed by the host computer" only with the exact
 including when switching back from Linux, and preserves customized, missing
 and symlinked files. The Windows patch and quality-of-life assets stay intact.
 
-The release helper remains unchanged: it applies all patches in filename order,
-builds the shared importer, and runs the guest contract tests. Refresh the lock
-later through the existing lock workflow.
+The release helper applies all patches in filename order, builds the shared
+importer, and supplies the patch series path to the guest contract tests.
+Refresh the lock later through the existing lock workflow.

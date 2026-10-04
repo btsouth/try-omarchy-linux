@@ -65,7 +65,7 @@ python3 "$repo_root/migrate/build.py" --version "${RELEASE_TAG:-dev}" --output "
 install -Dm0755 "$work/importer/try-omarchy-import.pyz" \
   "$work/guest/factory-overlay/usr/local/lib/try-omarchy/try-omarchy-import.pyz"
 
-"$work/guest/test"
+TRY_OMARCHY_PATCH_SERIES="$repo_root/guest-build" "$work/guest/test"
 
 if ((contract_only)); then
   exit 0

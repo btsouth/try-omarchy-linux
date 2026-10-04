@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -99,6 +100,32 @@ func (l *flakyListener) Accept() (net.Conn, error) {
 func (l *flakyListener) Close() error   { return nil }
 func (l *flakyListener) Addr() net.Addr { return nil }
 
+// trackedConn reports when the bridge closes its end.
+type trackedConn struct {
+	net.Conn
+	once   sync.Once
+	closed chan struct{}
+}
+
+func newTrackedPipe() (*trackedConn, net.Conn) {
+	host, guest := net.Pipe()
+	return &trackedConn{Conn: host, closed: make(chan struct{})}, guest
+}
+
+func (c *trackedConn) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	return c.Conn.Close()
+}
+
+func (c *trackedConn) waitClosed(t *testing.T, what string) {
+	t.Helper()
+	select {
+	case <-c.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal(what)
+	}
+}
+
 func TestLinuxTimeZoneBridgeReplacesConnectionsAndRecovers(t *testing.T) {
 	listener := &flakyListener{conns: make(chan net.Conn), fails: 2}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,16 +142,17 @@ func TestLinuxTimeZoneBridgeReplacesConnectionsAndRecovers(t *testing.T) {
 			t.Fatalf("snapshot %q %v", line, err)
 		}
 	}
-	firstHost, first := net.Pipe()
+	firstHost, first := newTrackedPipe()
 	listener.conns <- firstHost
 	readOne(first)
-	secondHost, second := net.Pipe()
+	secondHost, second := newTrackedPipe()
 	listener.conns <- secondHost
 	readOne(second)
-	// The replaced connection is closed by the bridge.
-	first.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if _, err := first.Read(make([]byte, 1)); err == nil {
-		t.Fatal("old connection stayed open")
+	firstHost.waitClosed(t, "old connection stayed open")
+	select {
+	case <-secondHost.closed:
+		t.Fatal("replacing a connection closed the new one")
+	default:
 	}
 	close(listener.conns)
 	select {
@@ -132,10 +160,7 @@ func TestLinuxTimeZoneBridgeReplacesConnectionsAndRecovers(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("bridge did not stop when the listener closed")
 	}
-	second.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if _, err := second.Read(make([]byte, 1)); err == nil {
-		t.Fatal("connection stayed open after the bridge stopped")
-	}
+	secondHost.waitClosed(t, "connection stayed open after the bridge stopped")
 }
 
 func TestLinuxTimeZoneBridgeNoticesAClosedPeerWithoutAZone(t *testing.T) {
@@ -143,17 +168,8 @@ func TestLinuxTimeZoneBridgeNoticesAClosedPeerWithoutAZone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go acceptTimeZoneConnections(ctx, listener, func() string { return "" }, time.Hour, time.Millisecond)
-	host, guest := net.Pipe()
+	host, guest := newTrackedPipe()
 	listener.conns <- host
 	guest.Close()
-	// net.Pipe reports the close to the bridge's reader; its side closes too.
-	host.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := host.Write([]byte("x")); err != nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("bridge kept a closed connection")
+	host.waitClosed(t, "bridge kept a closed connection")
 }

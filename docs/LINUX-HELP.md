@@ -155,8 +155,10 @@ cannot release unused blocks; Settings says so.
 - Inside Omarchy, Super+Space opens its menu and Super+K lists every key
   binding.
 - Text, images and files move both ways through the clipboard. Dropping files
-  on the window sends them to Omarchy. Settings can also share one folder,
-  which appears in Omarchy as `/mnt/host`.
+  on the window sends them to Omarchy: onto a Files folder they land there,
+  onto another app that app receives them, and otherwise they go to
+  Downloads. Settings can also share one folder, which appears in Omarchy as
+  `/mnt/host`.
 
 ### Clipboard permission on GNOME
 

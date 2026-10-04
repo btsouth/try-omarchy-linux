@@ -2,22 +2,23 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-// Delivering a Windows file drop to the Omarchy app under the pointer. The
+// Delivering a host file drop to the Omarchy app under the pointer. The
 // guest receives the files, then shows a small drag source next to the drop
 // point and asks for "drop-drag ID X Y" over the agent port, naming the drop
 // by its transfer ticket ID and giving that source's position in absolute
 // tablet units (0-32767). The launcher answers by
 // pressing on the source and dragging to the recorded drop point through the
 // guest's virtual tablet, so the app gets an ordinary Wayland drop. It does
-// that at most once per drop, only soon after it, and only if the Windows
-// pointer has not moved and the Omarchy window is still in front; otherwise
-// the files stay in Downloads.
+// that at most once per drop, only soon after it, and only if the host
+// pointer has not moved (and, on Windows, the Omarchy window is still in
+// front); otherwise the files stay in Downloads.
 
 const (
 	dropDragWindow  = 30 * time.Second
@@ -36,6 +37,8 @@ type recordedDrop struct {
 	at     time.Time
 	point  []int    // x, y, width, height in display-window client pixels
 	cursor [2]int32 // Windows screen position of the pointer at the drop
+	// Linux pointer moves reported by QEMU before the drop.
+	pointerMoves uint64
 }
 
 type dragScript struct {
@@ -151,4 +154,17 @@ func abs(value int) int {
 		return -value
 	}
 	return value
+}
+
+func pointerStepCommand(step pointerStep) string {
+	return `{"execute":"input-send-event","arguments":` + pointerStepArguments(step) + `}`
+}
+
+// pointerStepArguments is the input-send-event argument object for one step.
+func pointerStepArguments(step pointerStep) string {
+	events := fmt.Sprintf(`{"type":"abs","data":{"axis":"x","value":%d}},{"type":"abs","data":{"axis":"y","value":%d}}`, step.x, step.y)
+	if step.button >= 0 {
+		events += fmt.Sprintf(`,{"type":"btn","data":{"down":%t,"button":"left"}}`, step.button == 1)
+	}
+	return `{"events":[` + events + `]}`
 }

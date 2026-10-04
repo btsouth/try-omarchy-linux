@@ -18,6 +18,9 @@ type droppedFiles struct {
 	paths  []string
 	point  []int
 	cursor [2]int32 // Windows pointer when the files were released
+	// pointerMoves is the Linux count of pointer moves reported by QEMU
+	// when the files were released (drop_drag_linux.go).
+	pointerMoves uint64
 }
 
 func droppedFilesEvent(line string) ([]string, *[2]int, bool) {
@@ -55,11 +58,17 @@ func sendDroppedFiles(paths []string) error {
 }
 
 func sendDroppedFilesAt(paths []string, point []int, cursor [2]int32) error {
+	return queueDroppedFiles(droppedFiles{paths: paths, point: point, cursor: cursor})
+}
+
+func queueDroppedFiles(dropped droppedFiles) error {
 	b := desktopClipboard.Load()
 	if b == nil {
 		return fmt.Errorf("Omarchy is still starting")
 	}
-	dropped := droppedFiles{paths: append([]string(nil), paths...), cursor: cursor}
+	point := dropped.point
+	dropped.paths = append([]string(nil), dropped.paths...)
+	dropped.point = nil
 	if (len(point) == 2 || len(point) == 4) && point[0] >= 0 && point[1] >= 0 {
 		dropped.point = append([]int(nil), point...)
 	}
@@ -89,7 +98,7 @@ func (b *clipBridge) offerDroppedFiles(dropped droppedFiles) error {
 	if len(dropped.point) == 4 {
 		// The guest may later ask to drag these files into the app at the
 		// drop point; it names the drop by this ticket ID (drop_drag.go).
-		recordDrop(ticket.ID, recordedDrop{at: time.Now(), point: dropped.point, cursor: dropped.cursor})
+		recordDrop(ticket.ID, recordedDrop{at: time.Now(), point: dropped.point, cursor: dropped.cursor, pointerMoves: dropped.pointerMoves})
 	}
 	data, _ := json.Marshal(ticket)
 	frame := encodeClipFrame(clipItem{Kind: clipDrop, Data: data})

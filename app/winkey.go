@@ -307,11 +307,3 @@ func runCursorReleaseGuard() {
 		releaseQemuCursor()
 	}
 }
-
-func pointerStepCommand(step pointerStep) string {
-	events := fmt.Sprintf(`{"type":"abs","data":{"axis":"x","value":%d}},{"type":"abs","data":{"axis":"y","value":%d}}`, step.x, step.y)
-	if step.button >= 0 {
-		events += fmt.Sprintf(`,{"type":"btn","data":{"down":%t,"button":"left"}}`, step.button == 1)
-	}
-	return `{"execute":"input-send-event","arguments":{"events":[` + events + `]}}`
-}

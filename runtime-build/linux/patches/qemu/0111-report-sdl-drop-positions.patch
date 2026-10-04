@@ -1,0 +1,218 @@
+sdl2: report where files were dropped and when the pointer moves away
+
+SDL2 drop events carry no position, but SDL3's do. The runtime's SDL2 is
+sdl2-compat on SDL3, so when SDL3 is already loaded, add an SDL3 event
+watch that remembers the last drop point, and report the drop with that
+point and the window size. With a real SDL2 the drop is reported without
+them, as before.
+
+After a positioned drop, report the first pointer move of more than 4
+pixels, a move into another window or leaving the window, once and only
+within 30 seconds. The launcher uses it to skip dragging files into an app
+the user has moved away from.
+
+--- a/qapi/ui.json
++++ b/qapi/ui.json
+@@ -1736,10 +1736,33 @@
+ #
+ # @files: Absolute host paths from the native drop operation.
+ #
++# @x: Pointer position of the drop in window coordinates, when known.
++#
++# @y: Pointer position of the drop in window coordinates, when known.
++#
++# @width: Window width in the same coordinates, sent with @x.
++#
++# @height: Window height in the same coordinates, sent with @y.
++#
+ # Since: 11.0
+ ##
+ { 'event': 'DISPLAY_FILE_DROP',
+-  'data': { 'display': 'int', 'files': [ 'str' ] } }
++  'data': { 'display': 'int', 'files': [ 'str' ],
++            '*x': 'int', '*y': 'int', '*width': 'int', '*height': 'int' } }
++
++##
++# @DISPLAY_DROP_POINTER_MOVED:
++#
++# The pointer moved away from the position reported with the last
++# DISPLAY_FILE_DROP, or left the window, within 30 seconds of the
++# drop.  Sent at most once per drop.
++#
++# @display: QEMU console index that received the drop.
++#
++# Since: 11.1
++##
++{ 'event': 'DISPLAY_DROP_POINTER_MOVED',
++  'data': { 'display': 'int' } }
+ 
+ ##
+ # @DISPLAY_CLOSE_REQUEST:
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -24,6 +24,7 @@
+ /* Ported SDL 1.2 code to 2.0 by Dave Airlie. */
+ 
+ #include "qemu/osdep.h"
++#include <dlfcn.h>
+ #include "qemu/module.h"
+ #include "qemu/cutils.h"
+ #include "ui/console.h"
+@@ -634,12 +635,127 @@ static void handle_textinput(SDL_Event *ev)
+     }
+ }
+ 
++/*
++ * SDL2 drop events carry no position.  The runtime's SDL2 is sdl2-compat on
++ * SDL3, whose drop events do, so when SDL3 is the library underneath, watch
++ * its events directly and remember where the last drop was.  The drop is
++ * then reported with that point and the window size, so the launcher can
++ * hand the files to the app under the pointer.  With a real SDL2 the drop
++ * is reported without them.  After a positioned drop, the first move away
++ * from the point is reported once, so the launcher does not drag files to
++ * where the user no longer is.
++ */
++#define SDL_DROP_WATCH_MS 30000
++#define SDL_DROP_POINTER_SLACK 4
++#define SDL3_EVENT_DROP_FILE 0x1000
++#define SDL3_EVENT_DROP_POSITION 0x1004
++
++/* The leading fields of SDL3's SDL_DropEvent. */
++typedef struct {
++    uint32_t type;
++    uint32_t reserved;
++    uint64_t timestamp;
++    uint32_t windowID;
++    float x;
++    float y;
++} SDL3DropEvent;
++
++static uint32_t sdl_drop_point_window;
++static float sdl_drop_point_x, sdl_drop_point_y;
++static bool sdl_drop_point_valid;
++
++static uint32_t sdl_drop_watch_window;
++static int64_t sdl_drop_watch_display;
++static int sdl_drop_watch_x, sdl_drop_watch_y;
++static uint64_t sdl_drop_watch_until;
++
++/* Runs on the thread that pumps SDL events, before sdl2-compat sees them. */
++static bool sdl3_drop_watch(void *opaque, void *event)
++{
++    const SDL3DropEvent *drop = event;
++
++    if (drop->type >= SDL3_EVENT_DROP_FILE &&
++        drop->type <= SDL3_EVENT_DROP_POSITION) {
++        sdl_drop_point_window = drop->windowID;
++        sdl_drop_point_x = drop->x;
++        sdl_drop_point_y = drop->y;
++        sdl_drop_point_valid = true;
++    }
++    return true;
++}
++
++static void sdl3_watch_drops(void)
++{
++    void *sdl3 = dlopen("libSDL3.so.0", RTLD_LAZY | RTLD_NOLOAD);
++    bool (*add_watch)(bool (*)(void *, void *), void *);
++
++    if (!sdl3) {
++        return;
++    }
++    add_watch = (bool (*)(bool (*)(void *, void *), void *))
++        dlsym(sdl3, "SDL_AddEventWatch");
++    if (add_watch) {
++        add_watch(sdl3_drop_watch, NULL);
++    }
++}
++
++static void sdl_drop_pointer_moved(void)
++{
++    if (sdl_drop_watch_window) {
++        sdl_drop_watch_window = 0;
++        qapi_event_send_display_drop_pointer_moved(sdl_drop_watch_display);
++    }
++}
++
++static void sdl_drop_report(uint32_t window, struct sdl2_console *scon,
++                            strList *files)
++{
++    int64_t display = qemu_console_get_index(scon->dcl.con);
++    int width = 0, height = 0, x = 0, y = 0;
++    bool positioned = false;
++
++    if (sdl_drop_point_valid && sdl_drop_point_window == window &&
++        scon->real_window) {
++        SDL_GetWindowSize(scon->real_window, &width, &height);
++        x = (int)sdl_drop_point_x;
++        y = (int)sdl_drop_point_y;
++        positioned = width > 1 && height > 1 &&
++            x >= 0 && y >= 0 && x < width && y < height;
++    }
++    sdl_drop_point_valid = false;
++    qapi_event_send_display_file_drop(display, files,
++                                      positioned, x, positioned, y,
++                                      positioned, width, positioned, height);
++    if (positioned) {
++        sdl_drop_watch_window = window;
++        sdl_drop_watch_display = display;
++        sdl_drop_watch_x = x;
++        sdl_drop_watch_y = y;
++        sdl_drop_watch_until = SDL_GetTicks64() + SDL_DROP_WATCH_MS;
++    }
++}
++
++static void sdl_drop_motion(const SDL_MouseMotionEvent *motion)
++{
++    if (!sdl_drop_watch_window) {
++        return;
++    }
++    if (SDL_GetTicks64() >= sdl_drop_watch_until) {
++        sdl_drop_watch_window = 0;
++    } else if (motion->windowID != sdl_drop_watch_window ||
++               abs(motion->x - sdl_drop_watch_x) > SDL_DROP_POINTER_SLACK ||
++               abs(motion->y - sdl_drop_watch_y) > SDL_DROP_POINTER_SLACK) {
++        sdl_drop_pointer_moved();
++    }
++}
++
+ static void handle_mousemotion(SDL_Event *ev)
+ {
+     int max_x, max_y;
+     struct sdl2_console *scon = get_scon_from_window(ev->motion.windowID);
+     int scr_w, scr_h, surf_w, surf_h, x, y, dx, dy;
+ 
++    sdl_drop_motion(&ev->motion);
+     if (!scon || !qemu_console_is_graphic(scon->dcl.con)) {
+         return;
+     }
+@@ -794,6 +910,9 @@ static void handle_windowevent(SDL_Event *ev)
+         scon->ignore_hotkeys = get_mod_state();
+         break;
+     case SDL_WINDOWEVENT_LEAVE:
++        if (ev->window.windowID == sdl_drop_watch_window) {
++            sdl_drop_pointer_moved();
++        }
+         /* Host panels need their shortcuts back on both X11 and Wayland. */
+         if (sdl_pointer_outside(scon)) {
+             if (gui_grab && !gui_fullscreen) {
+@@ -894,8 +1013,9 @@ static void handle_file_drop(SDL_Event *event)
+         target = get_scon_from_window(event->drop.windowID);
+         if (target && !sdl_drop_invalid && sdl_drop_files &&
+             sdl_drop_window == event->drop.windowID) {
+-            qapi_event_send_display_file_drop(
+-                qemu_console_get_index(target->dcl.con), sdl_drop_files);
++            /* A new drop ends the watch on the last one. */
++            sdl_drop_pointer_moved();
++            sdl_drop_report(event->drop.windowID, target, sdl_drop_files);
+         }
+         sdl_drop_reset(0);
+         break;
+@@ -1182,6 +1302,7 @@ static void sdl2_display_init(DisplayState *ds, DisplayOptions *o)
+                 SDL_GetError());
+         exit(1);
+     }
++    sdl3_watch_drops();
+ #ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR /* only available since SDL 2.0.8 */
+     SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
+ #endif

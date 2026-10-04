@@ -307,7 +307,7 @@ pass none of these flags and retain their existing behavior and wording.
 | 0130 | 0106 | 52 | Follow Linux host display dimensions at 96 logical DPI when requested. Explicit user scale still wins; Windows keeps its existing thresholds. |
 | 0131 | 0107 | 53 | Report `desktop-ready` after a monitor, Quickshell, background and bar surfaces are stable. The user service runs only on a Linux host; system `ready` still serves image rollback. |
 | 0132 | 0114 | 54 | Name approved Linux apps `Host: name` and report agent version 5 only to Linux. Windows retains its app labels and agent version 4. |
-| 0133 | 0115, differences from 0116 and 0117 | 55 | Name the Linux host in Settings, file transfer, locale and time-zone notices. Select desktop labels at boot, preserving custom, missing and symlinked entries. Repair only the shipped clock widget, on Linux, before the display manager starts. |
+| 0133 | 0115, differences from 0116 and 0117 | 55 | Name the Linux host in Settings, file transfer, locale, time-zone notices and power menus. Select desktop labels at boot, preserving custom, missing and symlinked entries. Repair only the shipped clock widget, on Linux, before the display manager starts. |
 
 Linux patch 0109 is covered by Windows 0107 and 0117, including preserving a
 removed quick-start SSH rule. Linux 0111 has the same exporter behavior as
@@ -320,11 +320,39 @@ time-zone service. Linux lock refreshes 0108, 0110, 0112, 0113 and 0118 are omit
 No additional packages or lock refresh are required by these patches.
 
 The initramfs records old disk lineage before extracting the compatibility
-overlay, preserving that record if extraction needs a retry. Catch-up uses it
+overlay, preserving that record if extraction needs a retry. It recognizes
+Linux-only files from old patches 0103 (`usr/local/lib/try-omarchy/vulkan-env`),
+0104 (`usr/local/lib/try-omarchy/host-window`) and 0107
+(`etc/systemd/user/try-omarchy-desktop-ready.service` or
+`usr/local/lib/try-omarchy/desktop-ready`). Shared paths are checked for Linux
+content: old 0106's `OMARCHY_DISPLAY_SYNC_HOST_SCALE` in
+`usr/local/bin/omarchy-native-display-sync`, old 0114's `host_is_linux` in
+`usr/local/lib/try-omarchy/approved-apps-sync` or Linux launch message in
+`usr/local/bin/try-omarchy-windows-app`, and old 0115's `host_name` in
+`usr/local/bin/file-transfer-window`. Linux evidence takes precedence. Windows
+0122's `usr/share/try-omarchy/guest-qol/manifest.json` and 0124's
+`usr/local/lib/try-omarchy/update-battery-dkms` prove Windows lineage when no
+Linux marker remains.
+
+A disk at a colliding revision 40-48 with neither marker set is recorded as
+`ambiguous`. It receives Linux's stricter SSH cutoff and missing payload
+catch-up: failing to infer lineage must not leave the public quick-start
+password exposed. Records accept only `linux:0..49`, `windows:0..49` or
+`ambiguous:40..48` with canonical decimal revisions. They are written to a
+same-directory temporary file and renamed atomically. Invalid, empty,
+symlinked or unwritable records stop the update before its revision advances;
+catch-up also validates records before accepting an already-complete revision.
+Catch-up uses the record
 to deliver the Windows defaults and battery payload missing from the old Linux
-revision 48, and to honor Linux's old SSH cutoff of 44. A Windows disk booted
+revision 48, and to honor Linux's old SSH cutoff of 44. A positively identified Windows disk booted
 with a Linux launcher retains the Windows cutoff of 42, so a removed SSH rule
 stays removed. Subsequent catch-up runs use the unified revision numbers.
+
+After catch-up, the boot label selector changes recognized stock power menu,
+panel and command text to "Managed by the host computer" only with the exact
+`tryomarchy.host=linux` flag. It selects Windows wording on other boots,
+including when switching back from Linux, and preserves customized, missing
+and symlinked files. The Windows patch and quality-of-life assets stay intact.
 
 The release helper remains unchanged: it applies all patches in filename order,
 builds the shared importer, and runs the guest contract tests. Refresh the lock

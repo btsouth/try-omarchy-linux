@@ -265,13 +265,19 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				dropPointerMoves.Add(1)
 			}
 			if paths, point, ok := droppedFilesEvent(line); ok {
+				// Time the drop from QEMU's own event timestamp, when its
+				// pointer watch started, not from when this loop got to it.
 				position := linuxDropPosition(line)
+				at, timed := linuxDropTime(line, time.Now())
+				if !timed {
+					position = nil
+				}
 				if position == nil && point != nil {
 					position = point[:]
 				}
 				// Count moves from here: a grant prompt means the pointer
 				// moves on before the files reach the guest.
-				moves, at := dropPointerMoves.Load(), time.Now()
+				moves := dropPointerMoves.Load()
 				go func() {
 					granted, err := linuxGrantDroppedFiles(paths)
 					if errors.Is(err, errSetupCancelled) {

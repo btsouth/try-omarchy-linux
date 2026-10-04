@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -143,5 +144,34 @@ func TestLinuxDragStopsWhenTheDropGetsTooOld(t *testing.T) {
 	held, err := runLinuxDragSteps(context.Background(), pointer, steps, dropPointerMoves.Load(), time.Now().Add(10*time.Millisecond))
 	if err == nil || !held || len(pointer.calls) != 1 {
 		t.Fatalf("held=%v err=%v calls=%v", held, err, pointer.calls)
+	}
+}
+
+func TestLinuxDropTimeComesFromQEMU(t *testing.T) {
+	now := time.Unix(1791100000, 0)
+	at, ok := linuxDropTime(`{"event":"DISPLAY_FILE_DROP","data":{},"timestamp":{"seconds":1791099990,"microseconds":250000}}`, now)
+	if !ok || !at.Equal(time.Unix(1791099990, 250000000)) {
+		t.Fatalf("event time = %v %v", at, ok)
+	}
+	for _, line := range []string{
+		`{"event":"DISPLAY_FILE_DROP","data":{}}`,
+		`{"event":"DISPLAY_FILE_DROP","timestamp":{"seconds":1791100002,"microseconds":0}}`,
+		`{"event":"DISPLAY_FILE_DROP","timestamp":{"seconds":-1,"microseconds":0}}`,
+		`{"event":"DISPLAY_FILE_DROP","timestamp":{"seconds":1791099990,"microseconds":1000000}}`,
+		`broken`,
+	} {
+		if _, ok := linuxDropTime(line, now); ok {
+			t.Fatalf("accepted %s", line)
+		}
+	}
+	// A drop QEMU sent long ago is too old to drag, however late it is read.
+	ready := guestReady.Load()
+	guestReady.Store(true)
+	defer guestReady.Store(ready)
+	const id = "fedcba9876543210fedcba9876543210"
+	old, _ := linuxDropTime(`{"timestamp":{"seconds":`+strconv.FormatInt(time.Now().Add(-40*time.Second).Unix(), 10)+`,"microseconds":0}}`, time.Now())
+	recordDrop(id, recordedDrop{at: old, point: []int{500, 400, 1000, 800}, pointerMoves: dropPointerMoves.Load()})
+	if err := performLinuxDropDrag(id, 16400, 16400); err == nil {
+		t.Fatal("dragged a drop QEMU sent 40 seconds ago")
 	}
 }

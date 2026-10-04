@@ -60,6 +60,26 @@ func linuxDropPosition(line string) []int {
 	return []int{x, y, width, height}
 }
 
+// linuxDropTime reads when QEMU sent an event. A missing timestamp, or one
+// more than a second ahead of now, cannot bound the drag, so it is refused.
+func linuxDropTime(line string, now time.Time) (time.Time, bool) {
+	var event struct {
+		Timestamp *struct {
+			Seconds      int64 `json:"seconds"`
+			Microseconds int64 `json:"microseconds"`
+		} `json:"timestamp"`
+	}
+	if len(line) > 1<<20 || json.Unmarshal([]byte(line), &event) != nil || event.Timestamp == nil ||
+		event.Timestamp.Seconds <= 0 || event.Timestamp.Microseconds < 0 || event.Timestamp.Microseconds >= 1e6 {
+		return time.Time{}, false
+	}
+	at := time.Unix(event.Timestamp.Seconds, event.Timestamp.Microseconds*1000)
+	if at.After(now.Add(time.Second)) {
+		return time.Time{}, false
+	}
+	return at, true
+}
+
 func linuxDropPointerMoved(line string) bool {
 	var event struct {
 		Event string `json:"event"`

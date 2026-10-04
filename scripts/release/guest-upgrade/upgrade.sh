@@ -80,5 +80,38 @@ sudo python3 /mnt/host/pinch-udev.py
 # Catch-up adds the rule to disks from before revision 42 and records it there;
 # later disks create the account with the rule and have no record.
 cmp /etc/ssh/sshd_config.d/90-try-omarchy-quick-start.conf /usr/share/try-omarchy/quick-start-sshd.conf
+# The unified series also delivers dormant Linux helpers to Windows disks.
+# Check payloads without starting a graphical session or contacting the host.
+revision=$(cut -d: -f1 /usr/share/try-omarchy/compat-version)
+if (( revision >= 50 )); then
+  grep -Fq 'tryomarchy.vulkan-present=cpu' /usr/local/lib/try-omarchy/vulkan-env
+fi
+if (( revision >= 51 )); then
+  [[ -x /usr/local/lib/try-omarchy/host-window ]]
+  [[ -x /usr/local/lib/try-omarchy/repair-host-window ]]
+  [[ -f /usr/share/try-omarchy/host-window-idle.qml ]]
+fi
+if (( revision >= 52 )); then
+  grep -Fq 'tryomarchy.host-scale=1' /usr/local/bin/omarchy-native-display-sync
+fi
+if (( revision >= 53 )); then
+  [[ -x /usr/local/lib/try-omarchy/desktop-ready ]]
+  grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/user/try-omarchy-desktop-ready.service
+  [[ $(readlink /etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service) == ../try-omarchy-desktop-ready.service ]]
+fi
+if (( revision >= 54 )); then
+  grep -qx 'version=4' /usr/local/lib/try-omarchy/agent
+  grep -Fq 'version=5' /usr/local/lib/try-omarchy/agent
+fi
+if (( revision >= 55 )); then
+  [[ -x /usr/local/lib/try-omarchy/apply-host-names ]]
+  [[ -x /usr/local/lib/try-omarchy/repair-clock-timezone ]]
+  [[ -f /usr/share/try-omarchy/clock-timezone-refresh.qml ]]
+  grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/system/try-omarchy-linux-clock.service
+  # This Windows harness passes no Linux host flag, so its defaults stay Windows.
+  for entry in try-omarchy-host-settings try-omarchy-file-transfers try-omarchy-follow-timezone; do
+    cmp "/usr/share/applications/$entry.desktop" "/usr/share/try-omarchy/host-applications/windows/$entry.desktop"
+  done
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

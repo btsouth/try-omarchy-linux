@@ -290,3 +290,42 @@ Patch 0126 allows Media Player to use Mesa software rendering when the launcher
 boots with CPU rendering. GPU mode retains mpv defaults, and explicit command-line
 options take precedence. Compatibility revision 49 delivers the wrapper to existing
 guest disks.
+
+## Linux launcher guest patches
+
+Patches 0001 through 0126 remain the Windows series unchanged. Patch 0126
+already uses compatibility revision 49, so the Linux additions use revisions
+50 through 55. Linux behavior is gated by `tryomarchy.host=linux`,
+`tryomarchy.host-scale=1`, or `tryomarchy.vulkan-present=cpu`. Windows launchers
+pass none of these flags and retain their existing behavior and wording.
+
+| Patch | Linux source patch | Compatibility revision | Purpose |
+| --- | --- | --- | --- |
+| 0127 | 0103 | 50 | Present Vulkan windows through CPU copies when requested, avoiding NVIDIA LINEAR dma-buf pitch artifacts. |
+| 0128 | 0104 | 51 | Keep the guest awake while the Linux host window renews an expiring lease, without changing the user's stay-awake preference. Repair only recognized idle service versions. |
+| 0129 | 0105 | None | Verify each patch digest and the chain of repeated targets before comparing the final postimage with the built guest. |
+| 0130 | 0106 | 52 | Follow Linux host display dimensions at 96 logical DPI when requested. Explicit user scale still wins; Windows keeps its existing thresholds. |
+| 0131 | 0107 | 53 | Report `desktop-ready` after a monitor, Quickshell, background and bar surfaces are stable. The user service runs only on a Linux host; system `ready` still serves image rollback. |
+| 0132 | 0114 | 54 | Name approved Linux apps `Host: name` and report agent version 5 only to Linux. Windows retains its app labels and agent version 4. |
+| 0133 | 0115, differences from 0116 and 0117 | 55 | Name the Linux host in Settings, file transfer, locale and time-zone notices. Select desktop labels at boot, preserving custom, missing and symlinked entries. Repair only the shipped clock widget, on Linux, before the display manager starts. |
+
+Linux patch 0109 is covered by Windows 0107 and 0117, including preserving a
+removed quick-start SSH rule. Linux 0111 has the same exporter behavior as
+Windows 0112; its only difference is a source comment. Linux 0116 uses the same
+`dev.tryomarchy.timezone` JSON-lines protocol as Windows 0109. Patch 0133 carries
+its Linux wording and `--follow-host` alias while preserving `--follow-windows`.
+Windows 0111 supplies Linux 0117's clock-cache fix; 0133 additionally carries
+Linux's digest-gated repair onto existing disks without changing the Windows
+time-zone service. Linux lock refreshes 0108, 0110, 0112, 0113 and 0118 are omitted.
+No additional packages or lock refresh are required by these patches.
+
+The initramfs records old disk lineage before extracting the compatibility
+overlay, preserving that record if extraction needs a retry. Catch-up uses it
+to deliver the Windows defaults and battery payload missing from the old Linux
+revision 48, and to honor Linux's old SSH cutoff of 44. A Windows disk booted
+with a Linux launcher retains the Windows cutoff of 42, so a removed SSH rule
+stays removed. Subsequent catch-up runs use the unified revision numbers.
+
+The release helper remains unchanged: it applies all patches in filename order,
+builds the shared importer, and runs the guest contract tests. Refresh the lock
+later through the existing lock workflow.

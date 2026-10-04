@@ -56,7 +56,7 @@ func main() {
 	flag.BoolVar(&cfg.fresh, "fresh", false, "start over and retain the previous writable disk for recovery")
 	flag.IntVar(&cfg.displays, "displays", 1, "number of guest displays (1 to 16)")
 	flag.BoolVar(&cfg.fullscreen, "fullscreen", false, "start fullscreen (Immersive)")
-	flag.StringVar(&cfg.fullscreenDisplay, "fullscreen-display", "", "Windows display device for the first fullscreen output (empty: primary)")
+	flag.StringVar(&cfg.fullscreenDisplay, "fullscreen-display", "", "display for the first fullscreen output: a Windows display device, or a Linux connector such as DP-1 (empty: primary on Windows, the desktop's choice on Linux)")
 	flag.IntVar(&cfg.memOverrideMiB, "memory", 0, "guest RAM in MiB (default: sized to this PC)")
 	flag.IntVar(&cfg.cpuOverride, "cpus", 0, "guest CPUs (default: sized to this PC)")
 	resourceProfileFlag := flag.String("resource-profile", "", "resource preset: balanced, maximum-performance, or manual; -cpus and -memory override individual resources")

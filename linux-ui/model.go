@@ -210,3 +210,27 @@ func hostAppOffersFor(allowed, installed []hostApp) (labels []string, offers []h
 	}
 	return labels, offers
 }
+
+// displayChoice is a monitor the VM can open fullscreen on.
+type displayChoice struct {
+	Connector   string
+	Description string
+}
+
+// fullscreenDisplayChoices names each monitor by its description and
+// connector. A monitor without a connector name cannot be chosen, because the
+// launcher passes the connector to SDL.
+func fullscreenDisplayChoices(displays []displayChoice) []audioDevice {
+	var choices []audioDevice
+	for _, display := range displays {
+		if display.Connector == "" || strings.ContainsAny(display.Connector, ",\x00\r\n") {
+			continue
+		}
+		label := display.Connector
+		if display.Description != "" && display.Description != display.Connector {
+			label = display.Description + " (" + display.Connector + ")"
+		}
+		choices = append(choices, audioDevice{Name: display.Connector, Label: label})
+	}
+	return choices
+}

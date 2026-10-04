@@ -172,3 +172,19 @@ func TestVulkanPresentMode(t *testing.T) {
 		t.Fatal("an unknown mode was accepted")
 	}
 }
+
+func TestLinuxFullscreenDisplayChoosesSDLPrimaryOutput(t *testing.T) {
+	inherited := []string{"HOME=/home/a", "SDL_VIDEO_DISPLAY_PRIORITY=HDMI-A-1"}
+	got := linuxFullscreenDisplay(inherited, true, "DP-2")
+	if strings.Join(got, " ") != "HOME=/home/a SDL_VIDEO_DISPLAY_PRIORITY=DP-2" {
+		t.Fatalf("env = %v", got)
+	}
+	for _, tc := range []struct {
+		fullscreen bool
+		display    string
+	}{{false, "DP-2"}, {true, ""}, {true, "DP-1,DP-2"}, {true, "DP-2\n"}} {
+		if got := linuxFullscreenDisplay(inherited, tc.fullscreen, tc.display); strings.Join(got, " ") != strings.Join(inherited, " ") {
+			t.Fatalf("%v %q changed env to %v", tc.fullscreen, tc.display, got)
+		}
+	}
+}

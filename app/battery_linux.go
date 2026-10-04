@@ -27,10 +27,15 @@ func linuxPowerNumber(dir, name string) (int64, bool) {
 }
 
 func linuxBatterySnapshot(root string) batterySnapshot {
+	snapshot, _ := linuxBatterySnapshotAndDetails(root)
+	return snapshot
+}
+
+func linuxBatterySnapshotAndDetails(root string) (batterySnapshot, batteryDetails) {
 	snapshot := batterySnapshot{Type: "state", State: "unknown"}
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return snapshot
+		return snapshot, batteryDetails{}
 	}
 	for _, entry := range entries {
 		dir := filepath.Join(root, entry.Name())
@@ -72,15 +77,18 @@ func linuxBatterySnapshot(root string) batterySnapshot {
 				snapshot.TimeToFullSeconds = &value
 			}
 		}
-		break
+		// Windows queries the first battery device rather than aggregating
+		// physical details. Use the same battery for Linux state and details.
+		return snapshot, linuxBatteryDetails(dir)
 	}
-	return snapshot
+	return snapshot, batteryDetails{}
 }
 
 func hostBatteryLine() (string, error) {
-	data, err := json.Marshal(linuxBatterySnapshot(linuxPowerSupplyRoot))
+	snapshot, details := linuxBatterySnapshotAndDetails(linuxPowerSupplyRoot)
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return "", fmt.Errorf("encode battery: %w", err)
 	}
-	return "battery " + string(data) + "\n", nil
+	return "battery " + string(data) + "\n" + encodeBatteryDetailsLine(details), nil
 }

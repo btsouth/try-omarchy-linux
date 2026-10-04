@@ -86,6 +86,7 @@ static void qemu_console_listener_set_refresh(void *d,int n) {}
 static void qemu_system_shutdown_request(int n) {}
 static int qemu_console_get_index(QemuConsole *c) {return 0;}
 static void qapi_event_send_display_close_request(int n) {}
+static void sdl_drop_pointer_left(uint32_t id) {}
 ''' + ''.join(function(source, name) for name in (
         'sdl_pointer_outside', 'sdl_focus_keyboard_grab', 'sdl_grab_start',
         'sdl_grab_end', 'absolute_mouse_grab', 'sdl_release_keyboard',

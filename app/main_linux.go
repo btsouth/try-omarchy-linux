@@ -512,6 +512,7 @@ func runLinuxGuestAgent(dir string) {
 		return err
 	}
 	a.reclaimFinished = linuxReclaimFinished
+	a.dropDrag = performLinuxDropDrag
 	theAgent.Store(a)
 	a.run(l, make(chan struct{}))
 }

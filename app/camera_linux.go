@@ -93,7 +93,7 @@ func runCameraBridge(preferences desktopPreferences) {
 	}
 	listener, err := listenLinuxCamera()
 	if err != nil {
-		fatal("Could not prepare the private camera connection: %v", err)
+		fatalf("Could not prepare the private camera connection: %v", err)
 	}
 	logf("camera: bridge listening on its private connection")
 	go func() {

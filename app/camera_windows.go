@@ -25,11 +25,11 @@ func newCameraFrameSource() cameraFrameSource {
 // copy of the app already owns the port.
 func runCameraBridge(preferences desktopPreferences) {
 	if preferences.CameraDisabled {
-		cameraState.Store("Camera access is off. Enable it in Settings and restart Omarchy.")
+		cameraState.Store(uiText("camera.off"))
 	}
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", cameraPort))
 	if err != nil {
-		fatal("Try Omarchy camera port %d is in use.", cameraPort)
+		fatal(uiTextWith("fatal.port.camera", map[string]string{"port": fmt.Sprint(cameraPort)}))
 	}
 	logf("camera: bridge listening on %d", cameraPort)
 	go func() {

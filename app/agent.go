@@ -127,11 +127,12 @@ func (a *guestAgent) serve(c net.Conn) {
 	a.conn = c
 	if a.zeroFillPending {
 		a.zeroFillPending = false
-		a.zeroFillStatus = "Preparation interrupted by a guest reconnect. Try again."
+		a.zeroFillStatus = uiText("reclaim.status.reconnected")
 	}
 	a.helloVersion, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(first, "hello ")))
 	a.mu.Unlock()
 	logf("agent: guest agent connected (%s)", strings.TrimSpace(strings.TrimPrefix(first, "hello ")))
+	guestAgentConnected()
 	a.sendTime("connect")
 	a.sendBattery()
 	a.sendApprovedApps()
@@ -188,7 +189,7 @@ func (a *guestAgent) read(c net.Conn, r *bufio.Reader) {
 			if finished {
 				a.zeroFilled = true
 				a.zeroFillPending = false
-				a.zeroFillStatus = reclaimReadyStatus
+				a.zeroFillStatus = reclaimReadyStatus()
 			}
 			a.mu.Unlock()
 			logf("agent: guest zero-filled its free space; disk.raw will be compacted after shutdown")
@@ -200,7 +201,7 @@ func (a *guestAgent) read(c net.Conn, r *bufio.Reader) {
 			failed := a.conn == c && a.zeroFillPending
 			if failed {
 				a.zeroFillPending = false
-				a.zeroFillStatus = "Preparation failed. Check diagnostics before retrying."
+				a.zeroFillStatus = uiText("reclaim.status.failed")
 			}
 			a.mu.Unlock()
 			logf("agent: guest could not zero-fill: %s", strings.TrimSpace(strings.TrimPrefix(line, "zero-fill failed")))
@@ -210,14 +211,19 @@ func (a *guestAgent) read(c net.Conn, r *bufio.Reader) {
 		}
 	}
 	a.mu.Lock()
-	if a.conn == c {
+	current := a.conn == c
+	if current {
 		if a.zeroFillPending {
-			a.zeroFillStatus = "Preparation interrupted. Reconnect the guest and try again."
+			a.zeroFillStatus = uiText("reclaim.status.interrupted")
 			a.zeroFillPending = false
 		}
 		a.conn = nil
 	}
 	a.mu.Unlock()
+	if current {
+		// The guest is shutting down or its agent restarted.
+		guestAgentDisconnected()
+	}
 	c.Close()
 }
 
@@ -258,7 +264,7 @@ func (a *guestAgent) sendLine(line string) bool {
 		a.conn = nil
 		if a.zeroFillPending {
 			a.zeroFillPending = false
-			a.zeroFillStatus = "Preparation interrupted. Reconnect the guest and try again."
+			a.zeroFillStatus = uiText("reclaim.status.interrupted")
 		}
 		return false
 	}
@@ -326,11 +332,11 @@ func (a *guestAgent) requestZeroFill(budgetMiB int64) bool {
 	if n, err := a.conn.Write([]byte(line)); err != nil || n != len(line) {
 		a.conn.Close()
 		a.conn = nil
-		a.zeroFillStatus = "Could not send the preparation request. Reconnect the guest and try again."
+		a.zeroFillStatus = uiText("reclaim.status.send_failed")
 		return false
 	}
 	a.zeroFillPending = true
-	a.zeroFillStatus = "Preparing free space. Keep Omarchy running until preparation finishes."
+	a.zeroFillStatus = uiText("reclaim.status.preparing")
 	logf("agent: asked the guest to zero-fill up to %d MiB of free space", budgetMiB)
 	return true
 }
@@ -343,9 +349,9 @@ func (a *guestAgent) reclaimStatus() string {
 		return a.zeroFillStatus
 	}
 	if a.conn == nil {
-		return "The guest agent is not connected. Wait for startup or update the guest."
+		return uiText("reclaim.status.no_agent")
 	}
-	return "No reclaim requested during this session."
+	return uiText("reclaim.status.none")
 }
 
 // connected reports whether the guest agent is currently connected.

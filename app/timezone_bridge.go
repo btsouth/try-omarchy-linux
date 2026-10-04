@@ -61,3 +61,32 @@ func serveTimeZoneBridge(ctx context.Context, conn net.Conn, zone func() string,
 		}
 	}
 }
+func startTimeZoneBridge(zone func() string) func() {
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", timeZoneBridgePort))
+	if err != nil {
+		logf("live time-zone following unavailable: %v", err)
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	gate := make(chan struct{}, 4)
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			select {
+			case gate <- struct{}{}:
+				go func() {
+					defer func() { <-gate }()
+					ticker := time.NewTicker(timeZoneInterval)
+					defer ticker.Stop()
+					_ = serveTimeZoneBridge(ctx, conn, zone, ticker.C)
+				}()
+			default:
+				conn.Close()
+			}
+		}
+	}()
+	return func() { cancel(); listener.Close() }
+}

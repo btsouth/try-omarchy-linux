@@ -4,9 +4,12 @@ Use a separate data folder and a copy of any existing guest. Keep the original
 backup untouched. Follow [RELEASING.md](RELEASING.md) for running a signed draft
 candidate against locally served, authenticated assets.
 
+For maintainer release rounds, use [the repeatable acceptance routine](RELEASE-ACCEPTANCE.md).
+The full checklist below supports deeper checks and additional hardware reports.
+
 ## Hardware testing
 
-The published baseline is [v0.6.0](https://github.com/omacom/try-omarchy-windows/releases/tag/v0.6.0).
+Record the published baseline used for the test and the exact candidate hashes.
 Reports on earlier previews remain useful, but must not be recorded as acceptance
 of unreleased master changes. Maintainers pin signed candidates and exact
 launcher/runtime/guest hashes before combined candidate rounds.
@@ -53,7 +56,11 @@ personal details. Do not upload the guest disk or a full backup.
   declining leaves them unchanged, and accepting preserves the original file
   before restoring defaults without changing guest files.
 - [ ] Cancel a download, relaunch, and finish setup without a broken install.
-- [ ] Instant account and personalized account both reach the desktop.
+- [ ] New setup defaults to "Choose my username and password". Both that path
+  and Quick start reach the desktop; existing installs keep their account choice.
+- [ ] Quick-start SSH rejects password login and accepts the authorized key,
+  including after upgrading an existing quick-start guest. Accounts you created
+  yourself keep password login.
 - [ ] GPU rendering, then CPU fallback, both reach the desktop.
 - [ ] Keyboard and Windows key work only in the intended window; host shortcuts
   still work after switching away. Windows handles Win+L itself.
@@ -83,6 +90,39 @@ personal details. Do not upload the guest disk or a full backup.
   next launch; Guest CPUs shows the automatic choice for this PC.
 - [ ] Remove Try Omarchy from Apps & features on a copied install; the folder,
   its shortcuts, and its entry are gone and the original install still runs.
+
+## Physical battery details
+
+Use the matching launcher and revision 48 guest on both a fresh install and a
+copy of an existing disk. In Omarchy, run:
+
+```sh
+upower -i /org/freedesktop/UPower/devices/battery_BAT0
+cat /sys/class/power_supply/BAT0/energy_full_design
+cat /sys/class/power_supply/BAT0/energy_full
+cat /sys/class/power_supply/BAT0/cycle_count
+cat /sys/class/power_supply/BAT0/manufacturer
+cat /sys/class/power_supply/BAT0/model_name
+cat /sys/class/power_supply/BAT0/technology
+cat /usr/share/try-omarchy/compat-version
+dkms status -m try-omarchy-battery
+```
+
+- [ ] Compare UPower `energy-full-design` and `energy-full` with Windows
+  `powercfg /batteryreport` design and full-charge capacity divided by 1000
+  (Wh). Sysfs uses mWh multiplied by 1000 (microwatt-hours). UPower `capacity`
+  should reflect full-charge/design health, separately from `percentage`.
+- [ ] Confirm vendor, model, charge cycles and technology match values Windows
+  reports. Unsupported readings stay unavailable; zero/unknown capacities and
+  cycle counts must not appear as real readings.
+- [ ] Open Omarchy's battery panel and confirm its health/cycles agree with
+  UPower. Unplug/reconnect AC and sleep/resume Windows; charge percentage and
+  charging state must still follow Windows. No charge-limit value is mirrored.
+- [ ] On the upgraded disk, confirm revision 48 and only DKMS source 1.1.0.
+  Run the normal **Update > Omarchy** with matching headers and confirm the
+  battery module still loads, without the identical-module installation error.
+- [ ] On a desktop PC without a battery, confirm `upower -e` has no BAT0 and
+  Omarchy shows no laptop battery panel, while AC state and boot remain normal.
 
 ## Hardware matrix facts to record
 

@@ -20,7 +20,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 	const maxLaunchAttempts = 8
 	for attempt := 1; attempt <= maxLaunchAttempts; attempt++ {
 		if err := checkSetupCancelled(); err != nil {
-			fatal("%v", err)
+			fatalf("%v", err)
 		}
 		getUI().setBooting(true)
 		mode := "CPU rendering (llvmpipe)"
@@ -34,7 +34,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 		logf("booting - %s (attempt %d)", mode, attempt)
 		controlDir, err := prepareQMPControl()
 		if err != nil {
-			fatal("Cannot prepare private VM controls: %v", err)
+			fatalf("Cannot prepare private VM controls: %v", err)
 		}
 		cfg.qmpDir = controlDir
 		// A startup fallback relaunch keeps forwards Settings changed live.
@@ -51,7 +51,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 			proc.Stdout, proc.Stderr = stderr, stderr
 		}
 		if err := proc.Start(); err != nil {
-			fatal("QEMU failed to start: %v", err)
+			fatalf("QEMU failed to start: %v", err)
 		}
 		exited := make(chan error, 1)
 		go func() {
@@ -101,7 +101,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 					if stderr != nil {
 						stderr.Close()
 					}
-					fatal("Omarchy stopped before its desktop became ready. Check %s for the VM error and try again.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+					fatalf("Omarchy stopped before its desktop became ready. Check %s for the VM error and try again.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
 				}
 			} else if initialInterrupts == 0 {
 				getUI().finish()
@@ -117,7 +117,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 			logf("QEMU did not answer on its control socket - stopping it")
 			proc.Process.Kill()
 			<-exited
-			fatal("QEMU did not start answering - see %s.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+			fatalf("QEMU did not start answering - see %s.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
 		}
 		if stderr != nil {
 			stderr.Close()
@@ -126,10 +126,10 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 			logf("QEMU startup failure (attempt %d, %s):\n%s", attempt, mode, detail)
 		}
 		if !linuxStartupFallback(cfg) {
-			fatal("QEMU exited at startup - see %s.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+			fatalf("QEMU exited at startup - see %s.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
 		}
 	}
-	fatal("QEMU failed to come up after %d attempts.", maxLaunchAttempts)
+	fatalf("QEMU failed to come up after %d attempts.", maxLaunchAttempts)
 }
 
 // KVM has no launch wedge, so the control socket is tried as soon as QEMU

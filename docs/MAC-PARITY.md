@@ -1,7 +1,8 @@
 # Windows and Mac feature review
 
-Reviewed September 21 and refreshed September 24, 2026 against Mac source commit
-[`28f4722fab3e16ae26a7cb8fab2ab7908b1833e4`](https://github.com/omacom/try-omarchy/tree/28f4722fab3e16ae26a7cb8fab2ab7908b1833e4).
+Reviewed September 21 and refreshed September 30, 2026 (Windows status updated
+October 1 for `v0.8.0`) against Mac source commit
+[`e1a0dbe9820a8f7554ac3b930c2f13e1f41b25a1`](https://github.com/omacom/try-omarchy/tree/e1a0dbe9820a8f7554ac3b930c2f13e1f41b25a1).
 This is an implementation and acceptance tracker, not a claim that every feature
 is shipped or hardware-tested. The release gates in
 [RELEASING.md](RELEASING.md) and [TESTING.md](TESTING.md) still apply.
@@ -10,11 +11,15 @@ The refreshed Mac baseline is newer than the original comparison.
 It adds automatic startup with in-guest settings access, host battery mirroring,
 guest-memory reclamation, precise trackpad scrolling, stable bridged identities,
 keyboard-geometry and language work, update discovery, and runtime reliability
-fixes. Equivalent behavior is tracked below only where it makes sense on Windows.
+fixes. September source also adds experimental host USB passthrough, graphics
+and audio continuity fixes, and safer management placement. The latest source
+also follows Mac time-zone changes while running and avoids 9p writeback caching
+for existing shared folders. Mac source features
+are separate from its published `v0.4.1` release. Equivalent behavior is tracked below only where it makes sense on Windows.
 
 ## Corrections to the previous handoff
 
-- Windows already has native first-run controls and four native Settings pages.
+- Windows already has native first-run controls and five native Settings pages.
   The missing piece was an ordinary pre-boot entry point, not an entirely new UI
   framework. This candidate opens those controls before boot with a **Launch
   Omarchy** action. Explicit runtime commands retain direct startup; `-start`
@@ -24,13 +29,12 @@ fixes. Equivalent behavior is tracked below only where it makes sense on Windows
   and signed in. Cross-compilation alone does not validate native windows.
 - WHPX requesting nesting does not prove working guest KVM. Use the executable
   probe in [NESTED-VIRTUALIZATION.md](NESTED-VIRTUALIZATION.md).
-- The Mac pinch implementation is a dedicated virtual multitouch touchpad, not
-  a Hyprland zoom shortcut. Windows parity needs equivalent event delivery,
-  including cancellation on focus loss and VM state changes.
-- The pinned QEMU SDL and DirectSound options do not expose endpoint selection.
-  A hypothetical `-audiodev wasapi` switch is not an implemented backend in this
-  runtime. SDL itself uses Windows audio APIs; endpoint selection could extend
-  the existing SDL backend instead of requiring a wholesale backend replacement.
+- Mac and Windows pinch use a dedicated virtual multitouch touchpad. Windows
+  ships gesture cancellation on focus loss and VM state changes with r18;
+  broader application and hardware acceptance remains open.
+- Windows endpoint selection ships through the r20c SDL backend. A hypothetical
+  `-audiodev wasapi` switch is not an implemented backend in this runtime;
+  follow the shipped SDL route rather than assuming such a switch exists.
 
 ## Current coverage
 
@@ -41,7 +45,7 @@ fixes. Equivalent behavior is tracked below only where it makes sense on Windows
 | Automatic startup | Owned Windows shortcuts can opt into direct startup while the Settings shortcut remains available | Broader physical acceptance |
 | In-guest host settings | Shipped in `v0.2.0`; the signed candidate opened native Settings above the running VM on the AMD laptop | Further physical observations as reports arrive |
 | Approved Windows apps | Phase 1 ships in `v0.2.0`; the signed candidate launched and revoked Notepad from Omarchy | [Embedded-window research #160](https://github.com/omacom/try-omarchy-windows/issues/160) and per-app icons |
-| Branding and About | Omacom resource metadata, retained original copyright plus contributor credit, notices, labelled About actions; native visibility tested | Confirm public-facing relationship and presentation before a 1.0 claim |
+| Branding and About | An Omacom project in the Omacom organization, linked from omarchy.org; Omacom resource metadata, retained original copyright plus contributor credit, notices, labelled About actions; native visibility tested | None |
 | Camera, clipboard, shared folders, transfers | Implemented; the signed candidate passed camera and share checks on the AMD laptop. Since `v0.6.0` a file dropped from File Explorer reaches the app under the pointer ([#174](https://github.com/omacom/try-omarchy-windows/issues/174)) | Investigate concrete device reports |
 | Resources, updates, storage and recovery | Implemented; the published update, backup, restore and uninstall paths passed on the AMD laptop | Broader hardware and recovery reports remain useful |
 | GPU application compatibility | AMD GPU desktop and applications passed their recorded checks; a previous Intel/NVIDIA preview runtime booted VirGL OpenGL but failed Venus Vulkan and Godot Forward+ | [Current-runtime investigation #173](https://github.com/omacom/try-omarchy-windows/issues/173); retain CPU/OpenGL fallback |
@@ -50,20 +54,39 @@ fixes. Equivalent behavior is tracked below only where it makes sense on Windows
 | Trackpad pinch | [r18 bridge](PINCH-ZOOM.md), virtual touchpad and guest rules for new and existing guests ([#184](https://github.com/omacom/try-omarchy-windows/pull/184)); on by default for guest images that declare the device; synthetic and AMD-laptop physical Chromium pinch/scroll tests pass | Shipped in `v0.4.0`; Firefox and broader host/DPI/fullscreen acceptance |
 | Windows Hello sudo | Opt-in since `v0.5.0`: launcher WebAuthn bridge, guest broker and a single PAM rule; one Hello prompt per sudo with password fallback ([design](WINDOWS-HELLO.md), [laptop run](evidence/HELLO-SUDO-LAPTOP-2026-09-26.md)) | Other Hello hardware (fingerprint, face) and Windows 10 |
 | 1Password host authentication | Opt-in since `v0.6.0`: 1Password's system authentication unlock asks for Windows Hello through a polkit agent scoped to the installed 1Password process ([#176](https://github.com/omacom/try-omarchy-windows/issues/176)); canceling falls back to the guest password | 1Password still asks for its account password after it restarts |
-| Bridged networking | NAT and explicit port forwarding exist | [True LAN bridge #166](https://github.com/omacom/try-omarchy-windows/issues/166), with supported adapter, privilege and firewall handling |
-| Host battery | Shipped in `v0.2.0`; the AMD laptop's 99% charging state appeared as BAT0/ADP0 and in UPower | Desktop/no-battery transition remains to be observed on a suitable host |
+| Bridged networking | NAT and explicit port forwarding exist | Closed for now ([#166](https://github.com/omacom/try-omarchy-windows/issues/166)): a TAP bridge passed in VMs but needs physical Ethernet and two hand-installed drivers |
+| Host battery | State mirroring shipped in `v0.2.0`; candidate patch 0124 and revision 48 add Windows physical battery details, including energy-based health and cycles, following Mac `f41da7c` | Physical details on fresh/upgraded disks and desktop/no-battery behavior need hardware acceptance; Windows charge limits are not mirrored |
 | Guest RAM reclamation | Shipped with r19 in `v0.2.0`; three physical touch/free cycles returned about 797 MiB after the third 768 MiB allocation | Follow up on concrete memory reports |
-| Keyboard and language | Windows time zone, keyboard layout and display language follow the host | Physical ANSI/ISO/JIS geometry and broader input-method acceptance |
+| Guest everyday defaults | Candidate patches 0121 to 0123 add fitted screensavers, clearer disk-full updates, calm first-run update notices, Windows-managed power labels and Traditional Chinese input/font defaults; revision 47 preserves customized files | Stacked guest contract, devbox build and headless boot smoke pass; physical small-window, first-run, battery-panel and Chromium IME acceptance remain needed |
+| Keyboard and language | Windows keyboard layout and display language are read at launch. Since `v0.7.0` the guest follows Windows time-zone changes while running, keeps a zone you set yourself, and offers Follow Windows Time Zone | Physical ANSI/ISO/JIS geometry and broader input-method acceptance remain open |
 
-Windows Hello, true bridged networking, and embedded Windows app windows remain
-feature work. Live audio switching shipped in `v0.3.0` with r20c; public `v0.2.0`
-remains the previous r19 release. The [signed and public v0.3.0 acceptance
-record](evidence/V030-SIGNED-CANDIDATE-2026-09-24.md) and
-[publish run](https://github.com/omacom/try-omarchy-windows/actions/runs/35978943238)
-record the release checks. Settings, battery mirroring, live memory reclamation,
-approved app launch, and fullscreen monitor selection shipped in `v0.2.0`. Pinch
-is on by default since `v0.4.0`; its physical gesture and scrolling checks
-passed on the laptop.
+Public `v0.8.0` is the current Windows release; it pauses Omarchy while Windows
+sleeps and opens the window once the desktop is drawn. Windows Hello sudo shipped in
+`v0.5.0`; process-scoped 1Password unlock and direct application drops shipped in
+`v0.6.0`. Live audio switching shipped in `v0.3.0`, and pinch is enabled by
+default since `v0.4.0`. These are shipped features with the hardware limits
+listed above.
+
+True LAN bridging (#166) and embedded Windows app windows (#160) are closed for
+now; NAT with port forwarding and the approved-app launch bridge cover those
+workflows. The guest watchdog change in `v0.6.1` addresses service restarts during a
+host suspension, but does not establish that #216's XWayland authorization
+failure is resolved. [Windows sleep handling](WINDOWS-SLEEP.md) describes how
+the launcher pauses Omarchy before Windows sleeps, including Modern Standby.
+Reporter confirmation and a physical Modern Standby S0 check remain outstanding.
+
+Merged PRs [#235](https://github.com/omacom/try-omarchy-windows/pull/235),
+[#236](https://github.com/omacom/try-omarchy-windows/pull/236) and
+[#237](https://github.com/omacom/try-omarchy-windows/pull/237) share Mac's Tokyo
+Night palette across the Windows launcher, Settings, About, USB and setup
+windows. The launcher, Settings and setup also share the Try Omarchy mark and
+monospaced heading. About and USB retain their native dialog structure.
+Settings retain visible actions while pages scroll, hide manual CPU/RAM fields
+for automatic profiles and explain when choices apply. This polish is merged,
+but the published `v0.6.2` launcher predates it.
+The visual comparison uses current Mac source and its public release capture;
+a current native Mac run has not been observed. Native VM checks do not establish
+mixed-monitor DPI, screen-reader user acceptance or broad physical coverage.
 
 ## Work sequence toward comparable everyday use
 
@@ -73,27 +96,24 @@ passed on the laptop.
    [public and physical acceptance record](evidence/V030-SIGNED-CANDIDATE-2026-09-24.md)
    documents the available laptop checks. Two physical endpoints per direction
    and hotplug remain to be tested on suitable hardware.
-2. **Add signed Windows Hello approval (#165).** Mirror the Mac's opt-in sudo
+2. **Maintain shipped Windows Hello approval (#165).** Mirror the Mac's opt-in sudo
    model: enroll only after the guest password, pair a per-guest public key,
    sign a fresh request with Windows Hello, and verify it inside guest PAM.
-   Denial and unsupported hosts must fall back to password. After PIN setup,
-   the current laptop can test approval and denial in the eventual guest flow.
+   Denial and unsupported hosts must fall back to password. Approval, denial and password fallback were checked on the laptop.
    Shipped in `v0.5.0`. The Mac's separate, process-scoped 1Password unlock
    ([#176](https://github.com/omacom/try-omarchy-windows/issues/176)) followed
    in `v0.6.0` without changing general guest PAM policy.
-3. **Offer a real LAN mode (#166).** Keep NAT and explicit forwards as the
-   default. Start with a signed TAP adapter and a reversible wired-Ethernet
-   bridge that has its own stable guest MAC. Verify host connectivity, guest
-   DHCP/LAN reachability, restart, adapter loss and cleanup on a disposable
-   wired setup. Only offer Wi-Fi bridging after an actual Wi-Fi proof.
-4. **Finish host-app and file workflows (#160, #174).** The approved-app launch
-   bridge already works. Window embedding needs capture, input, focus,
-   accessibility, scaling and lifecycle behavior, and can ship once it is
-   reliable in normal use. Direct drops shipped in `v0.6.0` through a guest
-   drag source under the pointer.
+3. **Real LAN mode (#166), parked.** A signed TAP adapter with a wired-Ethernet
+   bridge and its own stable guest MAC passed in VMs. It needs physical
+   Ethernet, two hand-installed drivers, Secure Boot and Windows 10 checks
+   before it could ship, so NAT and explicit forwards stay the only mode. The
+   closed pull requests #229 to #234 keep the work if it comes back.
+4. **Host-app and file workflows (#160, #174).** The approved-app launch
+   bridge works and direct drops shipped in `v0.6.0`. Embedding Windows app
+   windows in the guest would be new work with its own issue.
 5. **Polish input, language and graphics.** Use specific reports and available
-   machines to address keyboard geometry/IME, shipping automatic pinch, and
-   the Intel/NVIDIA Vulkan issue (#173).
+   machines to address keyboard geometry/IME, shipped automatic pinch, and
+   Intel or NVIDIA Vulkan reports (#173 is closed until a fresh report).
    Keep the existing CPU/OpenGL fallback.
 
 Public `v0.2.0` already covers the former battery, unused-RAM, fullscreen and
@@ -132,7 +152,7 @@ replace the accepted launcher or mutate a running guest disk.
 6. Run the KVM probe inside the guest as its ordinary user and retain the JSON
    alongside exact runtime and host facts.
 
-This engineering work is included in the public `v0.1.0` release; see its
+The original pre-boot launcher work is included in the public `v0.1.0` release; see its
 [signed acceptance and public update record](evidence/V0.1.0-SIGNED-CANDIDATE-2026-09-23.md).
 
 ## September 21 host capability checks
@@ -153,7 +173,16 @@ two-finger scrolling still worked. See
 `DeviceNotPresent`, both through OpenSSH and in an interactive scheduled task
 for the signed-in user. After Windows Hello PIN setup on September 23, the
 interactive task returned `Available`, and an initial approval prompt returned
-`Verified`. No guest PAM change has been made. The
+`Verified`. That was a pre-implementation probe. Windows Hello sudo subsequently
+shipped as an opt-in feature in `v0.5.0`. The
 [availability API](https://learn.microsoft.com/en-us/uwp/api/windows.security.credentials.ui.userconsentverifier.checkavailabilityasync)
 allows an implementation to retain password authentication on unsupported hosts;
-the laptop is now available for a key-backed guest approval and denial test.
+the later approval and denial checks are recorded in the
+[Hello laptop report](evidence/HELLO-SUDO-LAPTOP-2026-09-26.md).
+
+The audio-rate candidate ports Mac commit `226ca68` startup rate matching to
+Windows shared-mode endpoint formats, with independent 48 kHz fallbacks. Live
+route changes keep the startup mixer format until restart. Guest patch 0120
+removes hidden virtio transport gain behind the route picker; volume controls
+remain independent. See [audio behavior and physical checks](AUDIO-DEVICES.md).
+These source changes have not been released or physically accepted.

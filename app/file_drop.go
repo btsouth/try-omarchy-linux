@@ -67,7 +67,7 @@ func sendDroppedFilesAt(paths []string, point []int, cursor [2]int32) error {
 func queueDroppedFiles(dropped droppedFiles) error {
 	b := desktopClipboard.Load()
 	if b == nil {
-		return fmt.Errorf("Omarchy is still starting")
+		return uiError(uiText("error.drop.starting"), nil)
 	}
 	point := dropped.point
 	dropped.paths = append([]string(nil), dropped.paths...)
@@ -89,7 +89,7 @@ func (b *clipBridge) offerDroppedFiles(dropped droppedFiles) error {
 	if b.pullConn == nil || !b.transferEnabled {
 		return fmt.Errorf("the guest file-transfer service is not connected yet")
 	}
-	progress := b.progress("Preparing dropped files")
+	progress := b.progress(uiText("transfer.preparing_drop"))
 	ticket, err := b.transfers.Offer(progress.ctx, dropped.paths, progress.report)
 	if err != nil {
 		progress.finish()

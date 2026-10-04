@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -23,7 +24,10 @@ var (
 func runLifecycleListener() {
 	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", lifecyclePort))
 	if err != nil {
-		fatal("Try Omarchy looks like it's already running (port %d is in use).", lifecyclePort)
+		if activateRunningInstance() {
+			os.Exit(0)
+		}
+		fatal(uiTextWith("fatal.port.lifecycle", map[string]string{"port": fmt.Sprint(lifecyclePort)}))
 	}
 	go func() {
 		for {
@@ -45,6 +49,7 @@ func runLifecycleListener() {
 				case "ready":
 					logf("guest userspace announced ready")
 					guestReady.Store(true)
+					guestDesktopReady()
 				case "desktop-ready":
 					logf("guest desktop announced ready")
 					desktopReady.Store(true)
@@ -53,7 +58,7 @@ func runLifecycleListener() {
 					if err := requestReclaimError(); err != nil {
 						fmt.Fprintln(c, "error: "+err.Error())
 					} else {
-						fmt.Fprintln(c, "ok: "+reclaimStartedMessage)
+						fmt.Fprintln(c, "ok: "+reclaimStartedMessage())
 					}
 				}
 			}(c)

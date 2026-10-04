@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -24,9 +25,11 @@ import (
 // window, keeps the window branded, and bridges the clipboard. The native
 // launcher edits settings before handing off to the SDL guest window.
 
-func fatal(format string, a ...any) {
-	msg := fmt.Sprintf(format, a...)
+// fatal shows a finished message, already in the launcher's language, and
+// exits. Messages come from the catalog: uiText or uiTextWith.
+func fatal(msg string) {
 	logf("FATAL %s", msg)
+	uiDone()
 	errorBox(msg)
 	os.Exit(1)
 }
@@ -35,12 +38,12 @@ func finishSetupCancellation(cfg *config, err error) bool {
 	if !setupCancelled() && !errors.Is(err, errSetupCancelled) {
 		return false
 	}
-	getUI().setStatus("Cancelling and cleaning up...")
+	getUI().setStatus("%s", uiText("status.cancelling"))
 	logf("setup cancelled by user")
 	closeLog()
 	executable, _ := os.Executable()
 	if cleanupErr := cleanupCancelledSetup(cfg.dir, executable, cancelRemovesAll.Load()); cleanupErr != nil {
-		errorBox(fmt.Sprintf("Setup was cancelled, but some temporary files could not be removed:\n\n%v\n\nOmarchy data folder: %s\n\nKeep this folder. Close Try Omarchy and try again.", cleanupErr, cfg.dir))
+		errorBox(uiTextWith("setup.cancel.cleanup_failed", map[string]string{"error": cleanupErr.Error(), "path": cfg.dir}))
 	}
 	uiDone()
 	return true
@@ -69,7 +72,7 @@ func main() {
 	flag.BoolVar(&cfg.hostCursor, "host-cursor", false, "force the legacy Windows cursor over the guest")
 	flag.BoolVar(&cfg.experimentalPinch, "experimental-pinch", false, "force Precision Touchpad pinch on for a guest configured by hand")
 	flag.BoolVar(&cfg.disablePinch, "disable-pinch", false, "keep ordinary Windows two-finger input instead of forwarding touchpad pinch")
-	flag.BoolVar(&cfg.instant, "instant", false, "skip first-boot questions and use the trial account")
+	flag.BoolVar(&cfg.instant, "instant", false, "skip first-boot questions and use the quick-start account (omarchy / omarchy)")
 	flag.BoolVar(&cfg.portable, "portable", false, "run entirely from data and payload folders beside the executable")
 	var forwards forwardList
 	flag.Var(&forwards, "forward", "forward a Windows port into Omarchy: tcp:2222:22 (local), tcp:192.168.1.5:8080:80 (LAN); repeatable")
@@ -77,8 +80,9 @@ func main() {
 	flag.BoolVar(&cfg.lanPublic, "lan-public", false, "allow explicitly selected LAN forwards on public networks")
 	sshPort := flag.Int("ssh", 0, "forward this Windows loopback port to Omarchy's sshd and start sshd for the session")
 	openAbout := flag.Bool("about", false, "show version information and check for updates")
+	usbSelection := flag.Bool("usb-selection", false, "internal: edit startup USB selection for an explicit data folder")
 	openDevices := flag.Bool("devices", false, "manage USB devices in the running VM")
-	recoveryAction := flag.String("recovery", "", "open backup, restore, snapshots, portable-create, reset, move, or uninstall controls")
+	recoveryAction := flag.String("recovery", "", "open backup, restore, snapshots, portable-create, reset, move, uninstall, or install-omarchy controls")
 	uninstall := flag.Bool("uninstall", false, "remove this Try Omarchy installation: shortcuts, the Apps & features entry, and the data folder")
 	uninstallFinish := flag.Bool("uninstall-finish", false, "internal: delete the data folder after the launcher inside it exits")
 	reclaim := flag.Bool("reclaim", false, "ask the running Omarchy to zero its free space so the disk file shrinks after shutdown, then exit")
@@ -100,6 +104,7 @@ func main() {
 	runtimeSumsSHA256 := flag.String("runtime-sums-sha256", defaultRuntimeSumsSHA256,
 		"trusted SHA256 digest of the runtime release's SHA256SUMS file")
 	enableWhp := flag.Bool("enable-whp", false, "internal: elevated helper that enables the Windows Hypervisor Platform")
+	disableFastStartupFlag := flag.Bool("disable-fast-startup", false, "internal: elevated helper that turns off Windows Fast Startup before installing Omarchy next to Windows")
 	applyLauncherUpdateFlag := flag.Bool("apply-launcher-update", false, "internal: apply a staged launcher update")
 	applyLauncherRollbackFlag := flag.Bool("apply-launcher-rollback", false, "internal: restore the previous launcher")
 	updateWaitPID := flag.Int("update-wait-pid", 0, "internal: process to wait for before replacing the launcher")
@@ -109,35 +114,51 @@ func main() {
 		runAbout()
 		return
 	}
+
 	if *openDevices {
 		if err := runUSBDeviceUI(); err != nil {
-			fatal("Could not open USB devices: %v", err)
+			fatal(uiTextWith("fatal.usb.open", map[string]string{"error": err.Error()}))
 		}
 		return
 	}
 	if *uninstall {
 		if *recoveryAction != "" && *recoveryAction != "uninstall" {
-			fatal("Choose one recovery action: backup, restore, reset, or uninstall.")
+			fatal(uiTextWith("fatal.cli.recovery_action", map[string]string{"actions": "backup, restore, reset, uninstall"}))
 		}
 		*recoveryAction = "uninstall"
 	}
 	maintenance := *backupPath != "" || *restorePath != "" || *recoveryAction != ""
-	if *recoveryAction != "" && (*recoveryAction != "backup" && *recoveryAction != "restore" && *recoveryAction != "reset" && *recoveryAction != "uninstall" && *recoveryAction != "move" && *recoveryAction != "move-cleanup" && *recoveryAction != "snapshots" && *recoveryAction != "portable-create" || *backupPath != "" || *restorePath != "") {
-		fatal("Choose one recovery action: backup, restore, snapshots, portable-create, reset, move, or uninstall.")
+	installWalkthrough := *recoveryAction == "install-omarchy"
+	if *recoveryAction != "" && (*recoveryAction != "backup" && *recoveryAction != "restore" && *recoveryAction != "reset" && *recoveryAction != "uninstall" && *recoveryAction != "move" && *recoveryAction != "move-cleanup" && *recoveryAction != "snapshots" && *recoveryAction != "portable-create" && *recoveryAction != "install-omarchy" || *backupPath != "" || *restorePath != "") {
+		fatal(uiTextWith("fatal.cli.recovery_action", map[string]string{"actions": "backup, restore, snapshots, portable-create, reset, move, uninstall, install-omarchy"}))
 	}
-	if maintenance && (*backupPath != "" && *restorePath != "" || cfg.portable && !portableRecoveryAllowed(*recoveryAction, *backupPath, *restorePath) || cfg.fresh || *openSettings || *diagnostics || *enableWhp || *applyLauncherUpdateFlag || *applyLauncherRollbackFlag) {
-		fatal("Use one recovery action on a stopped installation, without other maintenance options.")
+	if maintenance && (*backupPath != "" && *restorePath != "" || cfg.portable && !portableRecoveryAllowed(*recoveryAction, *backupPath, *restorePath) || cfg.fresh || *openSettings || *diagnostics || *enableWhp || *disableFastStartupFlag || *applyLauncherUpdateFlag || *applyLauncherRollbackFlag) {
+		fatal(uiText("fatal.cli.one_action"))
 	}
 	explicitFlags := map[string]bool{}
 	flag.Visit(func(f *flag.Flag) { explicitFlags[f.Name] = true })
+	if *usbSelection {
+		if !explicitFlags["dir"] || cfg.portable || *openDevices || maintenance || *openSettings || *uninstall {
+			fatal(uiText("fatal.cli.usb_selection"))
+		}
+		qemu := filepath.Join(cfg.dir, "runtime", "bin", "qemu-system-x86_64w.exe")
+		external := filepath.Join(cfg.winqEmu, "bin", "qemu-system-x86_64w.exe")
+		if info, e := os.Stat(external); e == nil && info.Mode().IsRegular() {
+			qemu = external
+		}
+		if err := runUSBSelectionUI(cfg.dir, qemu); err != nil {
+			fatal(uiTextWith("fatal.usb.choose", map[string]string{"error": err.Error()}))
+		}
+		return
+	}
 	if explicitFlags["recovery"] && *recoveryAction == "" {
-		fatal("Choose a recovery action: backup, restore, or reset.")
+		fatal(uiTextWith("fatal.cli.recovery_action_maintenance", map[string]string{"actions": "backup, restore, reset"}))
 	}
 	if explicitFlags["backup"] && strings.TrimSpace(*backupPath) == "" || explicitFlags["restore"] && strings.TrimSpace(*restorePath) == "" {
-		fatal("Provide a backup filename with -backup or -restore.")
+		fatal(uiText("fatal.cli.backup_filename"))
 	}
 	if *restorePath != "" && !explicitFlags["dir"] {
-		fatal("Use -dir with a new data folder when restoring. Existing installations are never replaced.")
+		fatal(uiText("fatal.cli.restore_dir"))
 	}
 	if strings.TrimSpace(*runtimeRelease) == "" {
 		*runtimeRelease = *release
@@ -151,9 +172,12 @@ func main() {
 	if *enableWhp {
 		os.Exit(runDismEnable())
 	}
+	if *disableFastStartupFlag {
+		runDisableFastStartupHelper()
+	}
 	if *firewallPlan != "" {
 		if err := applyEncodedLANFirewall(*firewallPlan); err != nil {
-			errorBox(err.Error())
+			errorBox(uiTextWith("lan.error.firewall", map[string]string{"error": err.Error()}))
 			os.Exit(1)
 		}
 		return
@@ -178,10 +202,10 @@ func main() {
 		// lifecycle port: recovery tools must remain usable before boot.
 		guard, err := acquireLauncherMenu(defaultDataDirectoryName)
 		if err != nil {
-			fatal("Cannot open the launcher: %v", err)
+			fatal(uiTextWith("fatal.launcher.open", map[string]string{"error": err.Error()}))
 		}
 		if guard == 0 {
-			infoBox("The Try Omarchy launcher is already open. Use its Launch Omarchy button to continue.")
+			infoBox(uiText("setup.already_open"))
 			return
 		}
 		releaseMenu = func() {
@@ -196,13 +220,13 @@ func main() {
 	// Direct starts bind before the first-run location prompt. The menu has its
 	// own guard above. Settings, diagnostics, and update helpers remain usable
 	// while the VM owns the lifecycle port.
-	if !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag {
+	if !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag && !installWalkthrough {
 		runLifecycleListener()
 	}
 	if !cfg.portable {
-		resolved, moveErr := prepareMovedLocation(cfg.dir, !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag)
+		resolved, moveErr := prepareMovedLocation(cfg.dir, !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag && !installWalkthrough)
 		if moveErr != nil {
-			fatal("Try Omarchy cannot finish resolving an installation move:\n\n%v", moveErr)
+			fatal(uiTextWith("fatal.move.resolve", map[string]string{"error": moveErr.Error()}))
 		}
 		if !pathsEqual(resolved, cfg.dir) {
 			cfg.dir = resolved
@@ -212,14 +236,14 @@ func main() {
 	if cfg.portable {
 		self, err := os.Executable()
 		if err != nil {
-			fatal("Cannot find the portable launcher: %v", err)
+			fatal(uiTextWith("fatal.launcher.portable_missing", map[string]string{"error": err.Error()}))
 		}
 		root := filepath.Dir(self)
 		cfg.dir = filepath.Join(root, "data")
 		cfg.payloadDir = filepath.Join(root, "payload")
 		removeDataOnCancel, err = dataDirectoryEmpty(cfg.dir)
 		if err != nil {
-			fatal("Try Omarchy cannot inspect its portable data location: %v", err)
+			fatal(uiTextWith("fatal.location.portable_inspect", map[string]string{"error": err.Error()}))
 		}
 		// WHP is a property of this Windows host, so its restart marker must
 		// not travel to another PC with the USB.
@@ -230,33 +254,35 @@ func main() {
 			defaultDir, cfg.dir, explicitFlags["dir"], promptForLocation, chooseFirstRunDataDirectory,
 		)
 		if err != nil {
-			fatal("Try Omarchy cannot resolve its data location: %v\n\nIf a saved location is damaged, fix or delete %s, then open Try Omarchy again.", err, dataLocationPointerPath(defaultDir))
+			fatal(uiTextWith("fatal.location.resolve", map[string]string{"error": err.Error(), "file": dataLocationPointerPath(defaultDir)}))
 		}
 		if !proceed {
 			return
 		}
 		if !explicitFlags["dir"] && !pathsEqual(selected, defaultDir) {
 			if err := validateStandardDataDrive(selected); err != nil {
-				fatal("The saved Try Omarchy data location is unavailable or incompatible:\n\n%s\n\n%v\n\nReconnect the drive or delete %s to choose another location.", selected, err, dataLocationPointerPath(defaultDir))
+				fatal(uiTextWith("fatal.location.unavailable", map[string]string{"path": selected, "error": err.Error(), "file": dataLocationPointerPath(defaultDir)}))
 			}
 		}
 		cfg.dir = selected
 		cfg.hostDir = cfg.dir
 		removeDataOnCancel, err = dataDirectoryEmpty(cfg.dir)
 		if err != nil {
-			fatal("Try Omarchy cannot inspect its data location: %v", err)
+			fatal(uiTextWith("fatal.location.inspect", map[string]string{"error": err.Error()}))
 		}
 		if *applyLauncherUpdateFlag || *applyLauncherRollbackFlag {
 			if err := applyLauncherUpdate(cfg.dir, *updateWaitPID, *updateRestartArgs, *applyLauncherRollbackFlag); err != nil {
-				errorBox("Try Omarchy could not finish applying its update.\n\n" + err.Error())
+				errorBox(uiTextWith("update.error.apply", map[string]string{"error": err.Error()}))
 				os.Exit(1)
 			}
 			return
 		}
 	}
-	if !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag {
+	// The install walkthrough can inspect a running guest and ask its owner to
+	// shut down. It must not take over lifecycle or interrupted-update recovery.
+	if !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag && !installWalkthrough {
 		if err := recoverCheckpointRollback(cfg.dir); err != nil {
-			fatal("Cannot finish snapshot recovery: %v", err)
+			fatal(uiTextWith("fatal.snapshot_recovery", map[string]string{"error": err.Error()}))
 		}
 	}
 	// Settings and diagnostics may be opened from the running app's tray.
@@ -264,7 +290,7 @@ func main() {
 	if !maintenance && !*openSettings && !*diagnostics {
 		restartArgs, err := encodeRestartArgs(os.Args[1:])
 		if err != nil {
-			fatal("Could not preserve launcher arguments for updates: %v", err)
+			fatal(uiTextWith("fatal.update_arguments", map[string]string{"error": err.Error()}))
 		}
 		if rollingBack, recoverErr := recoverLauncherUpdate(cfg.dir, restartArgs); recoverErr != nil {
 			logf("launcher update recovery: %v", recoverErr)
@@ -283,27 +309,27 @@ func main() {
 	if maintenance {
 		var err error
 		if *backupPath != "" {
-			beginRecoveryProgress("Creating VM backup. This may take a while...")
-			err = writeVMBackupProgress(cfg.dir, *backupPath, recoveryProgress("Backing up"))
+			beginRecoveryProgress(uiText("recovery.backup.status"))
+			err = writeVMBackupProgress(cfg.dir, *backupPath, recoveryProgress(recoveryBackingUp))
 		} else {
-			beginRecoveryProgress("Verifying and restoring VM backup...")
-			err = restoreVMBackupProgress(*restorePath, cfg.dir, recoveryProgress("Restoring"))
+			beginRecoveryProgress(uiText("recovery.restore.status"))
+			err = restoreVMBackupProgress(*restorePath, cfg.dir, recoveryProgress(recoveryRestoring))
 		}
 		uiDone()
 		if errors.Is(err, errSetupCancelled) {
 			return
 		}
 		if err != nil {
-			errorBox("Try Omarchy could not finish the backup or restore.\n\n" + err.Error())
+			errorBox(uiTextWith("recovery.error", map[string]string{"error": err.Error()}))
 			os.Exit(1)
 		}
 		if *backupPath != "" {
-			infoBox("Backup saved to:\n\n" + *backupPath + "\n\nIt contains your guest files and settings. Keep it private. Shared Windows folders are not included.")
+			infoBox(uiTextWith("recovery.backup.done", map[string]string{"path": *backupPath}))
 		} else {
 			if err := createRestoredLaunchers(cfg.dir); err != nil {
-				infoBox("Backup restored to:\n\n" + cfg.dir + "\n\nStartup shortcuts could not be created: " + err.Error() + "\n\nStart Try Omarchy with -dir pointing to this folder. Your original installation was not changed.")
+				infoBox(uiTextWith("recovery.restore.done_no_shortcuts", map[string]string{"path": cfg.dir, "error": err.Error()}))
 			} else {
-				infoBox("Backup restored to:\n\n" + cfg.dir + "\n\nOpen Start Omarchy in that folder to use this copy. Sign-in launch is off for the restored copy; enable it in Settings if wanted. Your original installation and shortcuts were not changed.")
+				infoBox(uiTextWith("recovery.restore.done", map[string]string{"path": cfg.dir}))
 			}
 		}
 		return
@@ -314,10 +340,10 @@ func main() {
 	if *diagnostics {
 		bundle, err := writeDiagnostics(cfg.dir, launcherFacts(cfg))
 		if err != nil {
-			errorBox("Try Omarchy could not write the diagnostics bundle.\n\n" + err.Error())
+			errorBox(uiTextWith("diagnostics.error", map[string]string{"error": err.Error()}))
 			os.Exit(1)
 		}
-		infoBox("Diagnostics written to:\n\n" + bundle + "\n\nIt contains redacted settings, recent logs, and machine facts, but no disk images or home-folder files. Review it before attaching it to an issue because logs can still contain local details.")
+		infoBox(uiTextWith("diagnostics.done", map[string]string{"path": bundle}))
 		return
 	}
 
@@ -327,12 +353,12 @@ func main() {
 			if showLauncher {
 				self, err := os.Executable()
 				if err != nil {
-					fatal("Cannot find the launcher: %v", err)
+					fatal(uiTextWith("fatal.launcher.missing", map[string]string{"error": err.Error()}))
 				}
 				args := append(append([]string{}, os.Args[1:]...), "-dir", cfg.dir, "-start")
 				cmd := exec.Command(self, args...)
 				if err := cmd.Start(); err != nil {
-					fatal("Could not start Omarchy: %v", err)
+					fatal(uiTextWith("fatal.start", map[string]string{"error": err.Error()}))
 				}
 				procAllowSetForeground.Call(uintptr(cmd.Process.Pid))
 				_ = cmd.Process.Release()
@@ -344,12 +370,12 @@ func main() {
 	var desktopErr error
 	cfg.desktop, desktopErr = loadDesktopPreferences(cfg.dir)
 	if desktopErr != nil {
-		fatal("Cannot read device and update preferences: %v", desktopErr)
+		fatal(uiTextWith("fatal.preferences.desktop", map[string]string{"error": desktopErr.Error()}))
 	}
 
 	cfg.audioDevices, desktopErr = loadLaunchAudioPreferences(cfg.dir)
 	if desktopErr != nil {
-		fatal("Cannot read audio preferences: %v", desktopErr)
+		fatal(uiTextWith("fatal.preferences.audio", map[string]string{"error": desktopErr.Error()}))
 	}
 
 	// settings.json holds the rows the settings window edits; explicit flags
@@ -361,25 +387,25 @@ func main() {
 			uiDone()
 			return
 		}
-		fatal("Try Omarchy cannot read its settings: %v\n\nFix or delete the file and open Try Omarchy again.", err)
+		fatal(uiTextWith("fatal.settings.read", map[string]string{"error": err.Error()}))
 	}
 	if err := applySettings(cfg, userSettings, explicitFlags, &forwards, sshKeyPath); err != nil {
-		fatal("Try Omarchy cannot use its settings: %v", err)
+		fatal(uiTextWith("fatal.settings.use", map[string]string{"error": err.Error()}))
 	}
 	resourcePrefs, err := loadResourcePreferences(cfg.dir)
 	if err != nil {
-		fatal("Cannot read resource preferences: %v", err)
+		fatal(uiTextWith("fatal.preferences.resources", map[string]string{"error": err.Error()}))
 	}
 	if explicitFlags["resource-profile"] {
 		resourcePrefs.Profile = *resourceProfileFlag
 	}
 	if err := validateResourceProfile(resourcePrefs.Profile); err != nil {
-		fatal("%v", err)
+		fatal(uiTextWith("fatal.invalid_setting", map[string]string{"error": err.Error()}))
 	}
 	if explicitFlags["render"] {
 		mode, err := parseRenderMode(*renderFlag)
 		if err != nil {
-			fatal("%v", err)
+			fatal(uiTextWith("fatal.invalid_setting", map[string]string{"error": err.Error()}))
 		}
 		cfg.renderMode = mode
 	}
@@ -388,7 +414,7 @@ func main() {
 	}
 	cfg.noGpu = cfg.renderMode == renderCPU
 	if cfg.memOverrideMiB != 0 && (cfg.memOverrideMiB < minimumGuestMemoryMiB || cfg.memOverrideMiB > maximumGuestMemoryMiB) {
-		fatal("-memory must be between %d and %d MiB.", minimumGuestMemoryMiB, maximumGuestMemoryMiB)
+		fatal(uiTextWith("fatal.cli.memory_range", map[string]string{"min": fmt.Sprint(minimumGuestMemoryMiB), "max": fmt.Sprint(maximumGuestMemoryMiB)}))
 	}
 	if !explicitFlags["disk-size"] {
 		storage, err := loadStorageWithRepair(cfg.dir)
@@ -397,27 +423,27 @@ func main() {
 				uiDone()
 				return
 			}
-			fatal("Cannot read storage preferences: %v", err)
+			fatal(uiTextWith("fatal.preferences.storage", map[string]string{"error": err.Error()}))
 		}
 		cfg.diskGiB = storage.DiskGiB
 	}
 	if _, err := requestedDiskMiB(24*1024, cfg.diskGiB, cfg.portable); err != nil {
-		fatal("%v", err)
+		fatal(uiTextWith("fatal.invalid_setting", map[string]string{"error": err.Error()}))
 	}
 	home, _ := os.UserHomeDir()
 	sshKey, err := resolveSSHPreset(&forwards, *sshPort, *sshKeyPath, home, explicitFlags["ssh-key"])
 	if err != nil {
-		fatal("%v.", err)
+		fatal(uiTextWith("fatal.ssh", map[string]string{"error": err.Error()}))
 	}
 	cfg.forwards = forwards
 	if !explicitFlags["forward"] && !explicitFlags["ssh"] && len(userSettings.ForwardAdapters) > 0 {
 		adapters, err := availableLANAdapters()
 		if err != nil {
-			fatal("Could not read network adapters: %v", err)
+			fatal(uiTextWith("fatal.lan.adapters", map[string]string{"error": err.Error()}))
 		}
 		cfg.forwards, err = resolveForwardAdapters(forwards, userSettings.ForwardAdapters, adapters)
 		if err != nil {
-			fatal("Could not prepare LAN forwarding: %v", err)
+			fatal(uiTextWith("fatal.lan.prepare", map[string]string{"error": err.Error()}))
 		}
 	}
 	cfg.sshKey = sshKey
@@ -444,26 +470,26 @@ func main() {
 	}
 	payloadsRolledBack, err := rollbackPendingPayloadUpdates(cfg.dir)
 	if err != nil {
-		fatal("Could not recover the previous Omarchy files after an interrupted update: %v", err)
+		fatal(uiTextWith("fatal.update.recover", map[string]string{"error": err.Error()}))
 	}
 	if payloadsRolledBack {
 		if err := pinRestoredPayloads(cfg.dir, release, sumsSHA256, runtimeRelease, runtimeSumsSHA256); err != nil {
-			fatal("Could not use the restored Omarchy files: %v", err)
+			fatal(uiTextWith("fatal.update.restored", map[string]string{"error": err.Error()}))
 		}
 		logf("using restored guest and runtime for this recovery launch")
 	}
 	snapshotRecovery, err := pinCheckpointBoot(cfg.dir, explicitFlags, release, sumsSHA256, runtimeRelease, runtimeSumsSHA256)
 	if err != nil {
-		fatal("Could not prepare the restored snapshot: %v", err)
+		fatal(uiTextWith("fatal.snapshot_restored", map[string]string{"error": err.Error()}))
 	}
 	completeAtStart := completeInstallExists(cfg.dir, filepath.Base(cfg.disk))
 	needsProvisioning := cfg.fresh || !completeAtStart
 	configureSetupCancellation(!completeAtStart && removeDataOnCancel)
 	if err := os.MkdirAll(cfg.vmDir, 0o755); err != nil {
-		fatal("Could not create the Omarchy data directory: %v", err)
+		fatal(uiTextWith("fatal.data_directory", map[string]string{"error": err.Error()}))
 	}
 	if err := os.MkdirAll(cfg.hostDir, 0o755); err != nil {
-		fatal("Could not create the Windows host-state directory: %v", err)
+		fatal(uiTextWith("fatal.host_state_directory", map[string]string{"error": err.Error()}))
 	}
 	if shellLog, _ := os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); shellLog != nil {
 		openLog(shellLog)
@@ -478,12 +504,12 @@ func main() {
 	// The splash IS the launch experience: it appears here and stays on screen
 	// through every phase until the Omarchy window itself is visible (the
 	// title enforcer closes it). Setup must never look like nothing happened.
-	getUI().setStatus("Starting Try Omarchy...")
+	getUI().setStatus("%s", uiText("status.starting_launcher"))
 	if err := configureRecommendedSharedFolder(cfg, &userSettings, settingsFile, home, explicitFlags["share"]); err != nil {
 		if finishSetupCancellation(cfg, err) {
 			return
 		}
-		fatal("Could not set up the recommended shared folder: %v", err)
+		fatal(uiTextWith("fatal.share.recommended", map[string]string{"error": err.Error()}))
 	}
 	if finishSetupCancellation(cfg, checkSetupCancelled()) {
 		return
@@ -492,10 +518,10 @@ func main() {
 		validated, shareErr := validateWindowsSharedFolder(cfg.share, cfg.dir, home)
 		if shareErr != nil {
 			if explicitFlags["share"] {
-				fatal("Cannot share %s: %v", cfg.share, shareErr)
+				fatal(uiTextWith("fatal.share.folder", map[string]string{"folder": cfg.share, "error": shareErr.Error()}))
 			}
 			logf("shared folder disabled for this launch: %v", shareErr)
-			infoBox("The saved shared folder is unavailable and will not be shared this time. Omarchy will still start.\n\n" + shareErr.Error() + "\n\nChoose another folder from Settings.")
+			infoBox(uiTextWith("share.unavailable", map[string]string{"error": shareErr.Error()}))
 			cfg.share = ""
 		} else {
 			cfg.share = validated
@@ -524,7 +550,7 @@ func main() {
 		if finishSetupCancellation(cfg, err) {
 			return
 		}
-		fatal("Could not preserve the portable disk before updating:\n\n%v", err)
+		fatal(uiTextWith("fatal.portable_disk_update", map[string]string{"error": err.Error()}))
 	}
 
 	// Machine setup the old bootstrap.ps1 handled: hypervisor on (may walk the
@@ -558,7 +584,7 @@ func main() {
 			root := filepath.Join(cfg.dir, "runtime")
 			info, err := os.Stat(filepath.Join(root, "bin", qemuExe))
 			if err != nil || !info.Mode().IsRegular() {
-				fatal("The restored graphics engine is incomplete. Reinstall Try Omarchy or use a working stock QEMU installation.")
+				fatal(uiText("fatal.runtime.incomplete"))
 			}
 			gpuRoot = root
 		} else {
@@ -570,9 +596,9 @@ func main() {
 				logf("runtime setup failed: %v", err)
 				if !haveStock {
 					if cfg.portable {
-						fatal("Setting up the portable graphics engine failed: %v\n\nThe USB payload may be missing or damaged.", err)
+						fatal(uiTextWith("fatal.runtime.portable", map[string]string{"error": err.Error()}))
 					}
-					fatal("Downloading the graphics engine failed: %v\n\n%s", err, setupFailureHelp(err))
+					fatal(uiTextWith("fatal.runtime.download", map[string]string{"error": err.Error(), "help": setupFailureHelp(err)}))
 				}
 			} else {
 				gpuRoot = root
@@ -602,7 +628,7 @@ func main() {
 	if payloadsRolledBack {
 		ready, err := installReceiptMatches(cfg.guestDir, *release, *sumsSHA256, installedGuestArtifacts)
 		if err != nil || !ready {
-			fatal("The restored Omarchy image is incomplete. Reinstall Try Omarchy to recover it.")
+			fatal(uiText("fatal.image.incomplete"))
 		}
 	} else {
 		if err := ensureGuest(cfg, *release, *sumsSHA256); err != nil {
@@ -610,24 +636,24 @@ func main() {
 				return
 			}
 			if cfg.portable {
-				fatal("Setting up portable Omarchy failed: %v\n\nThe USB payload may be missing or damaged.", err)
+				fatal(uiTextWith("fatal.image.portable", map[string]string{"error": err.Error()}))
 			}
-			fatal("Setting up the Omarchy image failed: %v\n\n%s", err, setupFailureHelp(err))
+			fatal(uiTextWith("fatal.image.setup", map[string]string{"error": err.Error(), "help": setupFailureHelp(err)}))
 		}
 	}
 	if cfg.share != "" && !cfg.supportsSharing {
 		logf("shared folder disabled for this launch: selected QEMU has no virtio-9p")
-		infoBox("The shared folder cannot be attached with the available graphics engine. Omarchy will start without it this time.\n\nTry again when the WINQ-EMU runtime is available.")
+		infoBox(uiText("share.unsupported_runtime"))
 		cfg.share = ""
 	}
 
 	specData, err := os.ReadFile(filepath.Join(cfg.guestDir, "build-spec.json"))
 	if err != nil {
-		fatal("Cannot read build-spec.json: %v", err)
+		fatal(uiTextWith("fatal.build_spec.read", map[string]string{"error": err.Error()}))
 	}
 	var spec buildSpec
 	if err := json.Unmarshal(specData, &spec); err != nil {
-		fatal("Cannot parse build-spec.json: %v", err)
+		fatal(uiTextWith("fatal.build_spec.parse", map[string]string{"error": err.Error()}))
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
 	cmdline := windowedKernelCmdline(spec)
@@ -646,7 +672,7 @@ func main() {
 		if finishSetupCancellation(cfg, err) {
 			return
 		}
-		fatal("Preparing the writable disk failed: %v", err)
+		fatal(uiTextWith("fatal.disk", map[string]string{"error": err.Error()}))
 	}
 	// From here onward the installation is complete. A last-second cancel may
 	// stop this launch, but must not remove the working VM it just finished.
@@ -663,17 +689,17 @@ func main() {
 		return
 	}
 	profile := effectiveResourceProfile(resourcePrefs.Profile, cfg.cpuOverride, cfg.memOverrideMiB)
-	getUI().setStatus("Measuring available resources...")
+	getUI().setStatus("%s", uiText("status.measuring_resources"))
 	host := measureHostResources(profile == resourceMaximum)
 	allocation, err := planGuestResources(profile, host, cfg.useGpu, cfg.cpuOverride, cfg.memOverrideMiB,
 		explicitFlags["cpus"], explicitFlags["memory"])
 	if err != nil {
-		fatal("Cannot allocate resources: %v", err)
+		fatal(uiTextWith("fatal.resources", map[string]string{"error": err.Error()}))
 	}
 	cfg.cpus, cfg.memMiB, cfg.hostTotalMiB = allocation.CPUs, allocation.MemoryMiB, host.TotalMiB
 	logf("resources: profile=%s, %d of %d logical processors, %d MiB guest RAM; Windows available=%d MiB, CPU sample known=%t busy=%.1f%%",
 		profile, cfg.cpus, host.LogicalCPUs, cfg.memMiB, host.AvailableMiB, host.CPUKnown, host.CPUBusy*100)
-	getUI().setStatus("Starting Omarchy...")
+	getUI().setStatus("%s", uiText("status.starting_omarchy"))
 	stopTray := startTray(cfg)
 	defer stopTray()
 
@@ -697,6 +723,7 @@ func main() {
 	reclaimDir.Store(&cfg.dir)
 	reclaimSupported.Store(cfg.diskFormat == "raw")
 	go runGuestAgent(cfg.dir)
+	go watchKeyboardPreferences(cfg.dir)
 	go runWinKeyHook()
 	go runWinKeyQmp()
 	go runTitleEnforcer(cfg.dir, cfg.fullscreen, cfg.fullscreenDisplay)
@@ -710,18 +737,29 @@ func main() {
 	runClipboardBridge()
 	runCameraBridge(cfg.desktop)
 	runHelloBridge()
+	cfg.followHostTimeZone = *timeZoneFlag != "keep" && guestAcceptsTimeZone(spec)
+	if cfg.followHostTimeZone {
+		stopTimeZone := startTimeZoneBridge(func() string {
+			if *timeZoneFlag != "" {
+				return *timeZoneFlag
+			}
+			return ianaZoneForWindows(hostTimeZoneKey())
+		})
+		defer stopTimeZone()
+	}
 	if audioRuntimeSupportsLiveRouting(cfg.qemu) {
 		runAudioBridge(cfg.dir, cfg.qemu, cfg.desktop.MicrophoneDisabled)
 	}
 
 	if err := checkForwardBindings(cfg.forwards); err != nil {
-		fatal("Could not prepare port forwarding:\n\n%v", err)
+		fatal(uiTextWith("fatal.forwarding", map[string]string{"error": err.Error()}))
 	}
 	if err := ensureLANFirewall(cfg); err != nil {
-		fatal("Could not prepare LAN forwarding:\n\n%v", err)
+		fatal(uiTextWith("fatal.lan.forwarding", map[string]string{"error": err.Error()}))
 	}
 	cfg.audio = "sdl"
 
+	startBootCurtain(cfg)
 	for relaunch := true; relaunch; {
 		relaunch = supervise(cfg, cmdline)
 	}
@@ -775,22 +813,27 @@ func supervise(cfg *config, cmdline string) bool {
 		logf("booting - %s (attempt %d)", mode, attempt)
 		pendingReboot.Store(false)
 		guestReady.Store(false)
+		guestBootStarted()
 		controlDir, err := prepareQMPControl()
 		if err != nil {
-			fatal("Cannot prepare private VM controls: %v", err)
+			fatal(uiTextWith("fatal.vm_controls", map[string]string{"error": err.Error()}))
 		}
 		cfg.qmpDir = controlDir
 		// Guest picker and a separate Settings process can change these files
 		// while QEMU runs. A guest reboot must use the latest saved choices.
 		cfg.audioDevices, err = loadLaunchAudioPreferences(cfg.dir)
 		if err != nil {
-			fatal("Cannot reload audio preferences for this boot: %v", err)
+			fatal(uiTextWith("fatal.preferences.audio_reload", map[string]string{"error": err.Error()}))
 		}
 		// Local forwards changed while running (forward_live.go) carry into a
 		// reboot instead of reverting to the launch list.
 		cfg.forwards = forwardsForBoot(cfg.launchForwards)
-		proc = exec.Command(cfg.qemu, buildQemuArgs(cfg, cmdline)...)
 		audioSelection := cfg.audio == "sdl" && audioRuntimeSupportsSelection(cfg.qemu)
+		if cfg.audio == "sdl" {
+			cfg.audioRates = launchAudioSampleRates(cfg.audioDevices, audioSelection, cfg.desktop.MicrophoneDisabled)
+			logf("SDL audio sample rates: output=%d Hz input=%d Hz", cfg.audioRates.Output, cfg.audioRates.Input)
+		}
+		proc = exec.Command(cfg.qemu, buildQemuArgs(cfg, cmdline)...)
 		if !audioSelection && (cfg.audioDevices.Output != "" || (!cfg.desktop.MicrophoneDisabled && cfg.audioDevices.Input != "")) {
 			logf("Selected audio devices require the updated SDL runtime; this attempt uses Windows defaults")
 		}
@@ -815,7 +858,7 @@ func supervise(cfg *config, cmdline string) bool {
 			defer ef.Close()
 		}
 		if err := proc.Start(); err != nil {
-			fatal("QEMU failed to start: %v", err)
+			fatal(uiTextWith("fatal.qemu.start", map[string]string{"error": err.Error()}))
 		}
 		qemuPid.Store(uint32(proc.Process.Pid))
 		exited := make(chan error, 1)
@@ -848,7 +891,7 @@ func supervise(cfg *config, cmdline string) bool {
 					logf("QEMU startup failure (attempt %d, %s):\n%s", attempt, mode, detail)
 				}
 				if forwardStartupProblem(cfg.vmDir) {
-					fatal("A configured port could not be opened. Another application may be using it, or the network adapter changed. Update the forward in Settings and try again.")
+					fatal(uiText("fatal.qemu.port"))
 				}
 				// The host refused nested virtualization for the partition
 				// (issue #19). Nothing else about the launch is wrong, so
@@ -859,7 +902,7 @@ func supervise(cfg *config, cmdline string) bool {
 						cfg.irqchipOff = true
 						break probe
 					}
-					fatal("Windows refused to start the virtual machine: the hypervisor does not allow nested virtualization on this PC.\n\nThis is a known problem with some Intel Core Ultra laptops and machines running the full Hyper-V feature set. Details are in %s\\qemu-stderr.log.", cfg.vmDir)
+					fatal(uiTextWith("fatal.qemu.nested", map[string]string{"folder": cfg.vmDir}))
 				}
 				// SDL supports capture and playback. Retain playback-only
 				// DirectSound, then silent operation, for unavailable devices.
@@ -883,7 +926,7 @@ func supervise(cfg *config, cmdline string) bool {
 						logf("QEMU exited at startup - low memory, retrying with %d MiB", cfg.memMiB)
 						break probe
 					}
-					fatal("There isn't enough free memory to start Omarchy right now.\n\nClose some apps and open Try Omarchy again.")
+					fatal(uiText("fatal.memory"))
 				}
 				// Broken host GL (remote sessions, ancient drivers) kills the
 				// gl=on display the same way; same binary, CPU args, still up.
@@ -909,7 +952,7 @@ func supervise(cfg *config, cmdline string) bool {
 					cfg.useGpu = false
 					break probe
 				}
-				fatal("QEMU exited at startup - see %s\\qemu-stderr.log.", cfg.vmDir)
+				fatal(uiTextWith("fatal.qemu.exited", map[string]string{"folder": cfg.vmDir}))
 			case <-time.After(wait):
 				wait = 3 * time.Second
 				qmp = qmpConnect(qmpSupPort, 8*time.Second)
@@ -917,6 +960,22 @@ func supervise(cfg *config, cmdline string) bool {
 		}
 		if qmp != nil {
 			guestUp.Store(true)
+			if pref, e := loadUSBPreferences(cfg.dir); e != nil {
+				logf("USB choice not applied: %v", e)
+			} else if pref.Enabled {
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				client, e := dialQMPControl(ctx, qmpToolsPort)
+				if e == nil {
+					e = (usbBroker{client}).AttachSaved(ctx, pref)
+					client.Close()
+				}
+				cancel()
+				if e != nil {
+					logf("USB choice not applied: %v", e)
+				} else {
+					logf("saved USB device attached")
+				}
+			}
 			// QMP answers while the guest is kernel-panicked, and a graphics
 			// runtime can start QMP before failing later in guest boot. Keep all
 			// update components rollback-capable until the in-guest readiness
@@ -937,7 +996,7 @@ func supervise(cfg *config, cmdline string) bool {
 	if setupCancelled() {
 		return false
 	}
-	fatal("QEMU failed to come up healthy after %d attempts.", maxLaunchAttempts)
+	fatal(uiTextWith("fatal.qemu.unhealthy", map[string]string{"count": fmt.Sprint(maxLaunchAttempts)}))
 	return false
 }
 
@@ -951,7 +1010,20 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 	defer ticker.Stop()
 	procDown := false
 	movedBootPending := false
+	// Cancel in the setup window, which stays up while Omarchy boots, shuts
+	// the guest down. Early in its boot the guest misses the power button, so
+	// it is pressed again once Omarchy reports that it is up; stopping it
+	// outright could interrupt a first boot's account setup. A guest that
+	// still has not shut down is stopped.
+	var stopDeadline <-chan time.Time
+	pressAgainWhenUp := false
 	for reason == "" && !procDown {
+		if pressAgainWhenUp && bootAnnouncedReady.Load() {
+			pressAgainWhenUp = false
+			logf("guest is up - asking it again to shut down")
+			qmp.writeLine(`{"execute":"system_powerdown"}`)
+			stopDeadline = time.After(30 * time.Second)
+		}
 		if guestReady.Swap(false) {
 			commitLauncherUpdate(cfg.dir)
 			commitPayloadUpdates(cfg.dir)
@@ -981,6 +1053,25 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 			if r := shutdownReason(line); r != "" {
 				reason = r
 			}
+		case <-setupCancelWake:
+			if stopDeadline == nil {
+				logf("startup cancelled - shutting the guest down")
+				if err := qmp.writeLine(`{"execute":"system_powerdown"}`); err != nil {
+					procDown = waitExit(exited, 15*time.Second, cfg)
+					break
+				}
+				pressAgainWhenUp = !bootAnnouncedReady.Load()
+				wait := 30 * time.Second
+				if pressAgainWhenUp {
+					wait = 90 * time.Second
+				}
+				stopDeadline = time.After(wait)
+			}
+		case <-stopDeadline:
+			logf("guest did not shut down after the cancel - stopping it")
+			qmp.writeLine(`{"execute":"quit"}`)
+			stopDeadline = nil
+			procDown = waitExit(exited, 15*time.Second, cfg)
 		case <-ticker.C:
 			tick++
 			if tick%5 == 0 {
@@ -1086,13 +1177,13 @@ func compactAfterShutdown(cfg *config) {
 	if a == nil || !a.compactPending() || cfg.diskFormat != "raw" {
 		return
 	}
-	getUI().setStatus("Reclaiming disk space...")
+	getUI().setStatus("%s", uiText("status.reclaiming"))
 	logf("compact: scanning %s", cfg.disk)
 	before, beforeErr := platformAllocatedFileBytes(cfg.disk)
 	reclaimed, err := compactDisk(cfg.disk, nil)
 	if err != nil {
 		logf("compact: %v", err)
-		infoBox("Omarchy shut down, but disk space could not be reclaimed. Your files remain intact.\n\n" + err.Error())
+		infoBox(uiTextWith("reclaim.error", map[string]string{"error": err.Error()}))
 		return
 	}
 	logf("compact: %s of zero blocks turned back into holes", formatGiB(reclaimed))
@@ -1102,9 +1193,9 @@ func compactAfterShutdown(cfg *config) {
 		if saved < 0 {
 			saved = 0
 		}
-		infoBox("Omarchy shut down. Its disk now uses " + formatGiB(saved) + " less space on Windows.")
+		infoBox(uiTextWith("reclaim.done", map[string]string{"space": formatGiB(saved)}))
 	} else {
-		infoBox("Omarchy shut down and disk compaction finished. Windows could not report the change in allocated space.")
+		infoBox(uiText("reclaim.done_unknown"))
 	}
 }
 
@@ -1112,19 +1203,19 @@ func compactAfterShutdown(cfg *config) {
 func sendLifecycleCommand(command string) int {
 	c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", lifecyclePort), 3*time.Second)
 	if err != nil {
-		errorBox("Try Omarchy is not running.")
+		errorBox(uiText("control.not_running"))
 		return 1
 	}
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(5 * time.Second))
 	if _, err := io.WriteString(c, command+"\n"); err != nil {
-		errorBox(err.Error())
+		errorBox(uiTextWith("control.error", map[string]string{"error": err.Error()}))
 		return 1
 	}
 	if command == "reclaim" {
 		reply, err := bufio.NewReader(io.LimitReader(c, 4096)).ReadString('\n')
 		if err != nil {
-			errorBox("The running launcher did not confirm reclaim. It may need an update.")
+			errorBox(uiText("control.reclaim_unconfirmed"))
 			return 1
 		}
 		if !strings.HasPrefix(reply, "ok: ") {

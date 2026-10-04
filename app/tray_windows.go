@@ -134,7 +134,7 @@ func requestTraySettings() bool {
 // Errors must never wait for a modal dialog in the file-transfer worker.
 func reportTransferError(err error) {
 	logf("file transfer: %v", err)
-	message := "These files could not be copied to Omarchy.\n\n" + err.Error()
+	message := uiTextWith("tray.transfer.failed", map[string]string{"error": err.Error()})
 	if hwnd := trayWindow.Load(); hwnd != 0 {
 		pendingTrayNotice.Store(&message)
 		if posted, _, _ := procPostMessageW.Call(hwnd, trayNoticeMessage, 0, 0); posted != 0 {
@@ -188,6 +188,8 @@ func startTray(cfg *config) func() {
 func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 	runtime.LockOSThread()
 	defer close(done)
+	power := newGuestPowerState()
+	defer power.close()
 
 	hInst, _, _ := procGetModuleHandleW.Call(0)
 	className, _ := syscall.UTF16PtrFromString("TryOmarchyTray")
@@ -195,6 +197,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 	taskbarCreated, _, _ := procRegisterWindowMessage.Call(uintptr(unsafe.Pointer(taskbarName)))
 
 	var hwnd uintptr
+	unregisterPower := func() {}
 	var nid notifyIconData
 	var aboutOpen atomic.Bool
 	var settingsOpen, diagnosticsOpen, devicesOpen atomic.Bool
@@ -220,7 +223,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		self, err := os.Executable()
 		if err != nil {
 			running.Store(false)
-			errorBox("Try Omarchy could not open " + flag + ".\n\n" + err.Error())
+			errorBox(uiTextWith("tray.error.open_window", map[string]string{"error": err.Error()}))
 			return
 		}
 		args := trayControlArguments(cfg, flag)
@@ -230,7 +233,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow}
 		if err := cmd.Start(); err != nil {
 			running.Store(false)
-			errorBox("Try Omarchy could not open " + flag + ".\n\n" + err.Error())
+			errorBox(uiTextWith("tray.error.open_window", map[string]string{"error": err.Error()}))
 			return
 		}
 		// The tray action is user initiated, but the child has a different PID.
@@ -252,7 +255,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		cmd := exec.Command("explorer.exe", cfg.share)
 		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 		if err := cmd.Start(); err != nil {
-			errorBox("Windows could not open the shared folder.\n\n" + err.Error())
+			errorBox(uiTextWith("tray.error.open_share", map[string]string{"error": err.Error()}))
 			return
 		}
 		_ = cmd.Process.Release()
@@ -268,29 +271,29 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 			text, _ := syscall.UTF16PtrFromString(label)
 			procAppendMenuW.Call(menu, flags, id, uintptr(unsafe.Pointer(text)))
 		}
-		appendItem(mfString, trayCommandShow, "Open Omarchy")
+		appendItem(mfString, trayCommandShow, uiText("tray.menu.open"))
 		shareFlags := uintptr(mfString)
 		if cfg.share == "" {
 			shareFlags |= mfGray
 		}
-		appendItem(shareFlags, trayCommandShare, "Open Shared Folder")
+		appendItem(shareFlags, trayCommandShare, uiText("tray.menu.share"))
 		appendItem(mfSeparator, 0, "")
-		appendItem(mfString, trayCommandSettings, "Settings...")
-		appendItem(mfString, trayCommandCameraStatus, "Camera status...")
-		appendItem(mfString, trayCommandDevices, "USB devices...")
-		appendItem(mfString, trayCommandTransfers, "File transfers…")
-		appendItem(mfString, trayCommandDiagnose, "Create diagnostics...")
+		appendItem(mfString, trayCommandSettings, uiText("tray.menu.settings"))
+		appendItem(mfString, trayCommandCameraStatus, uiText("tray.menu.camera"))
+		appendItem(mfString, trayCommandDevices, uiText("tray.menu.devices"))
+		appendItem(mfString, trayCommandTransfers, uiText("tray.menu.transfers"))
+		appendItem(mfString, trayCommandDiagnose, uiText("tray.menu.diagnostics"))
 		reclaimFlags := uintptr(mfString)
 		if !reclaimSupported.Load() {
 			reclaimFlags |= mfGray
 		}
-		appendItem(reclaimFlags, trayCommandReclaim, "Reclaim disk space...")
-		appendItem(reclaimFlags, trayCommandReclaimStatus, "Reclaim status...")
-		appendItem(mfString, trayCommandClipboardFiles, "Open received files")
-		appendItem(mfString, trayCommandAbout, "About and updates...")
-		appendItem(mfString, trayCommandHelp, "Help and shortcuts...")
+		appendItem(reclaimFlags, trayCommandReclaim, uiText("tray.menu.reclaim"))
+		appendItem(reclaimFlags, trayCommandReclaimStatus, uiText("tray.menu.reclaim_status"))
+		appendItem(mfString, trayCommandClipboardFiles, uiText("tray.menu.received_files"))
+		appendItem(mfString, trayCommandAbout, uiText("tray.menu.about"))
+		appendItem(mfString, trayCommandHelp, uiText("tray.menu.help"))
 		appendItem(mfSeparator, 0, "")
-		appendItem(mfString, trayCommandShutdown, "Shut down Omarchy...")
+		appendItem(mfString, trayCommandShutdown, uiText("tray.menu.shutdown"))
 
 		var point struct{ x, y int32 }
 		procGetCursorPos.Call(uintptr(unsafe.Pointer(&point)))
@@ -301,6 +304,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		switch command {
 		case trayCommandShow:
 			if qemuWindow := qemuHwnd.Load(); qemuWindow != 0 {
+				liftCurtain("asked for from the tray")
 				// Approved Windows apps minimize a fullscreen VM. SW_SHOW leaves
 				// a minimized window minimized; restore it before focusing it.
 				procShowWindow.Call(qemuWindow, swRestore)
@@ -317,25 +321,25 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		case trayCommandDiagnose:
 			launchControl("-diagnostics", &diagnosticsOpen)
 		case trayCommandReclaim:
-			if msgBox("Give deleted Omarchy files' space back to Windows?\n\nOmarchy will prepare up to 8 GiB of free space per pass. This temporarily uses Windows disk space while keeping a 4 GiB reserve. The disk file on Windows shrinks the next time Omarchy shuts down.", mbYesNo|mbIconQuestion|mbDefbutton2) == idYes {
+			if msgBox(uiText("tray.reclaim.confirm"), mbYesNo|mbIconQuestion|mbDefbutton2) == idYes {
 				if err := requestReclaimError(); err != nil {
 					infoBox(err.Error())
 				} else {
-					infoBox("Preparing free space. Keep Omarchy running. Choose Reclaim status from the tray to check when it is ready to shut down.")
+					infoBox(uiText("tray.reclaim.started"))
 				}
 			}
 		case trayCommandReclaimStatus:
 			if a := theAgent.Load(); a != nil {
 				infoBox(a.reclaimStatus())
 			} else {
-				infoBox("Omarchy is not ready yet.")
+				infoBox(uiText("tray.reclaim.not_ready"))
 			}
 		case trayCommandCameraStatus:
 			infoBox(cameraStatusText())
 		case trayCommandAbout:
 			launchControl("-about", &aboutOpen)
 		case trayCommandHelp:
-			infoBox(everydayHelp)
+			infoBox(uiText("help.everyday"))
 		case trayCommandClipboardFiles:
 			if dir, err := clipboardFilesCache(); err == nil {
 				if err = os.MkdirAll(dir, 0700); err == nil {
@@ -347,7 +351,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 			}
 		case trayCommandShutdown:
 			if qemuHwnd.Load() == 0 {
-				infoBox("Omarchy is still starting. You can shut it down once its window opens.")
+				infoBox(uiText("tray.shutdown.starting"))
 			} else {
 				requestQuitConfirm()
 			}
@@ -369,7 +373,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 				notice.flags = 0x10  // NIF_INFO
 				notice.infoFlags = 2 // NIIF_WARNING
 				notificationText(notice.info[:], *text)
-				notificationText(notice.infoTitle[:], "File transfer")
+				notificationText(notice.infoTitle[:], uiText("tray.transfer.title"))
 				if ok, _, err := procShellNotifyIconW.Call(1, uintptr(unsafe.Pointer(&notice))); ok == 0 {
 					logf("tray: file-transfer notification failed: %v", err)
 				}
@@ -380,6 +384,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 			switch event {
 			case wmLButtonDblClk:
 				if qemuWindow := qemuHwnd.Load(); qemuWindow != 0 {
+					liftCurtain("asked for from the tray")
 					procShowWindow.Call(qemuWindow, swRestore)
 					procSetForegroundWindow.Call(qemuWindow)
 				}
@@ -388,22 +393,13 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 			}
 			return 0
 		case wmPowerbroadcast:
-			if wParam == pbtApmSuspend {
-				pauseGuest("host sleep")
-			}
-			if wParam == pbtApmResumeAutomatic || wParam == pbtApmResumeSuspend {
-				resumeGuest()
-				logf("windows resumed from sleep")
-				select {
-				case hostResumed <- struct{}{}:
-				default:
-				}
-			}
+			power.handle(wParam)
 			return 1
 		case trayStopMessage:
 			procDestroyWindow.Call(window)
 			return 0
 		case wmDestroy:
+			unregisterPower()
 			trayWindow.CompareAndSwap(window, 0)
 			procShellNotifyIconW.Call(nimDelete, uintptr(unsafe.Pointer(&nid)))
 			procPostQuitMessage.Call(0)
@@ -435,6 +431,11 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		ready <- 0
 		return
 	}
+	unregisterPower, err = registerPowerNotifications(hwnd)
+	if err != nil {
+		logf("power: %v; ordinary sleep broadcasts remain available", err)
+	}
+	defer unregisterPower()
 	nid.size = uint32(unsafe.Sizeof(nid))
 	nid.id = trayIconID
 	nid.flags = nifMessage | nifIcon | nifTip | nifShowTip

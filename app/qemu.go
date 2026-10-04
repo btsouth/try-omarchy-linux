@@ -45,7 +45,10 @@ func memoryStarved(cfg *config) bool {
 func windowedKernelCmdline(spec buildSpec) string {
 	cmdline := strings.ReplaceAll(spec.Runtime.KernelCommandLine, "console=tty0 ", "")
 	cmdline = strings.ReplaceAll(cmdline, "console=hvc0", "console=ttyS0")
-	return cmdline + " vt.global_cursor_default=0"
+	cmdline += " vt.global_cursor_default=0"
+	// The kernel's setup code prints "Probing EDD" on the display while it
+	// asks the BIOS about disks, which a virtio disk does not need.
+	return cmdline + " edd=off"
 }
 
 // buildQemuArgs selects the native runtime devices and private controls.
@@ -106,7 +109,9 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		"-initrd", filepath.Join(cfg.guestDir, "initramfs-linux.img"),
 		"-append", cmdline+" tryomarchy.render="+render,
 		"-device", "virtio-keyboard-pci", "-device", "virtio-tablet-pci",
-		"-device", "virtio-net-pci,netdev=n0", "-netdev", netdevArg(cfg.forwards),
+		// No option ROM: the guest boots its kernel directly, and iPXE would
+		// only print its banner on the display.
+		"-device", "virtio-net-pci,netdev=n0,romfile=", "-netdev", netdevArg(cfg.forwards),
 		"-device", "virtio-rng-pci",
 		// The camera bridge needs a bulk channel the host can write without
 		// going through slirp. The launcher listens and QEMU connects, with
@@ -144,16 +149,18 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		// stalls on virtio-snd control messages and the whole session hangs.
 		// cfg.audio is sdl normally, with dsound and none fallbacks when
 		// the host cannot initialize audio.
-		"-audiodev", audioBackendOptions(cfg.audio, cfg.desktop.MicrophoneDisabled),
+		"-audiodev", audioBackendOptions(cfg.audio, cfg.desktop.MicrophoneDisabled, cfg.audioRates),
 		"-device", "virtio-sound-pci,audiodev=snd",
-		"-qmp", "unix:"+qemuOptionValue(filepath.Join(cfg.qmpDir, qmpControlName(qmpToolsPort)))+",server=on,wait=off",
-		"-qmp", "unix:"+qemuOptionValue(filepath.Join(cfg.qmpDir, qmpControlName(qmpFwdPort)))+",server=on,wait=off",
-		"-qmp", "unix:"+qemuOptionValue(filepath.Join(cfg.qmpDir, qmpControlName(qmpSupPort)))+",server=on,wait=off",
 		"-D", filepath.Join(vm, "qemu.log"),
 		"-name", appTitle,
 	)
 	if qemuExitsOnReboot {
 		args = append(args, "-no-reboot")
+	}
+	// Power holds its own Windows monitor across sleep. Tools, forwarding and
+	// supervisor controls stay available even when automatic resume fails.
+	for _, role := range platformQMPControlRoles() {
+		args = append(args, "-qmp", "unix:"+qemuOptionValue(filepath.Join(cfg.qmpDir, qmpControlName(role)))+",server=on,wait=off")
 	}
 	if cfg.audio == "sdl" && audioRuntimeSupportsLiveRouting(cfg.qemu) {
 		args = append(args,
@@ -335,7 +342,7 @@ func prepareDisk(cfg *config, expandedMiB int64) error {
 		return fmt.Errorf("marking disk sparse: %w", err)
 	}
 	ui := getUI()
-	ui.setStatus("Preparing your Omarchy disk...")
+	ui.setStatus("%s", uiText("status.preparing_disk"))
 	st, err := src.Stat()
 	if err != nil {
 		return err
@@ -444,8 +451,14 @@ func preparePortableDisk(cfg *config, expandedBytes int64) error {
 
 // Disabling input keeps playback while preventing the host recording device
 // from being opened. QEMU exposes no recording stream to the guest.
-func audioBackendOptions(backend string, microphoneDisabled bool) string {
+func audioBackendOptions(backend string, microphoneDisabled bool, rates audioSampleRates) string {
 	options := backend + ",id=snd"
+	if backend == "sdl" {
+		options += fmt.Sprintf(",out.frequency=%d", audioSampleRateOrFallback(rates.Output))
+		if !microphoneDisabled {
+			options += fmt.Sprintf(",in.frequency=%d", audioSampleRateOrFallback(rates.Input))
+		}
+	}
 	if microphoneDisabled && backend != "none" {
 		options += ",in.voices=0"
 	}

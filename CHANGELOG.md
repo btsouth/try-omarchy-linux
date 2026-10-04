@@ -1,5 +1,121 @@
 # Changelog
 
+## Unreleased
+
+- Screensaver branding fits small windows, falling back to Omarchy when needed.
+- Update > Omarchy explains when the Omarchy disk needs free space and where
+  to increase its capacity in Settings. The first-run update notice uses normal
+  priority, and power menus show "Managed by Windows".
+- Chromium supports Wayland input methods, new input profiles include Chewing
+  for Traditional Chinese, and zh-TW/zh-Hant text prefers Noto CJK TC fonts.
+  Existing customized guest files are kept during compatibility catch-up.
+
+- Update > Omarchy no longer prints "Installation aborted" for the camera and
+  battery modules when the guest's kernel headers catch up with the launcher's
+  kernel. DKMS now takes those modules over and puts the launcher's copies back
+  if the headers move on.
+- Update > Omarchy no longer asks to reboot for a new kernel on installs older
+  than their launcher. The launcher supplies the kernel, so that reboot never
+  changed anything.
+- Every Settings page and the Help text are available in Korean (#265, thanks
+  @seunghan91).
+
+## v0.8.0 - 2026-10-01
+
+- Omarchy's window stays invisible while Omarchy boots and fades in once the
+  desktop and wallpaper are drawn. The setup window stays up with the starter
+  keys and says when the desktop is starting, and Cancel shuts Omarchy down.
+  The first start with your own account still shows the window for Omarchy's
+  setup form. The network card's boot ROM and the kernel's EDD probe no longer
+  print on screen.
+- The window keeps the place and size you gave it while Omarchy starts and shuts
+  down. Starting Try Omarchy while it runs brings the window forward, and a
+  second installation whose shortcut is taken says where to start it.
+- The window title stays "Try Omarchy" instead of briefly showing QEMU's.
+- Omarchy pauses before Windows sleeps, including Modern Standby, and resumes
+  on wake. A pause you made yourself is left alone.
+- Files copied before Omarchy started that are gone by then no longer show a
+  transfer error.
+- Settings counts the running Omarchy's memory as available for the next boot.
+- The launcher is available in Korean (#256, thanks @seunghan91). Every Settings
+  page and its messages can now be translated, and `TRY_OMARCHY_UI_LANGUAGE`
+  picks a language without changing Windows.
+- The importer says "1 file" rather than "1 files".
+- The guest moves to Omarchy 4.0.4. Its switch to Omarchy's own kernel is
+  skipped, since the launcher supplies the kernel.
+
+## v0.7.1 - 2026-10-01
+
+- Security: the Linux importer only passes package and Flatpak names from the
+  trial to pacman, yay and Flatpak when they are valid names, and always after
+  `--`. A crafted trial could otherwise hand yay an option that runs another
+  program.
+- Security: the importer only runs commands from the system folders, with a
+  PATH of just those. A script the import put in `~/.local/bin` could otherwise
+  run in place of mise, sudo or the package tools when that folder came first
+  in PATH. AUR builds ignore the home folder's yay, makepkg and git settings,
+  and sudo forgets its cached password before imported settings run (mise, the
+  Hyprland check, the theme switch).
+- Security: trial account homes must be under `/home` without `.` or `..`
+  parts, and links on the trial disk are followed inside the trial only, so a
+  crafted trial cannot point the importer at other files on the computer.
+- The importer no longer prints control characters from file names, checks
+  service, theme and background names, applies your umask to imported files,
+  and mounts its ID-mapped copy of the trial with nodev, nosuid and noexec.
+- The importer's list says that everything checked comes along and Enter
+  continues.
+- The launcher's About and update screens, first-launch questions and Settings
+  section titles are available in Simplified Chinese (#246, thanks
+  @Dazzle-sys).
+
+## v0.7.0 - 2026-09-30
+
+- Install Omarchy next to Windows and bring your trial setup along. Open
+  Settings > Recovery > Install Omarchy for a short checklist,
+  buttons for Windows settings and Disk Management, and the import command.
+  BitLocker status is checked through Windows without PowerShell or elevation.
+- Import settings, files and app data from the Windows trial into your Linux
+  account. Unchanged defaults stay in place, changed files are backed up before
+  replacement, and a repeat import keeps your later edits. Browser profiles
+  and sign-ins are optional.
+- `try-omarchy-export` includes the same importer with its selected files,
+  for moving to another PC or replacing Windows.
+- First-launch screens and Settings use the updated Try Omarchy branding,
+  clearer sections and native Windows controls.
+- Remember a selected USB device before starting Omarchy, so it can attach
+  on the next launch. Disconnected saved devices stay visible in Settings.
+- Follow Windows time-zone changes while preserving a time zone you chose
+  yourself inside Omarchy.
+
+## v0.6.2 - 2026-09-29
+
+- Security: SSH no longer accepts the quick-start account's public password.
+  With a port forward to guest port 22, and especially a LAN forward, anyone
+  who could reach the port could log in as `omarchy` / `omarchy` and use its
+  passwordless sudo. The quick-start account now accepts only SSH keys, which
+  Try Omarchy authorizes for you. Existing quick-start installs get the change
+  on their first boot after the update. Your own accounts keep password login.
+- New installs now preselect your own account on the first-launch screen. The
+  quick start (`omarchy` / `omarchy`) is still one click away. Existing
+  installs keep the choice they made.
+- The quick-start welcome notice suggests running `passwd` to set your own
+  password.
+- Setup checks for enough free space to unpack the Omarchy image before it
+  downloads, instead of running out partway through.
+
+## v0.6.1 - 2026-09-29
+
+- Settings > General has a "Send Alt+Tab to Omarchy while its window is
+  focused" checkbox. It stays on by default. Turn it off and Alt+Tab opens the
+  Windows task switcher again. The change applies without restarting Omarchy.
+- On laptops with Modern Standby, Omarchy no longer drops to a black screen or
+  the login screen when Windows wakes after more than a few minutes of sleep.
+  Core guest services were being restarted on wake because their watchdog
+  timers ran out while Omarchy was frozen.
+- A monitor scale set in `~/.config/hypr/monitors.lua` stays after a theme
+  switch or `hyprctl reload` instead of returning to the automatic scale.
+- Guest packages are refreshed to current Arch versions.
+
 ## v0.6.0 - 2026-09-27
 
 - Unlock 1Password with Windows Hello. If you install 1Password in Omarchy and

@@ -113,6 +113,11 @@ func deleteLinuxDefaultVM(defaultDir string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	disk, err := openBackupDisk(filepath.Join(vmDir, "disk.raw"))
+	if err != nil {
+		return fmt.Errorf("the guest disk is in use or could not be locked; shut down Omarchy before deleting this VM: %w", err)
+	}
+	defer disk.Close()
 	// Snapshots and the state a roll back kept are this VM's own copies.
 	// Remove them first, so a failure leaves the VM itself in place.
 	if err := removeLinuxSnapshotStore(defaultDir); err != nil {

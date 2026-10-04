@@ -261,6 +261,9 @@ to the generated branch for manual review; `--check` reports drift without writi
 scripts/release/refresh-guest-lock.sh
 ```
 
+Patch 0134 refreshes the package lock for the next Linux guest image, updating
+device-mapper to `2.03.43-2` and libutf8proc to `2.12.0-1`.
+
 Patch 0066 limits runtime command ownership to materialized upstream commands,
 bumps the runtime package to `4.0.3-4`, and preserves the two dependency-owned
 Neovim helpers when upgrading older runtime packages. Database consistency is

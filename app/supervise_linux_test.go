@@ -5,8 +5,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -123,5 +125,64 @@ func TestLinuxWindowAndTrayCanConfirmForceStop(t *testing.T) {
 			answer <- true
 			command("quit")
 		})
+	}
+}
+
+func TestLinuxWatchReportsOnlyUnexpectedQEMUFailure(t *testing.T) {
+	oldGUI, oldUI := linuxGUIEnabled, linuxUI
+	linuxGUIEnabled, linuxUI = false, newLinuxProgressUI()
+	t.Cleanup(func() { linuxGUIEnabled, linuxUI = oldGUI, oldUI })
+	failure := exec.Command("sh", "-c", "exit 23").Run()
+	if failure == nil {
+		t.Fatal("expected process failure")
+	}
+	for _, tc := range []struct {
+		name      string
+		exit      error
+		requests  int
+		wantError bool
+	}{
+		{"crash", failure, 0, true},
+		{"clean poweroff", nil, 0, false},
+		{"requested shutdown", failure, 1, false},
+		{"force stop", failure, 2, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			exited := make(chan error, 1)
+			exited <- tc.exit
+			confirmation := newLinuxShutdownConfirmation(nil)
+			defer confirmation.close()
+			err := watchLinux(&config{vmDir: dir}, nil, &exec.Cmd{}, exited, nil, nil,
+				&linuxVisibility{}, tc.requests, confirmation, false)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("supervisor failure=%v, want error=%t", err, tc.wantError)
+			}
+			if err != nil && (!errors.Is(err, failure) || !strings.Contains(err.Error(), filepath.Join(dir, "qemu-stderr.log"))) {
+				t.Fatalf("failure lost process error or log path: %v", err)
+			}
+		})
+	}
+}
+
+func TestLinuxQEMUFailureShowsIndependentDialog(t *testing.T) {
+	oldGUI, oldShow := linuxGUIEnabled, showLinuxRuntimeErrorWindow
+	linuxGUIEnabled = true
+	t.Cleanup(func() { linuxGUIEnabled, showLinuxRuntimeErrorWindow = oldGUI, oldShow })
+	calls := 0
+	showLinuxRuntimeErrorWindow = func(title, detail string) {
+		calls++
+		if title != "Omarchy stopped unexpectedly" || detail != "runtime failure" {
+			t.Fatalf("runtime dialog: %q %q", title, detail)
+		}
+	}
+	reportLinuxQEMUFailure(errors.New("runtime failure"))
+	if calls != 1 {
+		t.Fatalf("runtime dialog calls=%d", calls)
+	}
+	linuxGUIEnabled = false
+	reportLinuxQEMUFailure(errors.New("terminal failure"))
+	if calls != 1 {
+		t.Fatal("terminal mode opened a dialog")
 	}
 }

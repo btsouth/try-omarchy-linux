@@ -438,7 +438,10 @@ func main() {
 	// The first interrupt asks the guest to shut down; a second one stops QEMU.
 	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	superviseLinux(cfg, cmdline, stop)
+	if err := superviseLinux(cfg, cmdline, stop); err != nil {
+		reportLinuxQEMUFailure(err)
+		os.Exit(1)
+	}
 	compactLinuxDisk(cfg)
 	logf("---- exiting ----")
 }

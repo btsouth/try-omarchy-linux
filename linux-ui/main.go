@@ -101,6 +101,7 @@ type settingsForm struct {
 	SSHKey             string        `json:"sshKey"`
 	Forwards           string        `json:"forwards"`
 	StartAutomatically bool          `json:"startAutomatically"`
+	LaunchAtSignIn     bool          `json:"launchAtSignIn"`
 	Share              string        `json:"share"`
 	ShareDisplay       string        `json:"shareDisplay,omitempty"`
 	ShareEnabled       bool          `json:"shareEnabled"`
@@ -560,6 +561,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		}
 		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
 		groupContent.Append(startAutomatically)
+		launchAtSignIn := gtk.NewCheckButtonWithLabel("Start with login")
+		groupContent.Append(launchAtSignIn)
+		formHelp("Open this launcher when you log in. Omarchy starts if automatic start is on.")
 		formHelp("Automatic start waits 10 seconds; Settings or Close stops it.")
 		fullscreen.SetTooltipText("Ctrl+Alt+F toggles fullscreen. Ctrl+Alt+G releases the keyboard.")
 		beginGroup("Resources", "General")
@@ -1020,7 +1024,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), FullscreenDisplay: fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)], Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), FullscreenDisplay: fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)], Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), LaunchAtSignIn: launchAtSignIn.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
@@ -1496,6 +1500,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							forwards.Buffer().SetText(next.Settings.Forwards)
 							forwardsHelp.SetText(forwardsHelpText(next.Settings.ForwardsLive))
 							startAutomatically.SetActive(next.Settings.StartAutomatically)
+							launchAtSignIn.SetActive(next.Settings.LaunchAtSignIn)
 							outputLabels, outputNames, outputIndex := namedChoices("System default", "Unavailable: ", next.Settings.AudioOutputs, next.Settings.AudioOutput)
 							if next.Settings.AudioLive {
 								audioHelp.SetText("Audio device choices apply when you save. Microphone access changes apply on the next launch. System default follows your desktop's current device.")

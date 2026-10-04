@@ -1,11 +1,11 @@
-From 1eb904f5f567a6af79737cbaed1dc91f47f0b198 Mon Sep 17 00:00:00 2001
+From 5259435fad1b35011bd4f086d8344e440f1a1b77 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Sun, 4 Oct 2026 01:26:06 -0400
 Subject: [PATCH 133/133] Name a Linux host in guest notices
 
 Compatibility revision 55 delivers Linux host wording, flag-selected desktop labels, and the Linux-only digest-gated clock repair from Linux patches 0116 and 0117. Windows desktop labels and time-zone protocol stay unchanged. Record legacy lineage atomically before extraction, validate it on retries, and use the stricter SSH cutoff for ambiguous revisions. Select host power wording after catch-up without changing the Windows payloads.
 ---
- .../etc/initcpio/hooks/tryomarchy_compat      |  52 ++++
+ .../etc/initcpio/hooks/tryomarchy_compat      |  54 ++++
  .../try-omarchy-linux-clock.service           |   1 +
  .../system/try-omarchy-catch-up.service       |   1 +
  .../system/try-omarchy-host-locale.service    |   1 +
@@ -16,8 +16,8 @@ Compatibility revision 55 delivers Linux host wording, flag-selected desktop lab
  .../usr/local/bin/try-omarchy-timezone        |  19 +-
  .../usr/local/bin/try-omarchy-windows-app     |  10 +-
  .../local/lib/try-omarchy/apply-host-locale   |  13 +-
- .../local/lib/try-omarchy/apply-host-names    |  60 +++++
- .../usr/local/lib/try-omarchy/catch-up        |  28 ++-
+ .../local/lib/try-omarchy/apply-host-names    |  61 +++++
+ .../usr/local/lib/try-omarchy/catch-up        |  28 +-
  .../lib/try-omarchy/repair-clock-timezone     |  19 ++
  .../linux/try-omarchy-file-transfers.desktop  |   8 +
  .../linux/try-omarchy-follow-timezone.desktop |   8 +
@@ -26,18 +26,18 @@ Compatibility revision 55 delivers Linux host wording, flag-selected desktop lab
  .../try-omarchy-follow-timezone.desktop       |   8 +
  .../windows/try-omarchy-host-settings.desktop |   8 +
  guest/scripts/finalize-rootfs.sh              |  12 +-
- guest/spec.json                               |  28 +--
- .../tests/fixtures/legacy-linux-lineage.json  | 175 ++++++++++++++
+ guest/spec.json                               |  28 +-
+ .../tests/fixtures/legacy-linux-lineage.json  | 175 ++++++++++++
  guest/tests/test_battery_details.py           |   2 +-
- guest/tests/test_file_drop_target.py          |  15 ++
- guest/tests/test_guest_lineage_contract.py    |  93 ++++++++
+ guest/tests/test_file_drop_target.py          |  15 +
+ guest/tests/test_guest_lineage_contract.py    |  93 +++++++
  guest/tests/test_guest_qol.py                 |   2 +-
- guest/tests/test_host_names.py                |  87 +++++++
- guest/tests/test_kernel_module_delivery.py    | 223 ++++++++++++++++++
- guest/tests/test_overlay_scripts.py           |  67 ++++++
- guest/tests/test_timezone.py                  |  74 ++++++
+ guest/tests/test_host_names.py                |  96 +++++++
+ guest/tests/test_kernel_module_delivery.py    | 258 +++++++++++++++++-
+ guest/tests/test_overlay_scripts.py           |  67 +++++
+ guest/tests/test_timezone.py                  |  74 +++++
  guest/tests/verify.py                         |  10 +-
- 32 files changed, 1054 insertions(+), 43 deletions(-)
+ 32 files changed, 1100 insertions(+), 44 deletions(-)
  create mode 120000 guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
  create mode 100644 guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service
  create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
@@ -53,10 +53,10 @@ Compatibility revision 55 delivers Linux host wording, flag-selected desktop lab
  create mode 100644 guest/tests/test_host_names.py
 
 diff --git a/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat b/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
-index 6ce51a3..28011f9 100755
+index 6ce51a3..1ae702a 100755
 --- a/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
 +++ b/guest/factory-overlay/etc/initcpio/hooks/tryomarchy_compat
-@@ -7,11 +7,63 @@ run_latehook() {
+@@ -7,11 +7,65 @@ run_latehook() {
      kernel=$(uname -r)
      modules_marker="$root/usr/lib/modules/$kernel/.tryomarchy-complete"
      [ -d "$root" ] || return 0
@@ -109,10 +109,12 @@ index 6ce51a3..28011f9 100755
 +                mkdir -p "$(dirname "$lineage")" || return 1
 +                temporary=$(mktemp "$lineage.XXXXXX") || return 1
 +                if ! printf '%s:%s\n' "$origin" "$previous_revision" >"$temporary" ||
++                   ! fsync "$temporary" ||
 +                   ! mv -f "$temporary" "$lineage"; then
 +                    rm -f "$temporary"
 +                    return 1
 +                fi
++                sync "$(dirname "$lineage")" || return 1
 +            fi
 +            ;;
 +    esac
@@ -419,10 +421,10 @@ index 8717164..89d8a53 100755
  [[ -z $zone ]] || apply_zone "$zone"
 diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
 new file mode 100755
-index 0000000..91d65ee
+index 0000000..c2ab277
 --- /dev/null
 +++ b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,61 @@
 +#!/usr/bin/python3 -I
 +"""Select host desktop labels without changing custom or symlinked entries."""
 +import hashlib
@@ -447,7 +449,7 @@ index 0000000..91d65ee
 +    wanted = other if linux else windows
 +    if current in (windows, other) and current != wanted:
 +        temporary = path.with_name(path.name + ".try-omarchy")
-+        # Refuse a pre-existing temporary file, including a symlink.
++        temporary.unlink(missing_ok=True)
 +        with temporary.open("xb") as output:
 +            output.write(wanted)
 +        temporary.chmod(0o644)
@@ -478,6 +480,7 @@ index 0000000..91d65ee
 +                continue
 +            if current != wanted:
 +                temporary = path.with_name(path.name + ".try-omarchy")
++                temporary.unlink(missing_ok=True)
 +                with temporary.open("xb") as output:
 +                    output.write(wanted)
 +                temporary.chmod(path.stat().st_mode & 0o777)
@@ -1058,10 +1061,10 @@ index 2a5acab..444dd43 100644
          self.assertNotIn("etc/fonts/conf.d/30-try-omarchy.conf", paths)
 diff --git a/guest/tests/test_host_names.py b/guest/tests/test_host_names.py
 new file mode 100644
-index 0000000..85579a9
+index 0000000..322271a
 --- /dev/null
 +++ b/guest/tests/test_host_names.py
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,96 @@
 +"""Exercise both host defaults and preservation of personal launcher entries."""
 +import json
 +import os
@@ -1088,9 +1091,14 @@ index 0000000..85579a9
 +            def apply(words):
 +                cmdline.write_text(words + '\n')
 +                subprocess.run([str(HELPER)], env=env, check=True)
++            stale = entries / 'try-omarchy-host-settings.desktop.try-omarchy'
 +            for words, host in [('root=/dev/vda', 'windows'), ('tryomarchy.host=linux', 'linux'),
 +                                ('tryomarchy.host=linuxish', 'windows')]:
++                if host == 'linux' or words.endswith('linuxish'):
++                    stale.write_text('interrupted label update')
 +                apply(words)
++                if host == 'linux' or words.endswith('linuxish'):
++                    self.assertFalse(stale.exists())
 +                for path in entries.iterdir():
 +                    self.assertEqual(path.read_bytes(), (SEEDS / host / path.name).read_bytes())
 +            paths = sorted(entries.iterdir())
@@ -1128,8 +1136,12 @@ index 0000000..85579a9
 +                for words, label in (('root=/dev/vda', 'Managed by Windows'),
 +                                     ('tryomarchy.host=linux', 'Managed by the host computer'),
 +                                     ('tryomarchy.host=linuxish', 'Managed by Windows')):
++                    stale = (root / hooks[0]['path']).with_name('omarchy-powerprofiles-set.try-omarchy')
++                    stale.write_text('interrupted power update')
 +                    cmdline.write_text(words)
 +                    subprocess.run([str(HELPER)], env=env, check=True)
++                    if words != 'root=/dev/vda':
++                        self.assertFalse(stale.exists())
 +                    for hook in hooks:
 +                        self.assertIn(label, (root / hook['path']).read_text())
 +                    menu = (root / hooks[1]['path']).read_text()
@@ -1150,7 +1162,7 @@ index 0000000..85579a9
 +        service = (OVERLAY / 'etc/systemd/system/try-omarchy-catch-up.service').read_text()
 +        self.assertIn('ExecStartPost=/usr/local/lib/try-omarchy/apply-host-names', service)
 diff --git a/guest/tests/test_kernel_module_delivery.py b/guest/tests/test_kernel_module_delivery.py
-index c65376d..fbaf1f9 100644
+index c65376d..50cad08 100644
 --- a/guest/tests/test_kernel_module_delivery.py
 +++ b/guest/tests/test_kernel_module_delivery.py
 @@ -10,6 +10,14 @@ import unittest
@@ -1168,7 +1180,30 @@ index c65376d..fbaf1f9 100644
  class ModuleDeliveryTests(unittest.TestCase):
      def setUp(self):
          self.tmp = tempfile.TemporaryDirectory()
-@@ -61,6 +69,221 @@ class ModuleDeliveryTests(unittest.TestCase):
+@@ -39,6 +47,13 @@ class ModuleDeliveryTests(unittest.TestCase):
+             script = script.replace('/' + before, str(self.root / after))
+         script = script.replace('kernel=$(uname -r)', 'kernel=' + self.kernel)
+         self.script = script
++        # fsync is a BusyBox initramfs applet, absent on some test hosts.
++        self.bin = self.root / 'bin'
++        self.bin.mkdir()
++        fsync = self.bin / 'fsync'
++        fsync.write_text('#!/usr/bin/env python3\nimport os, sys\nwith open(sys.argv[1], "rb") as source:\n    os.fsync(source.fileno())\n')
++        fsync.chmod(0o755)
++        self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'])
+ 
+     def archive(self, name, files):
+         with tarfile.open(self.root / name, 'w') as out:
+@@ -49,7 +64,7 @@ class ModuleDeliveryTests(unittest.TestCase):
+                 out.addfile(info, io.BytesIO(data))
+ 
+     def run_hook(self, prefix=''):
+-        return subprocess.run(['sh', '-c', prefix + '\n' + self.script + '\nrun_latehook'], text=True, capture_output=True)
++        return subprocess.run(['sh', '-c', prefix + '\n' + self.script + '\nrun_latehook'], text=True, capture_output=True, env=self.env)
+ 
+     def test_repairs_partial_tree_and_does_not_repeat(self):
+         result = self.run_hook()
+@@ -61,6 +76,247 @@ class ModuleDeliveryTests(unittest.TestCase):
          (self.root / 'modules.tar').unlink()
          self.assertEqual(self.run_hook().returncode, 0)
  
@@ -1354,6 +1389,31 @@ index c65376d..fbaf1f9 100644
 +                    hook.doCleanups()
 +                    catchup.doCleanups()
 +
++    def test_lineage_syncs_file_before_rename_and_directory_after(self):
++        marker = self.guest / 'usr/share/try-omarchy/compat-version'
++        marker.parent.mkdir(parents=True, exist_ok=True)
++        marker.write_text('48:old-kernel\n')
++        lineage = self.guest / 'var/lib/try-omarchy/guest-series-origin'
++        log = self.root / 'sync-order'
++        prefix = f'''fsync() {{
++            [ -f "$1" ] && [ ! -e "{lineage}" ] || return 1
++            cat "$1" >> "{log}"
++            echo "fsync:$1" >> "{log}"
++        }}
++        mv() {{ echo "mv:$1:$2:$3" >> "{log}"; command mv "$@"; }}
++        sync() {{
++            [ "$1" = "{lineage.parent}" ] && [ -f "{lineage}" ] || return 1
++            echo "sync:$1" >> "{log}"
++        }}'''
++        result = self.run_hook(prefix)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        record, fsync, rename, sync = log.read_text().splitlines()
++        self.assertEqual(record, 'ambiguous:48')
++        temporary = fsync.removeprefix('fsync:')
++        self.assertTrue(temporary.startswith(str(lineage) + '.'))
++        self.assertEqual(rename, f'mv:-f:{temporary}:{lineage}')
++        self.assertEqual(sync, f'sync:{lineage.parent}')
++
 +    def test_lineage_write_or_rename_failure_keeps_old_revision_and_retries(self):
 +        marker = self.guest / 'usr/share/try-omarchy/compat-version'
 +        marker.parent.mkdir(parents=True, exist_ok=True)
@@ -1361,6 +1421,7 @@ index c65376d..fbaf1f9 100644
 +        lineage = self.guest / 'var/lib/try-omarchy/guest-series-origin'
 +        for prefix in ('mktemp() { return 1; }',
 +                       'printf() { command printf partial; return 1; }',
++                       'fsync() { return 1; }',
 +                       'mv() { return 1; }'):
 +            with self.subTest(prefix=prefix):
 +                self.assertNotEqual(self.run_hook(prefix).returncode, 0)

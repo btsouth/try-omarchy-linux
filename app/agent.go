@@ -285,7 +285,7 @@ func (a *guestAgent) run(l net.Listener, resumed <-chan struct{}) {
 			a.sendBattery()
 			a.sendApprovedApps()
 		case <-resumed:
-			// Windows may take a moment to bring the clock and network back;
+			// The host may take a moment to bring the clock and network back;
 			// send now and again shortly after.
 			a.sendTime("resume")
 			a.sendBattery()

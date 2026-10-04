@@ -79,6 +79,14 @@ data folder.
 Memory, processors and the rest are in **Settings**. If the download stops,
 **Try again** or the next launch continues where it left off.
 
+## Sleep and wake
+
+On hosts with systemd-logind, Try Omarchy pauses a running VM before your
+computer sleeps and resumes it after wake. A VM you paused manually stays
+paused. The guest clock is corrected after wake. On other hosts, the app keeps
+running without automatic sleep handling. See [Linux sleep handling](LINUX-SLEEP.md)
+for details and verification limits.
+
 ## Moving from preview 1
 
 Preview 1 was a standalone bundle. It never updates itself, and while it is

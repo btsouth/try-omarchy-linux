@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 )
 
 // Try Omarchy for Linux. It prepares the guest the same way the Windows
@@ -120,6 +119,7 @@ func main() {
 	noGUI := flag.Bool("no-gui", false, "show setup status in the terminal only")
 	startDirect := flag.Bool("start", false, "start Omarchy without the launcher home")
 	showLauncher := flag.Bool("launcher", false, "show the launcher home even with other options")
+	autostart := flag.Bool("autostart", false, "open the launcher at login using saved startup preferences")
 	reclaim := flag.Bool("reclaim", false, "ask the running Omarchy to prepare its free space, so its disk file shrinks after shutdown, then exit")
 	flag.Parse()
 	if *reclaim {
@@ -148,8 +148,8 @@ func main() {
 		}
 		cfg.dir = resolved
 	}
-	if !*noGUI && !*startDirect && (*showLauncher || !linuxDirectStart(explicitFlags)) {
-		if !showLinuxHome(defaultLinuxDataDirectory(), cfg.dir, explicitFlags["dir"]) {
+	if !*noGUI && !*startDirect && (*showLauncher || *autostart || !linuxDirectStart(explicitFlags)) {
+		if !showLinuxHome(defaultLinuxDataDirectory(), cfg.dir, explicitFlags["dir"], *autostart) {
 			return
 		}
 	}
@@ -327,7 +327,7 @@ func main() {
 	}
 
 	var reason string
-	cfg.useGpu, reason = startWithGPU(cfg.renderMode, nil, "", "", time.Now())
+	reason = configureLinuxRender(cfg, linuxDisplayDriverIdentity())
 	if reason != "" {
 		logf("rendering: %s", reason)
 	}

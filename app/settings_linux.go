@@ -46,6 +46,7 @@ type linuxSettingsForm struct {
 	SSHKey             string             `json:"sshKey"`
 	Forwards           string             `json:"forwards"`
 	StartAutomatically bool               `json:"startAutomatically"`
+	LaunchAtSignIn     bool               `json:"launchAtSignIn"`
 	Share              string             `json:"share"`
 	ShareDisplay       string             `json:"shareDisplay,omitempty"`
 	ShareEnabled       bool               `json:"shareEnabled"`
@@ -125,7 +126,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
-	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, FullscreenDisplay: saved.FullscreenDisplay, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != "", ClipboardShare: !linuxClipboardSharingOff()}
+	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, FullscreenDisplay: saved.FullscreenDisplay, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, LaunchAtSignIn: launch.LaunchAtSignIn, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != "", ClipboardShare: !linuxClipboardSharingOff()}
 	layout, variant := linuxHostKeyboard()
 	form.HostKeyboard = layout
 	if variant != "" {
@@ -367,10 +368,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 					}
 				}
 			}
-			if err == nil && form.StartAutomatically != launch.StartAutomatically {
+			if err == nil && (form.StartAutomatically != launch.StartAutomatically || form.LaunchAtSignIn != launch.LaunchAtSignIn) {
 				nextLaunch := launch
 				nextLaunch.StartAutomatically = form.StartAutomatically
-				err = savePart("startup", func() error { return saveLaunchPreferences(dir, nextLaunch) })
+				nextLaunch.LaunchAtSignIn = form.LaunchAtSignIn
+				err = savePart("startup", func() error { return saveLinuxLaunchPreferences(ctx, dir, launch, nextLaunch) })
 				if err == nil {
 					launch = nextLaunch
 				}
@@ -432,10 +434,18 @@ type linuxSettingsSaveError struct {
 
 func (e *linuxSettingsSaveError) Error() string {
 	message := "Could not save " + e.Group + "."
+	var loginErr linuxSignInError
+	portalFailure := errors.As(e.Err, &loginErr)
+	if portalFailure {
+		message = loginErr.Error()
+	}
 	if len(e.Saved) > 0 {
 		message += " Already saved: " + strings.Join(e.Saved, ", ") + "."
 	} else {
 		message += " No settings were saved by this attempt."
+	}
+	if portalFailure {
+		return message + " Your remaining edits are kept here."
 	}
 	folder := "VM folder"
 	if e.Group == "clipboard sharing" {
@@ -514,7 +524,7 @@ func linuxAutomaticResourcesSummary(host hostResources) string {
 // direct-start behavior, while -launcher lets a script request the home.
 func linuxDirectStart(flags map[string]bool) bool {
 	for name := range flags {
-		if name != "launcher" && name != "start" && name != "no-gui" {
+		if name != "launcher" && name != "start" && name != "no-gui" && name != "autostart" {
 			return true
 		}
 	}
@@ -690,15 +700,16 @@ func capitalizeFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-func showLinuxHome(defaultDir, requestedDir string, explicitDir bool) bool {
+func showLinuxHome(defaultDir, requestedDir string, explicitDir bool, autostart bool) bool {
 	w := startLinuxWindow(func() {
 		if linuxRecoveryActive.Load() {
 			requestSetupCancel()
 		}
 	})
 	if w == nil {
-		// A missing helper keeps the terminal/flag workflow available.
-		return true
+		// Login never boots a VM when the home helper is unavailable.
+		// Ordinary launches keep the terminal/flag workflow available.
+		return !autostart
 	}
 	defer w.stop()
 	return runLinuxHome(w, defaultDir, requestedDir, explicitDir)

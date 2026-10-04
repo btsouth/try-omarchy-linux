@@ -1,0 +1,178 @@
+From 4f811c4cdc2c504f730401845caa416e7f801d91 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Fri, 2 Oct 2026 01:06:43 -0400
+Subject: [PATCH 132/133] Name approved apps for a Linux host
+
+The Linux launcher passes tryomarchy.host=linux. With it, approved apps use Host labels and agent version 5. Windows wording and agent version 4 stay unchanged. Compatibility revision 54 delivers the scripts to existing disks.
+---
+ .../usr/local/bin/try-omarchy-windows-app     | 17 +++++++---
+ .../usr/local/lib/try-omarchy/agent           |  3 ++
+ .../local/lib/try-omarchy/approved-apps-sync  | 18 +++++++++--
+ guest/scripts/finalize-rootfs.sh              |  3 +-
+ guest/tests/test_overlay_scripts.py           | 32 +++++++++++++++++++
+ guest/tests/verify.py                         |  2 +-
+ 6 files changed, 66 insertions(+), 9 deletions(-)
+
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app b/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app
+index bc13be3..28f64b2 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-windows-app
+@@ -1,17 +1,26 @@
+ #!/bin/bash
+-# Launch only a Windows app ID previously approved in host Settings.
++# Launch only an app ID previously approved in host Settings. The host is
++# Windows unless the Linux launcher names itself on the kernel command line.
+ set -u
+ id=${1:-}
+ if [[ ! $id =~ ^[0-9a-f]{32}$ || $# -ne 1 ]]; then
+-  echo 'Invalid approved Windows app.' >&2
++  echo 'Invalid approved app.' >&2
+   exit 2
+ fi
++unavailable='Windows app launch is unavailable. Start Omarchy from Windows and try again.'
++refused='That Windows app is no longer approved or could not start. Check Try Omarchy Settings on Windows.'
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*)
++    unavailable='Host app launch is unavailable. Start Omarchy from Try Omarchy and try again.'
++    refused='That app is no longer allowed or could not start. Check Apps on this computer in Try Omarchy Settings.'
++    ;;
++esac
+ host=${TRY_OMARCHY_AGENT_HOST:-10.0.2.2}
+ port=${TRY_OMARCHY_AGENT_PORT:-4451}
+ if ! { exec 3<>"/dev/tcp/$host/$port"; } 2>/dev/null; then
+-  message='Windows app launch is unavailable. Start Omarchy from Windows and try again.'
++  message=$unavailable
+ elif ! printf 'launch-app %s\n' "$id" >&3 || ! IFS= read -r -t 5 response <&3 || [[ $response != ok ]]; then
+-  message='That Windows app is no longer approved or could not start. Check Try Omarchy Settings on Windows.'
++  message=$refused
+ else
+   exec 3>&-
+   exit 0
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/agent b/guest/factory-overlay/usr/local/lib/try-omarchy/agent
+index dd7c5ac..d8ed050 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/agent
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/agent
+@@ -12,6 +12,9 @@ port=${TRY_OMARCHY_AGENT_PORT:-4451}
+ set_time=${TRY_OMARCHY_SET_TIME:-date -s}
+ fill_dir=${TRY_OMARCHY_FILL_DIR:-/var/tmp}
+ version=4
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*) version=5 ;;
++esac
+ app_sync=${TRY_OMARCHY_APP_SYNC:-/usr/local/lib/try-omarchy/approved-apps-sync}
+ window_lease=${TRY_OMARCHY_WINDOW_HELPER:-/usr/local/lib/try-omarchy/host-window}
+ max_drift=2
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/approved-apps-sync b/guest/factory-overlay/usr/local/lib/try-omarchy/approved-apps-sync
+index eaa0f68..0d84f20 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/approved-apps-sync
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/approved-apps-sync
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""Apply host-approved Windows app IDs to the Omarchy user's launcher menu."""
++"""Apply host-approved app IDs to the Omarchy user's launcher menu."""
+ import base64
+ import json
+ import os
+@@ -32,15 +32,27 @@ def entries(data: str) -> dict[str, str]:
+     return result
+ 
+ 
++def host_is_linux() -> bool:
++    """The Linux launcher says so on the kernel command line; Windows passes nothing."""
++    try:
++        words = pathlib.Path(os.environ.get("TRY_OMARCHY_CMDLINE", "/proc/cmdline")).read_text().split()
++    except OSError:
++        return False
++    return "tryomarchy.host=linux" in words
++
++
+ def sync(apps: dict[str, str], directory: pathlib.Path) -> None:
+     directory.mkdir(mode=0o755, parents=True, exist_ok=True)
+     wanted = set()
++    label, comment = "Windows", "Launch an approved Windows app outside Omarchy"
++    if host_is_linux():
++        label, comment = "Host", "Launch an approved app on the host computer, outside Omarchy"
+     for app_id, name in apps.items():
+         target = directory / f"{PREFIX}{app_id}.desktop"
+         wanted.add(target.name)
+         content = ("[Desktop Entry]\nType=Application\n"
+-                   f"Name=Windows: {name.replace('\\', '\\\\')}\n"
+-                   "Comment=Launch an approved Windows app outside Omarchy\n"
++                   f"Name={label}: {name.replace('\\', '\\\\')}\n"
++                   f"Comment={comment}\n"
+                    f"Exec=try-omarchy-windows-app {app_id}\n"
+                    "Icon=computer\nCategories=Utility;\nTerminal=false\n")
+         if target.is_file() and target.read_text(encoding="utf-8") == content:
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 88cece2..219d573 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -237,7 +237,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 51 adds a temporary Linux host-window idle lease.
+ # Revision 52 follows Linux host display scale while preserving explicit user scale.
+ # Revision 53 reports Linux desktop readiness after the Omarchy shell starts.
+-compat_revision=53
++# Revision 54 names approved apps for Linux and reports agent version 5 there.
++compat_revision=54
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/test_overlay_scripts.py b/guest/tests/test_overlay_scripts.py
+index 3ff1ca9..c33436f 100644
+--- a/guest/tests/test_overlay_scripts.py
++++ b/guest/tests/test_overlay_scripts.py
+@@ -408,6 +408,38 @@ class AgentTests(OverlayCase):
+                                 capture_output=True, text=True, timeout=10)
+         self.assertNotEqual(result.returncode, 0)
+ 
++    def test_approved_apps_are_named_for_a_linux_host(self) -> None:
++        app_id = "d" * 32
++        directory = self.root / "applications"
++        cmdline = self.root / "cmdline"
++        encoded = base64.b64encode(json.dumps([{"id": app_id, "name": "Calculator"}]).encode()).decode()
++        entry = directory / f"try-omarchy-windows-{app_id}.desktop"
++        for words, name, comment in (
++            ("root=/dev/vda rw tryomarchy.host=linux quiet", "Name=Host: Calculator", "on the host computer"),
++            ("root=/dev/vda rw tryomarchy.host=linuxish", "Name=Windows: Calculator", "approved Windows app"),
++        ):
++            cmdline.write_text(words + "\n")
++            env = dict(self.env, TRY_OMARCHY_APP_DIR=str(directory), TRY_OMARCHY_CMDLINE=str(cmdline))
++            result = subprocess.run([str(APP_SYNC)], input=encoded + "\n", env=env,
++                                    capture_output=True, text=True, timeout=10)
++            self.assertEqual(result.returncode, 0, result.stderr)
++            text = entry.read_text()
++            self.assertIn(name + "\n", text)
++            self.assertIn(comment, text)
++            self.assertIn(f"Exec=try-omarchy-windows-app {app_id}\n", text)
++        # Nothing is listening: the message names the host the guest runs on.
++        with socket.socket() as unused:
++            unused.bind(("127.0.0.1", 0))
++            port = unused.getsockname()[1]
++        for words, message in (("tryomarchy.host=linux", "Host app launch is unavailable"),
++                               ("quiet", "Windows app launch is unavailable")):
++            cmdline.write_text(words + "\n")
++            env = dict(self.env, TRY_OMARCHY_AGENT_HOST="127.0.0.1", TRY_OMARCHY_AGENT_PORT=str(port),
++                       TRY_OMARCHY_CMDLINE=str(cmdline))
++            result = subprocess.run([str(WINDOWS_APP), app_id], env=env, capture_output=True, text=True, timeout=10)
++            self.assertEqual(result.returncode, 1)
++            self.assertIn(message, result.stderr)
++
+     def test_approved_windows_app_request(self) -> None:
+         app_id = "b" * 32
+         with socket.socket() as server:
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 5da9fa8..4cd1a69 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -326,7 +326,7 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=53" in finalize_rootfs
++        "compat_revision=54" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/host-window" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-host-window" in compat_paths
+         and "usr/share/try-omarchy/host-window-idle.qml" in compat_paths
+-- 
+2.56.0
+

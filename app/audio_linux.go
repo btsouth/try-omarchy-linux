@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -22,15 +23,24 @@ func linuxAudioArgs(cfg *config, args []string) []string {
 		return args
 	}
 	for i := 1; i < len(args); i++ {
-		if args[i-1] == "-audiodev" && strings.HasSuffix(args[i], ",id=snd") {
-			if cfg.audio == "pipewire" && cfg.audioDevices.Output != "" {
-				args[i] += ",out.name=" + qemuOptionValue(cfg.audioDevices.Output)
-			}
-			if cfg.desktop.MicrophoneDisabled {
+		if args[i-1] != "-audiodev" {
+			continue
+		}
+		// The backend options may already end with settings such as
+		// in.voices=0, so match the id field rather than the suffix.
+		fields := strings.Split(args[i], ",")
+		if !slices.Contains(fields, "id=snd") {
+			continue
+		}
+		if cfg.audio == "pipewire" && cfg.audioDevices.Output != "" {
+			args[i] += ",out.name=" + qemuOptionValue(cfg.audioDevices.Output)
+		}
+		if cfg.desktop.MicrophoneDisabled {
+			if !slices.Contains(fields, "in.voices=0") {
 				args[i] += ",in.voices=0"
-			} else if cfg.audio == "pipewire" && cfg.audioDevices.Input != "" {
-				args[i] += ",in.name=" + qemuOptionValue(cfg.audioDevices.Input)
 			}
+		} else if cfg.audio == "pipewire" && cfg.audioDevices.Input != "" {
+			args[i] += ",in.name=" + qemuOptionValue(cfg.audioDevices.Input)
 		}
 	}
 	return args

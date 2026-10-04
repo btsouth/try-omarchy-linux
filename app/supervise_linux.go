@@ -227,6 +227,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 	defer func() { visibility.visible = false; sendLinuxVisibility(visibility) }()
 	for {
 		if !imageConfirmed && guestReady.Load() {
+			recordRenderResult(cfg)
 			commitGuestPayloadUpdate(cfg.dir)
 			commitCheckpointBoot(cfg.dir)
 			markLinuxMovedGuestReady(defaultLinuxDataDirectory(), cfg.dir)

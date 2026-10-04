@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 )
 
 // Try Omarchy for Linux. It prepares the guest the same way the Windows
@@ -327,7 +326,7 @@ func main() {
 	}
 
 	var reason string
-	cfg.useGpu, reason = startWithGPU(cfg.renderMode, nil, "", "", time.Now())
+	reason = configureLinuxRender(cfg, linuxDisplayDriverIdentity())
 	if reason != "" {
 		logf("rendering: %s", reason)
 	}

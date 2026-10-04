@@ -96,6 +96,7 @@ type settingsForm struct {
 	DiskGiB            string        `json:"diskGiB"`
 	Scale              string        `json:"scale"`
 	Keyboard           string        `json:"keyboard"`
+	HostKeyboard       string        `json:"hostKeyboard,omitempty"`
 	SSHEnabled         bool          `json:"sshEnabled"`
 	SSHPort            string        `json:"sshPort"`
 	SSHKey             string        `json:"sshKey"`
@@ -131,6 +132,14 @@ type reclaimInfo struct {
 type audioDevice struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
+}
+
+func keyboardHelpText(host string) string {
+	text := "Host layout could not be detected. Choose a layout explicitly, or keep the guest choice."
+	if host != "" {
+		text = "Detected host layout: " + host + ". Host layout changes while Omarchy runs apply on its next launch."
+	}
+	return text + " Press Ctrl+Alt+G to release keyboard capture."
 }
 
 func namedChoices(defaultLabel, unavailableLabel string, devices []audioDevice, selected string) (labels, names []string, index uint) {
@@ -714,7 +723,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		named(keyboard, "Guest keyboard layout")
 		formField("Guest keyboard layout", keyboard)
 		keyboardNames := []string{""}
-		formHelp("Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.")
+		keyboardHelp := formHelp(keyboardHelpText(""))
 		beginGroup("Microphone and camera", "Devices")
 		microphone := gtk.NewCheckButtonWithLabel("Allow microphone access")
 		groupContent.Append(microphone)
@@ -1489,6 +1498,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							keyboardNames = selectedKeyboards
 							keyboard.SetModel(gtk.NewStringList(keyboardLabels))
 							keyboard.SetSelected(keyboardIndex)
+							keyboardHelp.SetText(keyboardHelpText(next.Settings.HostKeyboard))
 							sshEnabled.SetActive(next.Settings.SSHEnabled)
 							sshPortValue, _ := strconv.Atoi(next.Settings.SSHPort)
 							sshPort.SetValue(float64(max(sshPortValue, 1024)))

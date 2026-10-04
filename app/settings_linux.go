@@ -40,6 +40,7 @@ type linuxSettingsForm struct {
 	DiskGiB            string             `json:"diskGiB"`
 	Scale              string             `json:"scale"`
 	Keyboard           string             `json:"keyboard"`
+	HostKeyboard       string             `json:"hostKeyboard"`
 	SSHEnabled         bool               `json:"sshEnabled"`
 	SSHPort            string             `json:"sshPort"`
 	SSHKey             string             `json:"sshKey"`
@@ -125,6 +126,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
 	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, FullscreenDisplay: saved.FullscreenDisplay, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != "", ClipboardShare: !linuxClipboardSharingOff()}
+	layout, variant := linuxHostKeyboard()
+	form.HostKeyboard = layout
+	if variant != "" {
+		form.HostKeyboard += ":" + variant
+	}
 	form.ResourceProfile = effectiveResourceProfile(resources.Profile, saved.CPUs, saved.MemoryMiB)
 	form.ResourceSummary = linuxAutomaticResourcesSummary(measureHostResources(false))
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)

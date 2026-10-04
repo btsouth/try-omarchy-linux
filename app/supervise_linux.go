@@ -44,7 +44,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 		args := linuxQemuArgs(cfg, buildQemuArgs(cfg, cmdline))
 		logf("qemu: %s %s", cfg.qemu, strings.Join(args, " "))
 		proc := exec.Command(cfg.qemu, args...)
-		proc.Env = linuxQemuEnvironment(os.Environ())
+		proc.Env = linuxFullscreenDisplay(linuxQemuEnvironment(os.Environ()), cfg.fullscreen, cfg.fullscreenDisplay)
 		// Per attempt: the fallbacks read this attempt's errors only.
 		stderr, err := os.OpenFile(filepath.Join(cfg.vmDir, "qemu-stderr.log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 		if err == nil {
@@ -353,6 +353,22 @@ func requestLinuxShutdown(qmp *qmpConn, proc *exec.Cmd, requests *int) {
 	if err := qmp.writeLine(command); err != nil {
 		proc.Process.Kill()
 	}
+}
+
+// linuxFullscreenDisplay makes the chosen output SDL's primary display, so a
+// VM that starts fullscreen opens there. SDL matches connector names such as
+// DP-2 on Wayland and X11, and a comma would start a second name.
+func linuxFullscreenDisplay(env []string, fullscreen bool, display string) []string {
+	if !fullscreen || display == "" || strings.ContainsAny(display, ",\x00\r\n") {
+		return env
+	}
+	clean := make([]string, 0, len(env)+1)
+	for _, value := range env {
+		if !strings.HasPrefix(value, "SDL_VIDEO_DISPLAY_PRIORITY=") {
+			clean = append(clean, value)
+		}
+	}
+	return append(clean, "SDL_VIDEO_DISPLAY_PRIORITY="+display)
 }
 
 // closeRequested matches the runtime's DISPLAY_CLOSE_REQUEST event, sent

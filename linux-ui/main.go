@@ -78,6 +78,7 @@ type settingsForm struct {
 	CPUs               string        `json:"cpus"`
 	Render             string        `json:"render"`
 	Fullscreen         bool          `json:"fullscreen"`
+	FullscreenDisplay  string        `json:"fullscreenDisplay"`
 	Microphone         bool          `json:"microphone"`
 	Camera             bool          `json:"camera"`
 	CameraID           string        `json:"cameraID"`
@@ -147,6 +148,24 @@ func namedChoices(defaultLabel, unavailableLabel string, devices []audioDevice, 
 		index = uint(len(names) - 1)
 	}
 	return
+}
+
+// connectedDisplays lists the monitors GDK knows about by connector name,
+// which is what SDL matches when the VM opens fullscreen.
+func connectedDisplays() []audioDevice {
+	display := gdk.DisplayGetDefault()
+	if display == nil {
+		return nil
+	}
+	monitors := display.Monitors()
+	var displays []displayChoice
+	for i := uint(0); i < monitors.NItems(); i++ {
+		if object := monitors.Item(i); object != nil {
+			monitor := &gdk.Monitor{Object: object}
+			displays = append(displays, displayChoice{Connector: monitor.Connector(), Description: monitor.Description()})
+		}
+	}
+	return fullscreenDisplayChoices(displays)
 }
 
 // named gives a control the name a screen reader announces. The visible label
@@ -522,6 +541,23 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		beginGroup("Display and startup", "General")
 		fullscreen := gtk.NewCheckButtonWithLabel("Open fullscreen")
 		groupContent.Append(fullscreen)
+		fullscreenDisplay := gtk.NewDropDownFromStrings([]string{"Automatic"})
+		named(fullscreenDisplay, "Fullscreen display")
+		formField("Fullscreen display", fullscreenDisplay)
+		fullscreenDisplayNames := []string{""}
+		formHelp("Automatic lets your desktop choose. A change applies the next time Omarchy starts.")
+		fullscreen.ConnectToggled(func() { fullscreenDisplay.SetSensitive(fullscreen.Active()) })
+		showDisplays := func(selected string) {
+			labels, names, index := namedChoices("Automatic", "Not connected: ", connectedDisplays(), selected)
+			fullscreenDisplayNames = names
+			fullscreenDisplay.SetModel(gtk.NewStringList(labels))
+			fullscreenDisplay.SetSelected(index)
+		}
+		if display := gdk.DisplayGetDefault(); display != nil {
+			display.Monitors().ConnectItemsChanged(func(position, removed, added uint) {
+				showDisplays(fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)])
+			})
+		}
 		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
 		groupContent.Append(startAutomatically)
 		formHelp("Automatic start waits 10 seconds; Settings or Close stops it.")
@@ -973,7 +1009,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), FullscreenDisplay: fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)], Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
 			return string(data)
 		}
 		audioRefresh.ConnectClicked(func() {
@@ -1416,6 +1452,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 								render.SetSelected(0)
 							}
 							fullscreen.SetActive(next.Settings.Fullscreen)
+							showDisplays(next.Settings.FullscreenDisplay)
+							fullscreenDisplay.SetSensitive(next.Settings.Fullscreen)
 							microphone.SetActive(next.Settings.Microphone)
 							camera.SetActive(next.Settings.Camera)
 							cameraLabels, names, index := namedChoices("Automatic", "Unavailable: ", next.Settings.Cameras, next.Settings.CameraID)

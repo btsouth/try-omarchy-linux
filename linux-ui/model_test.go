@@ -133,3 +133,27 @@ func TestHostAppOffersLeaveOutAllowedAppsAndTellTwinsApart(t *testing.T) {
 		t.Fatalf("kept %+v", kept)
 	}
 }
+
+// TestFullscreenDisplayChoicesUseConnectorNames pins that the saved choice is
+// the connector SDL matches, and that an unusable name is never offered.
+func TestFullscreenDisplayChoicesUseConnectorNames(t *testing.T) {
+	got := fullscreenDisplayChoices([]displayChoice{
+		{Connector: "DP-2", Description: "Dell U2720Q"},
+		{Connector: "eDP-1", Description: "eDP-1"},
+		{Connector: "HDMI-A-1"},
+		{Description: "Unnamed panel"},
+		{Connector: "DP-1,DP-2", Description: "Bad name"},
+	})
+	want := []audioDevice{
+		{Name: "DP-2", Label: "Dell U2720Q (DP-2)"},
+		{Name: "eDP-1", Label: "eDP-1"},
+		{Name: "HDMI-A-1", Label: "HDMI-A-1"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("choices = %#v, want %#v", got, want)
+	}
+	labels, names, index := namedChoices("Automatic", "Not connected: ", got, "DP-3")
+	if names[index] != "DP-3" || labels[index] != "Not connected: DP-3" {
+		t.Fatalf("a disconnected choice is kept: %v %v %d", labels, names, index)
+	}
+}

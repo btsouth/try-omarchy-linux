@@ -22,6 +22,7 @@ type linuxSettingsForm struct {
 	CPUs               string             `json:"cpus"`
 	Render             string             `json:"render"`
 	Fullscreen         bool               `json:"fullscreen"`
+	FullscreenDisplay  string             `json:"fullscreenDisplay"`
 	Microphone         bool               `json:"microphone"`
 	Camera             bool               `json:"camera"`
 	CameraID           string             `json:"cameraID"`
@@ -123,7 +124,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
-	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
+	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, FullscreenDisplay: saved.FullscreenDisplay, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: linuxGNOMEWayland(), ClipboardShare: !linuxClipboardSharingOff()}
 	form.ResourceProfile = effectiveResourceProfile(resources.Profile, saved.CPUs, saved.MemoryMiB)
 	form.ResourceSummary = linuxAutomaticResourcesSummary(measureHostResources(false))
 	form.AudioLive = running && linuxLiveAudioAvailable(ctx)
@@ -223,6 +224,10 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err == nil {
 			next, err = settingsFromForm(form.Fullscreen, form.ShareEnabled && form.Share != "", form.Memory, form.CPUs, form.Share, forwardsText, "", form.Render)
 			next.SSHKey = form.SSHKey
+			next.FullscreenDisplay = strings.TrimSpace(form.FullscreenDisplay)
+			if err == nil && (len(next.FullscreenDisplay) > 64 || strings.ContainsAny(next.FullscreenDisplay, ",\x00\r\n")) {
+				err = fmt.Errorf("fullscreen display name is invalid")
+			}
 		}
 		if err == nil {
 			err = validateLinuxLocalForwards(next.Forwards)
@@ -298,6 +303,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			// copy only after the atomic write succeeds.
 			nextSaved := saved
 			nextSaved.MemoryMiB, nextSaved.CPUs, nextSaved.Render, nextSaved.Fullscreen = next.MemoryMiB, next.CPUs, next.Render, next.Fullscreen
+			nextSaved.FullscreenDisplay = next.FullscreenDisplay
 			if form.Share != saved.Share || form.ShareEnabled != (saved.Share != "" && !saved.ShareDisabled) {
 				nextSaved.Share, nextSaved.ShareDisabled, nextSaved.SharedFolderPrompted = next.Share, next.ShareDisabled, true
 			}

@@ -118,8 +118,10 @@ virtio port, declared in `runtime.optionalDevices`, and a root service applies
 it until a guest user picks another zone. Follow Host Time Zone in the launcher
 menu turns following back on. The first-boot setup form starts from the host
 zone, and the shell clock refreshes its cached zone when it changes.
-Compatibility revision 48 delivers the service to existing disks. Patch 0118
-refreshes the package lock.
+Compatibility revision 48 delivers the service to existing disks. Before the
+display manager starts, the service also brings them the clock fix, replacing
+the clock widget only while it has the digest earlier images shipped. Patch
+0118 refreshes the package lock.
 Windows launchers pass no flag and keep the `Windows: name` entries.
 
 The second command needs Docker and currently takes about ten minutes. Release

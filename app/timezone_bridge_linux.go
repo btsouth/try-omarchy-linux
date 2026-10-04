@@ -4,6 +4,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,21 +27,52 @@ func startLinuxTimeZoneBridge(zone func() string) (func(), error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			// QEMU holds one connection; a reconnect replaces it.
-			go func() {
-				ticker := time.NewTicker(timeZoneInterval)
-				defer ticker.Stop()
-				_ = serveTimeZoneBridge(ctx, conn, zone, ticker.C)
-			}()
+	go acceptTimeZoneConnections(ctx, listener, zone, timeZoneInterval, time.Second)
+	return func() { cancel(); listener.Close() }, nil
+}
+
+// acceptTimeZoneConnections serves one connection at a time: QEMU holds one,
+// and a reconnect replaces it. A failed accept, such as running out of file
+// descriptors, is retried so a later QEMU reconnect is still served.
+func acceptTimeZoneConnections(ctx context.Context, listener net.Listener, zone func() string, interval, retry time.Duration) {
+	var current context.CancelFunc
+	defer func() {
+		if current != nil {
+			current()
 		}
 	}()
-	return func() { cancel(); listener.Close() }, nil
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
+				return
+			}
+			logf("time zone: accept: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(retry):
+			}
+			continue
+		}
+		if current != nil {
+			current()
+		}
+		connCtx, connCancel := context.WithCancel(ctx)
+		current = connCancel
+		go func() {
+			defer connCancel()
+			// The guest never writes. A read ends when the peer closes, even
+			// while there is no valid zone to send.
+			go func() {
+				_, _ = io.Copy(io.Discard, conn)
+				connCancel()
+			}()
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			_ = serveTimeZoneBridge(connCtx, conn, zone, ticker.C)
+		}()
+	}
 }
 
 // linuxMonitorTimeZone is kept current by Flatpak's session helper. Inside

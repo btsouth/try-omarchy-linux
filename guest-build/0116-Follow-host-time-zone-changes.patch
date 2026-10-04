@@ -1,4 +1,4 @@
-From 01d7ad095567f804fc260a92db3ef1204dfa52a6 Mon Sep 17 00:00:00 2001
+From 792c4820f0ec5cff359ffcf4e57a798b15bee49a Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Sun, 4 Oct 2026 09:51:56 -0400
 Subject: [PATCH 116/117] Follow host time-zone changes until the guest opts
@@ -43,12 +43,12 @@ index 0000000..dbb1e04
 \ No newline at end of file
 diff --git a/guest/factory-overlay/etc/systemd/system/try-omarchy-timezone.service b/guest/factory-overlay/etc/systemd/system/try-omarchy-timezone.service
 new file mode 100644
-index 0000000..1317b42
+index 0000000..8339e4a
 --- /dev/null
 +++ b/guest/factory-overlay/etc/systemd/system/try-omarchy-timezone.service
 @@ -0,0 +1,12 @@
 +[Unit]
-+Description=Follow the Windows time zone until changed inside Omarchy
++Description=Follow the host time zone until changed inside Omarchy
 +After=systemd-udev-trigger.service try-omarchy-host-locale.service
 +ConditionPathExists=/dev/virtio-ports/dev.tryomarchy.timezone
 +
@@ -265,7 +265,7 @@ index 0000000..b03b04a
 +if __name__ == "__main__":
 +    main()
 diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale
-index 51e27a3..8717164 100755
+index 51e27a3..31a70e9 100755
 --- a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale
 +++ b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-locale
 @@ -5,6 +5,7 @@
@@ -286,7 +286,7 @@ index 51e27a3..8717164 100755
 +    if "$helper" --initialize "$zone"; then
 +      printf '%s\n' "$zone" >"$marker"
 +    else
-+      echo "Could not follow the Windows time zone; keeping the guest selection" >&2
++      echo "Could not follow the host time zone; keeping the guest selection" >&2
 +    fi
 +    return 0
 +  fi
@@ -621,5 +621,5 @@ index 49d03aa..3777aeb 100755
          and "usr/share/try-omarchy/quick-start-sshd.conf" in compat_paths
          and "usr/local/lib/try-omarchy/desktop-ready" in compat_paths
 -- 
-2.43.0
+2.56.0
 

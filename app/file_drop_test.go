@@ -58,9 +58,10 @@ func TestDroppedFilesCarryTheDropPoint(t *testing.T) {
 	defer guest.Close()
 	guest.SetDeadline(time.Now().Add(3 * time.Second))
 	bridge := &clipBridge{transfers: service, transferEnabled: true, pullConn: host}
+	droppedAt := time.Now().Add(-5 * time.Second)
 	done := make(chan error, 1)
 	go func() {
-		done <- bridge.offerDroppedFiles(droppedFiles{paths: []string{source}, point: []int{640, 360, 1280, 720}, pointerMoves: 7})
+		done <- bridge.offerDroppedFiles(droppedFiles{paths: []string{source}, point: []int{640, 360, 1280, 720}, pointerMoves: 7, at: droppedAt})
 	}()
 	line, err := bufio.NewReader(guest).ReadString('\n')
 	if err != nil {
@@ -80,7 +81,7 @@ func TestDroppedFilesCarryTheDropPoint(t *testing.T) {
 	if len(ticket.Point) != 4 || ticket.Point[0] != 640 || ticket.Point[1] != 360 || ticket.Point[2] != 1280 || ticket.Point[3] != 720 {
 		t.Fatalf("ticket point = %v", ticket.Point)
 	}
-	if drop, err := takeDrop(ticket.ID, time.Now()); err != nil || drop.pointerMoves != 7 || len(drop.point) != 4 {
+	if drop, err := takeDrop(ticket.ID, time.Now()); err != nil || drop.pointerMoves != 7 || len(drop.point) != 4 || !drop.at.Equal(droppedAt) {
 		t.Fatalf("recorded drop = %+v, %v", drop, err)
 	}
 }

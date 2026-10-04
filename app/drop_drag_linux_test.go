@@ -57,6 +57,10 @@ func TestLinuxDropDragRefusesAfterThePointerMoved(t *testing.T) {
 	if err := performLinuxDropDrag(id, 16400, 16400); err == nil || !strings.Contains(err.Error(), "no recent drop") {
 		t.Fatalf("a refused drop stayed available: %v", err)
 	}
+	recordDrop(id, recordedDrop{at: time.Now().Add(-linuxDropDragWindow), point: []int{500, 400, 1000, 800}, pointerMoves: dropPointerMoves.Load()})
+	if err := performLinuxDropDrag(id, 16400, 16400); err == nil || !strings.Contains(err.Error(), "too old") {
+		t.Fatalf("drag after QEMU stopped watching the pointer: %v", err)
+	}
 	guestReady.Store(false)
 	recordDrop(id, recordedDrop{at: time.Now(), point: []int{500, 400, 1000, 800}, pointerMoves: dropPointerMoves.Load()})
 	if err := performLinuxDropDrag(id, 16400, 16400); err == nil || !strings.Contains(err.Error(), "not running") {
@@ -85,7 +89,7 @@ func (p *recordedPointer) Call(_ context.Context, command string, arguments any,
 func TestLinuxDragStepsSendEveryStep(t *testing.T) {
 	steps := []pointerStep{{x: 10, y: 20, button: -1}, {x: 10, y: 20, button: 1}, {x: 30, y: 40, button: -1}, {x: 30, y: 40, button: 0}}
 	pointer := &recordedPointer{}
-	held, err := runLinuxDragSteps(context.Background(), pointer, steps, dropPointerMoves.Load())
+	held, err := runLinuxDragSteps(context.Background(), pointer, steps, dropPointerMoves.Load(), time.Now().Add(time.Minute))
 	if err != nil || held || len(pointer.calls) != len(steps) {
 		t.Fatalf("held=%v err=%v calls=%v", held, err, pointer.calls)
 	}
@@ -105,7 +109,7 @@ func TestLinuxDragStopsWhenThePointerMovesMidDrag(t *testing.T) {
 			dropPointerMoves.Add(1)
 		}
 	}}
-	held, err := runLinuxDragSteps(context.Background(), pointer, steps, dropPointerMoves.Load())
+	held, err := runLinuxDragSteps(context.Background(), pointer, steps, dropPointerMoves.Load(), time.Now().Add(time.Minute))
 	if err == nil || !held || len(pointer.calls) != 2 {
 		t.Fatalf("held=%v err=%v calls=%v", held, err, pointer.calls)
 	}
@@ -114,7 +118,30 @@ func TestLinuxDragStopsWhenThePointerMovesMidDrag(t *testing.T) {
 		t.Fatalf("button not released: %s", last)
 	}
 	failing := &recordedPointer{fail: 2}
-	if held, err := runLinuxDragSteps(context.Background(), failing, steps, dropPointerMoves.Load()); err == nil || !held {
+	if held, err := runLinuxDragSteps(context.Background(), failing, steps, dropPointerMoves.Load(), time.Now().Add(time.Minute)); err == nil || !held {
 		t.Fatalf("broken connection: held=%v err=%v", held, err)
+	}
+}
+
+func TestLinuxDragCountsAPressWhoseReplyIsLost(t *testing.T) {
+	steps := []pointerStep{{x: 10, y: 20, button: -1}, {x: 10, y: 20, button: 1}, {x: 30, y: 40, button: 0}}
+	deadline := time.Now().Add(time.Minute)
+	if held, err := runLinuxDragSteps(context.Background(), &recordedPointer{fail: 2}, steps, dropPointerMoves.Load(), deadline); err == nil || !held {
+		t.Fatalf("lost press reply: held=%v err=%v", held, err)
+	}
+	if held, err := runLinuxDragSteps(context.Background(), &recordedPointer{fail: 3}, steps, dropPointerMoves.Load(), deadline); err == nil || !held {
+		t.Fatalf("lost release reply: held=%v err=%v", held, err)
+	}
+	if held, err := runLinuxDragSteps(context.Background(), &recordedPointer{fail: 1}, steps, dropPointerMoves.Load(), deadline); err == nil || held {
+		t.Fatalf("failure before any press: held=%v err=%v", held, err)
+	}
+}
+
+func TestLinuxDragStopsWhenTheDropGetsTooOld(t *testing.T) {
+	steps := []pointerStep{{x: 10, y: 20, button: 1, pause: 30 * time.Millisecond}, {x: 30, y: 40, button: 0}}
+	pointer := &recordedPointer{}
+	held, err := runLinuxDragSteps(context.Background(), pointer, steps, dropPointerMoves.Load(), time.Now().Add(10*time.Millisecond))
+	if err == nil || !held || len(pointer.calls) != 1 {
+		t.Fatalf("held=%v err=%v calls=%v", held, err, pointer.calls)
 	}
 }

@@ -271,7 +271,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				}
 				// Count moves from here: a grant prompt means the pointer
 				// moves on before the files reach the guest.
-				moves := dropPointerMoves.Load()
+				moves, at := dropPointerMoves.Load(), time.Now()
 				go func() {
 					granted, err := linuxGrantDroppedFiles(paths)
 					if errors.Is(err, errSetupCancelled) {
@@ -279,7 +279,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 						return
 					}
 					if err == nil {
-						err = queueDroppedFiles(droppedFiles{paths: granted, point: position, pointerMoves: moves})
+						err = queueDroppedFiles(droppedFiles{paths: granted, point: position, pointerMoves: moves, at: at})
 					}
 					reportLinuxFileDropError(err)
 				}()

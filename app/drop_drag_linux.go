@@ -18,7 +18,13 @@ import (
 // check. A runtime without the patch reports no position, so the guest keeps
 // the files in Downloads.
 
-const linuxDropWindowLimit = 1 << 16
+const (
+	linuxDropWindowLimit = 1 << 16
+	// QEMU watches the pointer for 30 seconds from the drop. Drag only
+	// well inside that, timed from when the launcher saw the drop, so a
+	// move QEMU no longer reports cannot go unnoticed.
+	linuxDropDragWindow = 25 * time.Second
+)
 
 var (
 	// dropPointerMoves counts DISPLAY_DROP_POINTER_MOVED events. A drop
@@ -75,6 +81,10 @@ func performLinuxDropDrag(id string, x, y int) error {
 	if dropPointerMoves.Load() != drop.pointerMoves {
 		return errors.New("the pointer moved after the drop")
 	}
+	deadline := drop.at.Add(linuxDropDragWindow)
+	if !time.Now().Before(deadline) {
+		return errors.New("the drop is too old")
+	}
 	steps, err := dropDragSteps(x, y, drop)
 	if err != nil {
 		return err
@@ -94,7 +104,7 @@ func performLinuxDropDrag(id string, x, y int) error {
 		defer linuxDragBusy.Store(false)
 		defer cancel()
 		defer qmp.Close()
-		held, err := runLinuxDragSteps(ctx, qmp, steps, drop.pointerMoves)
+		held, err := runLinuxDragSteps(ctx, qmp, steps, drop.pointerMoves, deadline)
 		if err == nil {
 			return
 		}
@@ -130,17 +140,25 @@ type pointerInput interface {
 }
 
 // runLinuxDragSteps sends the steps and stops if the pointer moves on the
-// host meanwhile. held reports whether the button was left pressed.
-func runLinuxDragSteps(ctx context.Context, qmp pointerInput, steps []pointerStep, moves uint64) (held bool, err error) {
+// host meanwhile or the drop gets too old. held reports whether the button
+// may be left pressed: a press counts from before it is sent, since QEMU can
+// apply it even when its reply is lost, and only a confirmed release clears it.
+func runLinuxDragSteps(ctx context.Context, qmp pointerInput, steps []pointerStep, moves uint64, deadline time.Time) (held bool, err error) {
 	for _, step := range steps {
 		if dropPointerMoves.Load() != moves {
 			return held, errors.New("the pointer moved during the drag")
 		}
+		if !time.Now().Before(deadline) {
+			return held, errors.New("the drop got too old during the drag")
+		}
+		if step.button == 1 {
+			held = true
+		}
 		if err := qmp.Call(ctx, "input-send-event", json.RawMessage(pointerStepArguments(step)), nil); err != nil {
 			return held, err
 		}
-		if step.button >= 0 {
-			held = step.button == 1
+		if step.button == 0 {
+			held = false
 		}
 		select {
 		case <-time.After(step.pause):

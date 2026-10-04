@@ -713,6 +713,9 @@ func runLinuxHome(w *linuxSetupWindow, defaultDir, requestedDir string, explicit
 				state, dir = linuxHomeStateForDir(resolved, defaultDir)
 			}
 		}
+		if dir != "" {
+			tightenLinuxGuestData(dir)
+		}
 		// Finish an interrupted roll back before describing the VM; until then
 		// its disk can be set aside and the home would offer a new setup.
 		if dir != "" && linuxSnapshotRecoveryPending(dir) {

@@ -739,7 +739,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		clipboardGroup := beginGroup("Clipboard", "Devices")
 		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
 		groupContent.Append(clipboardShare)
-		clipboardHelp := formHelp("GNOME asks for your permission the first time. A change applies the next time Omarchy starts.")
+		clipboardHelp := formHelp("On GNOME Wayland, sharing asks for your permission the first time. A change applies the next time Omarchy starts.")
 		beginGroup("Graphics", "Advanced")
 		formField("Rendering", render)
 		groupContent.Append(defaults)

@@ -126,24 +126,36 @@ func settingsClipboardRun(t *testing.T, mode string) {
 	}
 }
 
-func TestSettingsCanTurnClipboardSharingOffAndBackOnAfterADenial(t *testing.T) {
-	consentTest(t)
-	settingsClipboardRun(t, "settings-clipboard-off")
-	if !linuxClipboardSharingOff() {
-		t.Fatal("unchecking the setting must record the choice")
-	}
-	settingsClipboardRun(t, "settings-clipboard-on")
-	if linuxClipboardSharingOff() {
-		t.Fatal("checking the setting must let Omarchy ask again")
+func TestSettingsCanTurnClipboardSharingOffAndBackOnOnEveryDesktop(t *testing.T) {
+	for _, desktop := range []struct{ name, wayland, display string }{
+		{"GNOME", "wayland-test", ""},
+		{"KDE", "wayland-test", ""},
+		{"Hyprland", "wayland-test", ""},
+		{"Xfce", "", ":test"},
+	} {
+		t.Run(desktop.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("WAYLAND_DISPLAY", desktop.wayland)
+			t.Setenv("DISPLAY", desktop.display)
+			t.Setenv("XDG_CURRENT_DESKTOP", desktop.name)
+			settingsClipboardRun(t, "settings-clipboard-off")
+			if !linuxClipboardSharingOff() {
+				t.Fatal("unchecking the setting must record the choice")
+			}
+			settingsClipboardRun(t, "settings-clipboard-on")
+			if linuxClipboardSharingOff() {
+				t.Fatal("checking the setting must allow clipboard sharing again")
+			}
+		})
 	}
 }
 
-func TestSettingsHideClipboardSharingWhereNoPermissionIsNeeded(t *testing.T) {
+func TestSettingsHideClipboardSharingWithoutAGraphicalSession(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("WAYLAND_DISPLAY", "wayland-test")
-	t.Setenv("XDG_CURRENT_DESKTOP", "KDE")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
 	settingsClipboardRun(t, "settings-clipboard-hidden")
 	if linuxClipboardSharingOff() {
-		t.Fatal("a desktop without the permission must never record a refusal")
+		t.Fatal("a hidden setting must not record a refusal")
 	}
 }

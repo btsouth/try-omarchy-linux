@@ -113,5 +113,9 @@ if (( revision >= 55 )); then
     cmp "/usr/share/applications/$entry.desktop" "/usr/share/try-omarchy/host-applications/windows/$entry.desktop"
   done
 fi
+if (( revision >= 56 )); then
+  grep -qx 'Target = try-omarchy-runtime' /etc/pacman.d/hooks/95-try-omarchy-host-names.hook
+  grep -Fq 'omarchy-shell shell ping' /usr/local/lib/try-omarchy/desktop-ready
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

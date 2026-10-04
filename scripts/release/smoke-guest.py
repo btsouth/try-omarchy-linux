@@ -51,6 +51,8 @@ def linux_guest_payload_checks(revision: int) -> dict[str, str]:
         checks["linux-app-payload"] = "grep -qx 'version=4' /usr/local/lib/try-omarchy/agent && grep -Fq 'version=5' /usr/local/lib/try-omarchy/agent"
     if revision >= 55:
         checks["linux-notices-payload"] = "test -x /usr/local/lib/try-omarchy/apply-host-names && test -d /usr/share/try-omarchy/host-applications/linux && test -d /usr/share/try-omarchy/host-applications/windows && test -x /usr/local/lib/try-omarchy/repair-clock-timezone && test -f /usr/share/try-omarchy/clock-timezone-refresh.qml && grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/system/try-omarchy-linux-clock.service"
+    if revision >= 56:
+        checks["linux-labels-hook-payload"] = "grep -qx 'Target = try-omarchy-runtime' /etc/pacman.d/hooks/95-try-omarchy-host-names.hook && grep -Fq 'omarchy-shell shell ping' /usr/local/lib/try-omarchy/desktop-ready"
     return {name: command + " && echo yes || echo no" for name, command in checks.items()}
 
 

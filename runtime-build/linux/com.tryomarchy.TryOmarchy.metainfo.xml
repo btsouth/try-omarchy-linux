@@ -24,7 +24,7 @@
       <li>A persistent disk with backup, restore and move</li>
       <li>Settings for memory, processors, display scale and microphone access</li>
     </ul>
-    <p>The first launch downloads Omarchy, about 2 GB, and needs about 13 GB
+    <p>The first launch downloads Omarchy, about 2 GB, and needs about 14 GB
     of free space for Omarchy, plus space for the Flatpak runtime. The app needs a 64-bit x86 PC with hardware virtualization
     and access to KVM. Removing the app keeps your VM unless you also delete
     its data.</p>
@@ -49,6 +49,22 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-10-04" type="stable">
+      <description>
+        <p>Snapshots, disk space reclaim, a path to installed Omarchy, and a newer Omarchy guest.</p>
+        <ul>
+          <li>Take snapshots of the VM and roll back to them</li>
+          <li>Give unused disk space back to this computer</li>
+          <li>Bring a trial into an installed Omarchy, including saved sign-ins and password-protected GNOME keyrings</li>
+          <li>Drop files from this computer straight into the Omarchy app under the pointer</li>
+          <li>Open approved apps on this computer from Omarchy</li>
+          <li>Follow this computer's time zone as it changes</li>
+          <li>Choose which monitor the app opens fullscreen on</li>
+          <li>Shared folder, diagnostics and help in the tray menu</li>
+          <li>New installs get Omarchy 4.0.4; existing VMs keep working and update through Update, Omarchy</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-02" type="stable">
       <description>
         <p>Fix startup on Bazzite and other Fedora Atomic desktops that store home directories under /var/home.</p>

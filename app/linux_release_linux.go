@@ -9,20 +9,21 @@ import (
 )
 
 // The Linux guest is built from the shared guest series plus the Linux patches
-// (compatibility revision 44) and published on this repository's releases.
+// (compatibility revision 55) and published on this repository's releases.
 // Windows release defaults in manifest.go are deliberately untouched.
 var (
-	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.1.1"
-	linuxGuestSumsSHA256 = "e0c5113c0eb9fa489bae3fc0c0abdf5696c35515f6b80db0660d4d3492d4a694"
+	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.2.0"
+	linuxGuestSumsSHA256 = "9018c27c21accd17a1bafbfd31e47f62611411a8f9a9c12fb673399efa87699e"
 )
 
-// Measured on the pinned guest image (linux-v0.1.1): the archive, kernel and
-// initramfs are 2.03 GB together, and a first launch ends with 5.7 GB of system
-// files, the VM's own 5.7 GB copy of them and about 1.4 GB the first boot
-// writes. Update these with the pin; the release manifest lists the sizes.
+// Measured on the pinned guest image (linux-v0.2.0): the archive, kernel and
+// initramfs total 2,186,319,748 bytes (2.04 GiB). The sparse factory image uses
+// 5.71 GiB; a quick-start disk uses about 7.08 GiB after its first shutdown.
+// Allow 14 GiB for setup, including the kernel, initramfs and room for writes.
+// Update these measurements with the pin; the release manifest lists the sizes.
 const (
-	linuxGuestDownloadBytes = 2_177_000_000
-	linuxGuestSpaceBytes    = int64(13) << 30
+	linuxGuestDownloadBytes = 2_186_319_748
+	linuxGuestSpaceBytes    = int64(14) << 30
 	// A sparse VM disk can grow past what its drive has left. Below this the
 	// guest can hit write errors, so the home says so.
 	linuxLowSpaceBytes = int64(2) << 30

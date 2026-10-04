@@ -9,9 +9,9 @@ Want to keep your trial when installing Omarchy for real? See
 
 ## Install
 
-You need a 64-bit x86 PC with virtualization turned on, Flatpak, and about
-15 GB free: Omarchy takes about 13 GB once set up, and Software also installs
-the GNOME runtime the first time if you do not have it yet.
+You need a 64-bit x86 PC with virtualization turned on, Flatpak, and at least
+14 GiB (about 15 GB) free for Omarchy setup, plus space for the GNOME runtime
+if Software has not installed it yet.
 
 1. [Download the installer](https://tryomarchy.com/linux.flatpakref), open it
    with **Software** or **Discover**, then choose **Install**. It adds the
@@ -108,10 +108,10 @@ the home screen says so and offers **Check again**.
 
 ## Space
 
-Setup needs about 13 GB. Omarchy sees a 24 GB disk, but only what it actually
-uses takes space on your drive. The home screen shows where the VM lives, what
-it uses and what is free, and warns when the drive has less than 2 GB left,
-since Omarchy can stop working if it fills up.
+Setup needs at least 14 GiB (about 15 GB) free. Omarchy sees a 24 GiB disk,
+but only what it actually uses takes space on your drive. The home screen
+shows where the VM lives, what it uses and what is free. It warns when the drive
+has less than 2 GB left, since Omarchy can stop working if it fills up.
 
 To make room, free space on that drive, or choose **Choose location** and pick
 another folder before setup. An existing VM can move later with **Backup and

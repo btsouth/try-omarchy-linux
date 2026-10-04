@@ -104,8 +104,9 @@ Folders and files reach the app through the desktop's file chooser and document 
 
 Touchpad gestures, bridged/LAN networking, USB passthrough and host biometric
 authentication are not in the Linux app yet. Apps on this computer that you
-allow in Settings open from Omarchy's launcher; they need the next Omarchy
-system image, which is not released yet.
+allow in Settings open from Omarchy's launcher with the guest image shipped in
+linux-v0.2.0 or later. Older guests receive this integration on the first launch
+after the app downloads the newer image. Your files stay on the existing disk.
 Playback and microphone devices and local port forwards change from Settings
 while Omarchy runs. Camera capture uses the desktop's camera permission portal,
 only while an app inside Omarchy opens the camera.
@@ -119,7 +120,7 @@ and port forwarding.
 - The app is a **Flatpak** built on the GNOME runtime. Install Flatpak support for your distribution before opening the installer; Ubuntu and NixOS instructions are above.
 - Tested end to end on fresh **Ubuntu 24.04, Fedora 44, Linux Mint 22.3 and NixOS 26.05** installs (GNOME Wayland and Cinnamon X11). KDE Plasma on Wayland and Xfce on X11 were tested on earlier builds.
 - A user reported it working on **Debian testing (forky) with COSMIC** on Wayland, installed as a `--user` Flatpak through COSMIC Store on an Intel i3-8130U laptop with UHD 620 graphics and 16 GB of RAM. See [reports so far](docs/LINUX-HARDWARE-TESTING.md#reports-so-far).
-- Keep about **15 GB free** for Omarchy and its runtime. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GB disk, but only what it uses takes space.
+- Keep at least **14 GiB (about 15 GB) free** for Omarchy setup, plus space for the Flatpak runtime if missing. First setup downloads a guest image of about 2 GB. Omarchy sees a 24 GiB disk, but only what it uses takes space.
 
 ## Build from source
 

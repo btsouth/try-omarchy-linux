@@ -246,7 +246,12 @@ func runLinuxClipboardBridge() func() {
 	supported := true
 	c := &linuxClipboard{}
 	names := []string{"wl-copy", "wl-paste"}
-	if os.Getenv("WAYLAND_DISPLAY") == "" {
+	if linuxClipboardSharingOff() {
+		setLinuxClipboardStatus(linuxClipboardOffMessage, false)
+		logf("clipboard: sharing is off; file drops remain available")
+		supported = false
+		names = nil
+	} else if os.Getenv("WAYLAND_DISPLAY") == "" {
 		if os.Getenv("DISPLAY") == "" {
 			logf("clipboard: no graphical session available")
 			return func() {}

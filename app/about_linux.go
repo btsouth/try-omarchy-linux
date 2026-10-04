@@ -31,7 +31,7 @@ func linuxAboutState() linuxSetupState {
 			}},
 			{Heading: "Settings and devices", Rows: []linuxRow{
 				{Title: "Resources", Detail: "Balanced leaves room for your Linux desktop. Maximum performance uses more available resources. Manual lets you tune memory and processors. Changes apply on the next VM launch."},
-				{Title: "When changes apply", Detail: "Audio devices can switch when you save during a running session. Camera and microphone access, shared folders, disk, display, keyboard and network settings need a shutdown and launch. A guest reboot does not apply them. Startup behavior applies the next time you open Try Omarchy."},
+				{Title: "When changes apply", Detail: "Audio devices and local port forwards can change when you save during a running session. Camera and microphone access, shared folders, clipboard sharing, disk, display, keyboard and SSH settings need a shutdown and launch. A guest reboot does not apply them. Startup behavior applies the next time you open Try Omarchy."},
 				{Title: "If Save fails", Detail: "Settings identifies any groups already saved and keeps your remaining edits. Fix the folder's permissions or free space, then Save again. If a live audio switch fails, the saved choices remain available for the next launch."},
 			}},
 			{Heading: "Removing the app and your VM", Rows: []linuxRow{

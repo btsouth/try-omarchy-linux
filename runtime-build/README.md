@@ -96,6 +96,43 @@ vertical and horizontal precision-touchpad scrolling in Chromium and a
 terminal on the Windows laptop, both Windows natural-scroll settings, plain
 wheel-mouse notches, and pinch zoom followed by scrolling.
 
+The Linux Flatpak builds QEMU 11.1.1 with the equivalent
+`linux/patches/qemu/0112-preserve-precise-sdl-scroll.patch`. This port uses
+11.1's inline `QemuInputEvent` fields and needs none of the Windows pinch
+patches. Both launchers already select `virtio-tablet-pci`; no extra device
+options or launcher changes are needed. The shared guest's kernel virtio-input
+driver and libinput handle the standard hi-res wheel codes, so no guest patch
+is needed. The GNOME 51 SDK supplies SDL 2.32.72, above the 2.0.18 minimum for
+fractional wheel fields. Positive SDL X scrolls right and positive Y scrolls
+up. Linux preserves the delivered values even for `SDL_MOUSEWHEEL_FLIPPED`,
+matching upstream QEMU's treatment of direction. Wayland compositors already
+apply the host's natural-scroll preference; flipping again would reverse it
+in the guest. This also applies to whole detents and the PS/2/USB fallback.
+
+For a headless Linux build and test, use the same pinned container image and
+mounts as `linux/build-flatpak.sh`, retaining the builder state in `/out/state`:
+
+```sh
+flatpak-builder --disable-rofiles-fuse --force-clean --keep-build-dirs \
+  --stop-at=try-omarchy-setup --state-dir=/out/state \
+  /out/build /src/runtime-build/linux/com.tryomarchy.TryOmarchy.yml
+flatpak build --filesystem=/src /out/build python3 \
+  /src/runtime-build/linux/test-sdl-scroll.py /app/bin/qemu-system-x86_64
+python3 /src/runtime-build/test-sdl-scroll.py --preserve-delivered-direction \
+  /out/state/build/qemu
+```
+
+`--stop-at` stops before the named module, so this builds through QEMU without
+building the launcher or exporting a repository. The test injects synthetic
+SDL wheel events into the built binary using a test-only preload shim and
+SDL's dummy video driver, then reads the tablet's guest-visible virtqueue via
+qtest. It checks both fractional axes, normal/flipped direction, legacy
+notches, sub-unit accumulation and QMP routing. The portable handler test
+also checks older SDL's integer fields and the PS/2/USB whole-detent fallback;
+its Linux flag preserves delivered signs, while its default retains the
+Windows expectations. These tests do not establish real
+touchpad feel or Wayland/X11 desktop behavior.
+
 The r4 recipe enables libusb explicitly and includes its runtime DLL and license.
 The USB host patch adds `auto-reconnect=off` for explicit attachment: the selected
 bus/address must exist, vendor/product/port must still match, and opening the

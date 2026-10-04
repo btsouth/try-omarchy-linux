@@ -121,6 +121,13 @@ func buildQemuArgs(cfg *config, cmdline string) []string {
 		"-chardev", cameraChardev(cfg.qmpDir),
 		"-device", "virtio-serial-pci,id=virtioserial0",
 		"-device", "virtserialport,chardev=cam0,name=dev.tryomarchy.camera",
+	)
+	if cfg.followHostTimeZone {
+		// Root-only in the guest; the host only sends zone snapshots.
+		args = append(args, "-chardev", timeZoneChardev(cfg.qmpDir),
+			"-device", "virtserialport,chardev=timezone0,name="+timeZoneDevice)
+	}
+	args = append(args,
 		// Root-only in the guest. The host sends only bounded responses to a
 		// matching request; enrollment remains opt-in through guest sudo.
 		"-chardev", fmt.Sprintf("socket,id=hello0,host=127.0.0.1,port=%d,reconnect-ms=1000", helloBridgePort),

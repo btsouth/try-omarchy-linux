@@ -11,19 +11,30 @@ import (
 )
 
 func linuxCameraSocketPath() (string, error) {
+	return linuxPrivateSocketPath("camera.sock")
+}
+
+// linuxPrivateSocketPath names a socket in the private control directory.
+func linuxPrivateSocketPath(name string) (string, error) {
 	dir, err := qmpControlDirectory()
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, "camera.sock")
+	path := filepath.Join(dir, name)
 	if !filepath.IsAbs(path) || len([]byte(path)) > 103 {
-		return "", fmt.Errorf("private camera connection path is too long or is not absolute")
+		return "", fmt.Errorf("private connection path %s is too long or is not absolute", name)
 	}
 	return path, nil
 }
 
 func listenLinuxCamera() (net.Listener, error) {
-	path, err := linuxCameraSocketPath()
+	return listenLinuxPrivateSocket("camera.sock")
+}
+
+// listenLinuxPrivateSocket listens on a socket only this user can reach, in
+// a private directory, replacing a stale socket but not a live one.
+func listenLinuxPrivateSocket(name string) (net.Listener, error) {
+	path, err := linuxPrivateSocketPath(name)
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +50,12 @@ func listenLinuxCamera() (net.Listener, error) {
 	}
 	if info, statErr := os.Lstat(path); statErr == nil {
 		if info.Mode()&os.ModeSocket == 0 {
-			return nil, fmt.Errorf("private camera path contains another file")
+			return nil, fmt.Errorf("private connection path %s contains another file", name)
 		}
 		conn, dialErr := net.DialTimeout("unix", path, 300*time.Millisecond)
 		if dialErr == nil {
 			conn.Close()
-			return nil, fmt.Errorf("another Omarchy runtime owns the camera connection")
+			return nil, fmt.Errorf("another Omarchy runtime owns the private connection %s", name)
 		}
 		if !qmpConnectionRefused(dialErr) && !os.IsNotExist(dialErr) {
 			return nil, dialErr

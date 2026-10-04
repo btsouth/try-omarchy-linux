@@ -14,4 +14,6 @@ const (
 	cameraPort      = 4453
 	audioBridgePort = 4454
 	helloBridgePort = 4455
+	// timeZoneBridgePort is only for launchers without a private socket.
+	timeZoneBridgePort = 4456
 )

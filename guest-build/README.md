@@ -111,6 +111,17 @@ Patch 0115 names a Linux host in the rest of the guest's notices. With
 and the file transfer window speak of the host computer instead of Windows.
 The Settings and file transfer desktop entries use wording that fits either
 host. Compatibility revision 47 delivers the scripts to existing disks.
+
+Patches 0116 and 0117 port live time-zone following from the Windows guest.
+The launcher streams the host zone over the root-only `dev.tryomarchy.timezone`
+virtio port, declared in `runtime.optionalDevices`, and a root service applies
+it until a guest user picks another zone. Follow Host Time Zone in the launcher
+menu turns following back on. The first-boot setup form starts from the host
+zone, and the shell clock refreshes its cached zone when it changes.
+Compatibility revision 48 delivers the service to existing disks. Before the
+display manager starts, the service also brings them the clock fix, replacing
+the clock widget only while it has the digest earlier images shipped. Patch
+0118 refreshes the package lock.
 Windows launchers pass no flag and keep the `Windows: name` entries.
 
 The second command needs Docker and currently takes about ten minutes. Release

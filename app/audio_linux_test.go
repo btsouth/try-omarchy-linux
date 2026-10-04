@@ -24,3 +24,21 @@ func TestLinuxAudioRoutesAndMicrophone(t *testing.T) {
 		t.Fatal("unknown backend accepted")
 	}
 }
+
+func TestLinuxAudioOutputKeptWithMicrophoneOff(t *testing.T) {
+	cfg := &config{audio: "pipewire", audioDevices: audioPreferences{Output: "sink.test", Input: "source.test"}, desktop: desktopPreferences{MicrophoneDisabled: true}}
+	backend := audioBackendOptions(cfg.audio, true, audioSampleRates{})
+	args := linuxAudioArgs(cfg, []string{"qemu", "-audiodev", backend})
+	if want := "pipewire,id=snd,in.voices=0,out.name=sink.test"; args[2] != want {
+		t.Fatalf("got %q, want %q", args[2], want)
+	}
+	cfg.audio = "sdl"
+	backend = audioBackendOptions(cfg.audio, true, audioSampleRates{})
+	if got := linuxAudioArgs(cfg, []string{"qemu", "-audiodev", backend})[2]; got != backend {
+		t.Fatalf("sdl options changed: %q", got)
+	}
+	cfg.audio = "pipewire"
+	if got := linuxAudioArgs(cfg, []string{"qemu", "-audiodev", "pipewire,id=other"})[2]; got != "pipewire,id=other" {
+		t.Fatalf("other audiodev changed: %q", got)
+	}
+}

@@ -13,15 +13,18 @@ type linuxDesktopWaitResult int
 // The same prompt owns a close answer before and after desktop handoff.
 // Its context is cancelled when QEMU exits, including while a dialog is open.
 type linuxShutdownConfirmation struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	pending <-chan bool
-	open    func(context.Context) <-chan bool
+	ctx        context.Context
+	cancel     context.CancelFunc
+	pending    <-chan bool
+	open       func(context.Context) <-chan bool
+	openForce  func(context.Context) <-chan bool
+	force      bool
+	shutdownAt time.Time
 }
 
 func newLinuxShutdownConfirmation(open func(context.Context) <-chan bool) *linuxShutdownConfirmation {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &linuxShutdownConfirmation{ctx: ctx, cancel: cancel, open: open}
+	return &linuxShutdownConfirmation{ctx: ctx, cancel: cancel, open: open, openForce: confirmLinuxForceStop}
 }
 
 func (c *linuxShutdownConfirmation) request() {
@@ -30,9 +33,28 @@ func (c *linuxShutdownConfirmation) request() {
 	}
 }
 
+var linuxShutdownGracePeriod = 15 * time.Second
+
+func (c *linuxShutdownConfirmation) requestShutdown(requests int, now time.Time) {
+	if c.pending != nil {
+		return
+	}
+	if requests == 0 {
+		c.force = false
+		c.request()
+	} else if requests == 1 && !c.shutdownAt.IsZero() && now.Sub(c.shutdownAt) >= linuxShutdownGracePeriod && c.openForce != nil {
+		if c.ctx.Err() != nil {
+			c.ctx, c.cancel = context.WithCancel(context.Background())
+		}
+		c.force = true
+		c.pending = c.openForce(c.ctx)
+	}
+}
+
 func (c *linuxShutdownConfirmation) close() {
 	if c != nil {
 		c.cancel()
+		c.pending = nil
 	}
 }
 

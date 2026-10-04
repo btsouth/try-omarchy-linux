@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -327,7 +328,11 @@ func prepareDisk(cfg *config, expandedMiB int64) error {
 	if err := requireDiskSpace(cfg.vmDir, allocated+diskSpaceReserve); err != nil {
 		return fmt.Errorf("preflighting writable disk storage: %w", err)
 	}
-	dst, err := os.Create(tmp)
+	mode := os.FileMode(0o666)
+	if runtime.GOOS == "linux" {
+		mode = 0o600
+	}
+	dst, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}

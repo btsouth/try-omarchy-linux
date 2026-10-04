@@ -31,6 +31,9 @@ func TestPrepareDiskPublishesCompleteFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("disk permissions = %o, want 600", info.Mode().Perm())
+	}
 	if info.Size() != 1024*1024 {
 		t.Fatalf("disk size = %d, want %d", info.Size(), 1024*1024)
 	}

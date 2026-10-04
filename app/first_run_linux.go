@@ -187,6 +187,21 @@ func resolveLinuxDataDirectory(defaultDir, requested string, explicit bool, choo
 				} else if !os.IsNotExist(err) {
 					return "", false, err
 				}
+				if _, err := os.Stat(approvedAppsPath(defaultDir)); err == nil {
+					if _, err := os.Stat(approvedAppsPath(selected)); os.IsNotExist(err) {
+						prefs, err := loadApprovedWindowsApps(defaultDir)
+						if err != nil {
+							return "", false, err
+						}
+						if err := saveApprovedWindowsApps(selected, prefs); err != nil {
+							return "", false, err
+						}
+					} else if err != nil {
+						return "", false, err
+					}
+				} else if !os.IsNotExist(err) {
+					return "", false, err
+				}
 				if err := saveDataLocationPointer(defaultDir, selected); err != nil {
 					return "", false, err
 				}
@@ -205,7 +220,7 @@ func linuxPrebootSettingsOnly(dir string) bool {
 	found := false
 	for _, entry := range entries {
 		switch entry.Name() {
-		case settingsFileName:
+		case settingsFileName, approvedAppsFilename:
 			found = true
 		case resourcePreferencesFilename, desktopPreferencesFilename, audioPreferencesFilename, storageSettingsFilename, linuxExperiencePreferencesFilename, launchPreferencesFilename, "diagnostics", "portable-host":
 		default:

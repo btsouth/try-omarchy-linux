@@ -5,6 +5,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -113,5 +115,50 @@ func TestLinuxDeleteDefaultVMRejectsSymlinkAndOverlappingShare(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(defaultDir, "vm", "disk.raw")); err != nil {
 		t.Fatalf("failed preflight deleted disk: %v", err)
+	}
+}
+
+func TestLinuxDeleteDefaultVMRejectsInUseDisk(t *testing.T) {
+	for _, kind := range []string{"flock", "OFD read", "OFD write"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "try-omarchy")
+			writeLinuxAttachFixture(t, dir)
+			kept := filepath.Join(dir, ".snapshot-rollback-"+strings.Repeat("a", 32), "data", "vm", "disk.raw")
+			snapshot := filepath.Join(dir, "checkpoints", "keep.txt")
+			for _, path := range []string{kept, snapshot} {
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("keep"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			path := filepath.Join(dir, "vm", "disk.raw")
+			f, err := os.OpenFile(path, os.O_RDWR, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if kind == "flock" {
+				err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+			} else {
+				lock := syscall.Flock_t{Type: syscall.F_RDLCK, Whence: 0, Start: 100, Len: 1}
+				if kind == "OFD write" {
+					lock.Type = syscall.F_WRLCK
+				}
+				err = ofdLock(f, linuxFOFDSetLock, &lock)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := deleteLinuxDefaultVM(dir); err == nil || !strings.Contains(err.Error(), "shut down Omarchy") {
+				t.Fatalf("in-use disk was not refused: %v", err)
+			}
+			for _, path := range []string{path, snapshot, kept, filepath.Join(dir, "guest", "rootfs.ext4")} {
+				if _, err := os.Stat(path); err != nil {
+					t.Fatalf("blocked delete changed %s: %v", path, err)
+				}
+			}
+		})
 	}
 }

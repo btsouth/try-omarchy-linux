@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sync"
 )
 
@@ -85,4 +86,14 @@ func reportLinuxFileDropError(err error) {
 	}
 	logf("file drop: %v", err)
 	showLinuxRuntimeError("File transfer failed", fmt.Sprintf("Omarchy could not receive the dropped files: %v\n\nCheck that Try Omarchy can access the files, then drop them again.", err))
+}
+
+// The setup window has closed by desktop readiness. Show the failure in a
+// fresh window and wait for it before the launcher exits with failure.
+func reportLinuxQEMUFailure(err error) {
+	logf("QEMU runtime failure: %v", err)
+	fmt.Fprintf(os.Stderr, "%s: %v\n", appTitle, err)
+	if linuxGUIEnabled {
+		showLinuxRuntimeErrorWindow("Omarchy stopped unexpectedly", err.Error())
+	}
 }

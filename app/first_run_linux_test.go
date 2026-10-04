@@ -4,8 +4,10 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -274,5 +276,40 @@ func TestLinuxResourceProfileFollowsFirstStorageChoice(t *testing.T) {
 	profile, err := loadResourcePreferences(selected)
 	if err != nil || profile.Profile != resourceBalanced {
 		t.Fatalf("profile lost: %+v %v", profile, err)
+	}
+}
+
+func TestLinuxApprovedAppsFollowFirstStorageChoice(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprint(existing), func(t *testing.T) {
+			root := t.TempDir()
+			original, selected := filepath.Join(root, "default"), filepath.Join(root, "custom")
+			prefs := approvedAppPreferences{Apps: []approvedWindowsApp{{ID: strings.Repeat("a", 32), Name: "Editor", Path: "editor.desktop"}}}
+			if err := saveApprovedWindowsApps(original, prefs); err != nil {
+				t.Fatal(err)
+			}
+			want := prefs.Apps[0]
+			if existing {
+				want.Name, want.Path = "Browser", "browser.desktop"
+				if err := saveApprovedWindowsApps(selected, approvedAppPreferences{Apps: []approvedWindowsApp{want}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if selectable, err := linuxDataLocationSelectable(original, original); err != nil || !selectable {
+				t.Fatalf("approval claimed storage: %t %v", selectable, err)
+			}
+			calls := 0
+			got, proceed, err := resolveLinuxDataDirectory(original, original, false, func(string) (string, bool, error) {
+				calls++
+				return selected, true, nil
+			})
+			if err != nil || !proceed || got != selected || calls != 1 {
+				t.Fatalf("storage chooser: %q %v %v calls=%d", got, proceed, err, calls)
+			}
+			loaded, err := loadApprovedWindowsApps(selected)
+			if err != nil || len(loaded.Apps) != 1 || loaded.Apps[0] != want {
+				t.Fatalf("approved apps changed: %+v %v", loaded, err)
+			}
+		})
 	}
 }

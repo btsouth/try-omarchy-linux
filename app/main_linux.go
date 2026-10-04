@@ -196,12 +196,13 @@ func main() {
 	cfg.vmDir = filepath.Join(cfg.dir, "vm")
 	cfg.diskFormat = "raw"
 	cfg.disk = filepath.Join(cfg.vmDir, "disk.raw")
+	tightenLinuxGuestData(cfg.dir)
 	// An interrupted roll back can have moved vm aside. Finish or undo it
 	// before anything creates or reads the VM's files.
 	if err := recoverLinuxSnapshots(cfg.dir); err != nil {
 		fatalf("Could not finish an interrupted snapshot operation: %v", err)
 	}
-	if err := os.MkdirAll(cfg.vmDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.vmDir, 0o700); err != nil {
 		fatalf("Could not create the Omarchy data directory: %v", err)
 	}
 	if shellLog, _ := os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); shellLog != nil {
@@ -437,7 +438,10 @@ func main() {
 	// The first interrupt asks the guest to shut down; a second one stops QEMU.
 	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	superviseLinux(cfg, cmdline, stop)
+	if err := superviseLinux(cfg, cmdline, stop); err != nil {
+		reportLinuxQEMUFailure(err)
+		os.Exit(1)
+	}
 	compactLinuxDisk(cfg)
 	logf("---- exiting ----")
 }

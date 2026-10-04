@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 // superviseLinux runs QEMU until the guest powers off. KVM resets in place,
 // so a guest reboot stays inside one QEMU and one window; QEMU is only
 // relaunched for the startup fallbacks: audio, memory, then CPU rendering.
-func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
+func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 	const maxLaunchAttempts = 8
 	for attempt := 1; attempt <= maxLaunchAttempts; attempt++ {
 		if err := checkSetupCancelled(); err != nil {
@@ -106,12 +107,12 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 			} else if initialInterrupts == 0 {
 				getUI().finish()
 			}
-			watchLinux(cfg, qmp, proc, exited, stop, lines, visibility, initialInterrupts, confirmation, desktopTimedOut)
+			err := watchLinux(cfg, qmp, proc, exited, stop, lines, visibility, initialInterrupts, confirmation, desktopTimedOut)
 			qmp.close()
 			if stderr != nil {
 				stderr.Close()
 			}
-			return
+			return err
 		}
 		if !died {
 			logf("QEMU did not answer on its control socket - stopping it")
@@ -130,6 +131,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) {
 		}
 	}
 	fatalf("QEMU failed to come up after %d attempts.", maxLaunchAttempts)
+	return nil
 }
 
 // KVM has no launch wedge, so the control socket is tried as soon as QEMU
@@ -187,8 +189,17 @@ func linuxAudioUnavailable(cfg *config) bool {
 // watchLinux follows the guest until QEMU exits. A first interrupt presses
 // the ACPI power button so the guest shuts down cleanly; another one quits.
 func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan os.Signal,
-	lines <-chan string, visibility *linuxVisibility, interrupts int, confirmation *linuxShutdownConfirmation, desktopTimedOut bool) {
+	lines <-chan string, visibility *linuxVisibility, interrupts int, confirmation *linuxShutdownConfirmation, desktopTimedOut bool) error {
 	logf("supervisor: watching guest lifecycle")
+	if interrupts > 0 {
+		confirmation.shutdownAt = time.Now()
+	}
+	requestShutdown := func() {
+		if interrupts == 0 {
+			confirmation.shutdownAt = time.Now()
+		}
+		requestLinuxShutdown(qmp, proc, &interrupts)
+	}
 	if getUI().window == nil && interrupts == 0 {
 		getUI().setStatus("Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.")
 	}
@@ -223,7 +234,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			if setupCancelled() {
 				confirmation.close()
 				if interrupts == 0 {
-					requestLinuxShutdown(qmp, proc, &interrupts)
+					requestShutdown()
 				}
 			} else if linuxGUIEnabled {
 				go showLinuxSessionTips(cfg.instant)
@@ -232,14 +243,17 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			startupStop = nil
 		}
 		select {
-		case <-exited:
+		case err := <-exited:
 			confirmation.close()
 			if reason == "" {
 				reason = "QEMU exited"
 			}
+			if err != nil && interrupts == 0 {
+				return fmt.Errorf("Omarchy stopped unexpectedly. Check %s for the VM error, or create diagnostics from Backup and recovery.\n\nQEMU: %w", filepath.Join(cfg.vmDir, "qemu-stderr.log"), err)
+			}
 			logf("guest stopped (%s)", reason)
 			getUI().setStatus("Omarchy stopped.")
-			return
+			return nil
 		case line, ok := <-lines:
 			if !ok {
 				lines = nil
@@ -252,13 +266,13 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				reason = r
 			}
 			if closeRequested(line) {
-				if interrupts == 0 && confirmation.pending == nil {
-					logf("window close requested")
-					if !linuxGUIEnabled {
-						requestLinuxShutdown(qmp, proc, &interrupts)
-					} else {
-						confirmation.request()
+				logf("window close requested")
+				if !linuxGUIEnabled {
+					if interrupts == 0 || time.Since(confirmation.shutdownAt) >= linuxShutdownGracePeriod {
+						requestShutdown()
 					}
+				} else {
+					confirmation.requestShutdown(interrupts, time.Now())
 				}
 			}
 			if linuxDropPointerMoved(line) {
@@ -315,24 +329,22 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		case <-linuxHelpRequests:
 			go showLinuxHelp(ctx)
 		case <-linuxShutdownRequests:
-			if interrupts == 0 && confirmation.pending == nil {
-				confirmation.request()
-			}
+			confirmation.requestShutdown(interrupts, time.Now())
 		case confirmed := <-confirmation.pending:
 			confirmation.pending = nil
-			if confirmed && interrupts == 0 {
-				requestLinuxShutdown(qmp, proc, &interrupts)
+			if confirmed && (interrupts == 0 || interrupts == 1 && confirmation.force) {
+				requestShutdown()
 			}
 		case <-startupStop:
 			startupStop = nil
 			confirmation.close()
 			if interrupts == 0 {
-				requestLinuxShutdown(qmp, proc, &interrupts)
+				requestShutdown()
 			}
 			getUI().finish()
 		case <-stop:
 			logf("interrupt")
-			requestLinuxShutdown(qmp, proc, &interrupts)
+			requestShutdown()
 		}
 	}
 }
@@ -441,4 +453,27 @@ func confirmLinuxShutdown(parent context.Context) <-chan bool {
 		result <- err == nil && answer == "shutdown"
 	}()
 	return result
+}
+
+func confirmLinuxForceStop(parent context.Context) <-chan bool {
+	result := make(chan bool, 1)
+	go func() {
+		ctx, cancel := context.WithCancel(parent)
+		defer cancel()
+		w := startLinuxWindow(cancel)
+		if w == nil {
+			logf("Could not open force stop confirmation; Omarchy is still running. Press Ctrl+C in the terminal to stop it.")
+			result <- false
+			return
+		}
+		defer w.stop()
+		answer, err := w.ask(ctx, linuxForceStopState())
+		result <- err == nil && answer == "secondary"
+	}()
+	return result
+}
+
+func linuxForceStopState() linuxSetupState {
+	return linuxSetupState{Prompt: "choice", Title: "Force stop Omarchy?", Primary: "Keep waiting", Secondary: "Force stop", Destructive: true,
+		Status: "Omarchy has not shut down yet. Force stopping turns off the VM immediately. Unsaved work may be lost."}
 }

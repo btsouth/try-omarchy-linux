@@ -478,7 +478,7 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 	updates <- state{Request: 801, Prompt: "settings", Version: "v0.1.0-preview.5", Settings: &settingsForm{
 		ResourceProfile: "manual", CPUMax: 8, Memory: "6144", CPUs: "3", Microphone: true,
 		Camera: true, CameraID: "missing-camera", AudioOutput: "missing-output", AudioInput: "missing-input",
-		Scale: "1.5", Keyboard: "de", SSHEnabled: true, SSHPort: "2222", SSHKey: "/tmp/test-key.pub",
+		FullscreenDisplay: "missing-display", Scale: "1.5", Keyboard: "de", SSHEnabled: true, SSHPort: "2222", SSHKey: "/tmp/test-key.pub",
 		Forwards: "tcp:8080:80", DiskGiB: "48", Share: "/run/user/1000/doc/test-grant/test-share", ShareDisplay: "~/test-share", ShareEnabled: true,
 	}}
 	phase, ticks := 0, 0
@@ -499,6 +499,7 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 			var cpus *gtk.SpinButton
 			var shareDisplay *gtk.Entry
 			var settingScroll *gtk.ScrolledWindow
+			var fullscreenDisplay *gtk.DropDown
 			var walk func(*gtk.Widget)
 			walk = func(widget *gtk.Widget) {
 				if entry, ok := widget.Object.Cast().(*gtk.Entry); ok && entry.Mapped() && !entry.Editable() {
@@ -515,6 +516,11 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 				}
 				if check, ok := widget.Object.Cast().(*gtk.CheckButton); ok {
 					checks[check.Label()] = check
+				}
+				if choice, ok := widget.Object.Cast().(*gtk.DropDown); ok {
+					if model, ok := choice.Model().Cast().(*gtk.StringList); ok && model.String(choice.Selected()) == "Not connected: missing-display" {
+						fullscreenDisplay = choice
+					}
 				}
 				if spin, ok := widget.Object.Cast().(*gtk.SpinButton); ok {
 					if spin.Digits() == 2 {
@@ -569,7 +575,21 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 				}
 				memory.SetValue(8)
 				cpus.SetValue(5)
+				if fullscreenDisplay == nil || fullscreenDisplay.Sensitive() {
+					t.Error("a saved fullscreen display was not kept, or was offered while fullscreen was off")
+				}
+				if fullscreenDisplay != nil {
+					// Automatic, the box's own monitor, then the saved one.
+					if model, ok := fullscreenDisplay.Model().Cast().(*gtk.StringList); !ok || model.NItems() < 3 || model.String(1) == "" {
+						t.Error("connected monitors were not listed for fullscreen")
+					} else {
+						t.Logf("fullscreen display choice: %q", model.String(1))
+					}
+				}
 				checks["Open fullscreen"].SetActive(true)
+				if fullscreenDisplay != nil && !fullscreenDisplay.Sensitive() {
+					t.Error("the fullscreen display stayed off with fullscreen on")
+				}
 				settingScroll.VAdjustment().SetValue(settingScroll.VAdjustment().Upper())
 				assertFooter("Save settings")
 			case 1:
@@ -653,7 +673,7 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 	if err := json.Unmarshal([]byte(replies[0].Value), &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.Memory != "8192" || saved.CPUs != "5" || !saved.Fullscreen || saved.Microphone || saved.CameraID != "missing-camera" || saved.AudioOutput != "missing-output" || saved.AudioInput != "missing-input" || saved.Scale != "1.5" || saved.Keyboard != "de" || saved.DiskGiB != "48" || saved.Share != "/run/user/1000/doc/test-grant/test-share" || !saved.ShareEnabled || saved.SSHKey != "/tmp/test-key.pub" || saved.SSHPort != "2222" || saved.Forwards != "tcp:8080:80" {
+	if saved.Memory != "8192" || saved.CPUs != "5" || !saved.Fullscreen || saved.Microphone || saved.CameraID != "missing-camera" || saved.FullscreenDisplay != "missing-display" || saved.AudioOutput != "missing-output" || saved.AudioInput != "missing-input" || saved.Scale != "1.5" || saved.Keyboard != "de" || saved.DiskGiB != "48" || saved.Share != "/run/user/1000/doc/test-grant/test-share" || !saved.ShareEnabled || saved.SSHKey != "/tmp/test-key.pub" || saved.SSHPort != "2222" || saved.Forwards != "tcp:8080:80" {
 		t.Fatalf("hidden settings/edits were not preserved: %+v", saved)
 	}
 }

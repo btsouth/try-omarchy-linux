@@ -104,8 +104,9 @@ Folders and files reach the app through the desktop's file chooser and document 
 
 Touchpad gestures, bridged/LAN networking, USB passthrough and host biometric
 authentication are not in the Linux app yet. Apps on this computer that you
-allow in Settings open from Omarchy's launcher; they need the next Omarchy
-system image, which is not released yet.
+allow in Settings open from Omarchy's launcher with the guest image shipped in
+linux-v0.2.0 or later. Older guests receive this integration on the first launch
+after the app downloads the newer image. Your files stay on the existing disk.
 Playback and microphone devices and local port forwards change from Settings
 while Omarchy runs. Camera capture uses the desktop's camera permission portal,
 only while an app inside Omarchy opens the camera.

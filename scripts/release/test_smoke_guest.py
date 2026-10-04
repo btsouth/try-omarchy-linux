@@ -33,13 +33,14 @@ class ParseFactsTests(unittest.TestCase):
 
 class GuestRevisionTests(unittest.TestCase):
     def test_unified_revision_is_read_from_appended_patches(self):
-        self.assertEqual(smoke_guest.guest_compat_revision(), 55)
+        self.assertEqual(smoke_guest.guest_compat_revision(), 56)
 
     def test_linux_payload_checks_follow_delivery_revisions(self):
         self.assertEqual(smoke_guest.linux_guest_payload_checks(49), {})
         previous = set()
         for revision, name in [(50, "vulkan"), (51, "idle"), (52, "display"),
-                               (53, "ready"), (54, "app"), (55, "notices")]:
+                               (53, "ready"), (54, "app"), (55, "notices"),
+                               (56, "labels-hook")]:
             with self.subTest(revision=revision):
                 checks = smoke_guest.linux_guest_payload_checks(revision)
                 self.assertEqual(set(checks) - previous, {f"linux-{name}-payload"})

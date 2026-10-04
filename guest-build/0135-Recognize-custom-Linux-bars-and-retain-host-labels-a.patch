@@ -1,0 +1,314 @@
+From 17f76e7226f7f4e777151f3a0de0679a0fd59fba Mon Sep 17 00:00:00 2001
+From: Try Omarchy Release <actions@users.noreply.github.com>
+Date: Sun, 4 Oct 2026 17:38:36 -0400
+Subject: [PATCH] Recognize custom Linux bars and retain host labels after
+ updates
+
+---
+ .../hooks/95-try-omarchy-host-names.hook      | 10 ++++
+ .../local/lib/try-omarchy/apply-host-names    |  7 +++
+ .../usr/local/lib/try-omarchy/desktop-ready   | 12 ++--
+ guest/scripts/finalize-rootfs.sh              |  4 +-
+ guest/tests/test_battery_details.py           |  2 +-
+ guest/tests/test_desktop_ready.py             | 43 ++++++++++++--
+ guest/tests/test_guest_qol.py                 |  2 +-
+ guest/tests/test_host_names.py                | 56 +++++++++++++++++++
+ guest/tests/verify.py                         |  3 +-
+ 9 files changed, 126 insertions(+), 13 deletions(-)
+ create mode 100644 guest/factory-overlay/etc/pacman.d/hooks/95-try-omarchy-host-names.hook
+
+diff --git a/guest/factory-overlay/etc/pacman.d/hooks/95-try-omarchy-host-names.hook b/guest/factory-overlay/etc/pacman.d/hooks/95-try-omarchy-host-names.hook
+new file mode 100644
+index 0000000..2e16aec
+--- /dev/null
++++ b/guest/factory-overlay/etc/pacman.d/hooks/95-try-omarchy-host-names.hook
+@@ -0,0 +1,10 @@
++[Trigger]
++Operation = Install
++Operation = Upgrade
++Type = Package
++Target = try-omarchy-runtime
++
++[Action]
++Description = Restore Linux host labels after updating Omarchy
++When = PostTransaction
++Exec = /usr/local/lib/try-omarchy/apply-host-names --linux-only
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+index c2ab277..11abb79 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+@@ -1,15 +1,22 @@
+ #!/usr/bin/python3 -I
+ """Select host desktop labels without changing custom or symlinked entries."""
++import argparse
+ import hashlib
+ import json
+ import os
+ from pathlib import Path
+ 
++parser = argparse.ArgumentParser(description=__doc__)
++parser.add_argument("--linux-only", action="store_true", help="Skip non-Linux hosts after package transactions")
++args = parser.parse_args()
++
+ cmdline = Path(os.environ.get("TRY_OMARCHY_CMDLINE", "/proc/cmdline"))
+ try:
+     linux = "tryomarchy.host=linux" in cmdline.read_text().split()
+ except OSError:
+     linux = False
++if args.linux_only and not linux:
++    raise SystemExit(0)
+ entries = Path(os.environ.get("TRY_OMARCHY_APPLICATIONS", "/usr/share/applications"))
+ seeds = Path(os.environ.get("TRY_OMARCHY_HOST_APPLICATIONS", "/usr/share/try-omarchy/host-applications"))
+ for name in ("try-omarchy-file-transfers.desktop", "try-omarchy-host-settings.desktop", "try-omarchy-follow-timezone.desktop"):
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready b/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready
+index d99c8da..037ec7e 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/desktop-ready
+@@ -1,6 +1,8 @@
+ #!/bin/bash
+ # Report only after the graphical session, a monitor, and the Omarchy shell's
+-# background and bar surfaces have remained visible. A quickshell process can
++# background and companion shell surfaces have remained visible. Bar plugins
++# choose their own namespaces; pair them with the background by process ID,
++# and require a response from Omarchy itself. A quickshell process can
+ # exist while the screen is still black. The earlier system-level "ready" is needed
+ # for image rollback but does not mean the desktop can be used yet.
+ set -euo pipefail
+@@ -11,9 +13,11 @@ stable=0
+ for ((attempt=1; attempt<=attempts; attempt++)); do
+   monitors=$(hyprctl -j monitors 2>/dev/null || true)
+   layers=$(hyprctl -j layers 2>/dev/null || true)
+-  if [[ $monitors == \[* && $monitors != '[]' ]] && pgrep -u "$(id -u)" -x quickshell >/dev/null &&
+-     jq -e '[.[] | .levels[][]? | select(.w > 0 and .h > 0 and .alpha > 0) | .namespace] |
+-       (index("omarchy-background") != null and index("omarchy-bar") != null)' <<<"$layers" >/dev/null 2>&1; then
++  shell_response=$(OMARCHY_PATH=${OMARCHY_PATH:-/usr/share/omarchy} omarchy-shell shell ping 2>/dev/null || true)
++  if [[ $shell_response == ok && $monitors == \[* && $monitors != '[]' ]] && pgrep -u "$(id -u)" -x quickshell >/dev/null &&
++     jq -e '[.[] | .levels[][]? | select(.w > 0 and .h > 0 and .alpha > 0)] |
++       . as $visible | any(.[]; .namespace == "omarchy-background" and .pid > 0 and
++         (.pid as $shell_pid | any($visible[]; .namespace != "omarchy-background" and .pid == $shell_pid)))' <<<"$layers" >/dev/null 2>&1; then
+     ((stable+=1))
+     if ((stable >= 5)); then
+       for retry in {1..10}; do
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 8d45a25..eb18e7a 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -79,6 +79,7 @@ install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/
+ install -m 0644 /usr/share/omarchy/shell/plugins/panels/clock/BarWidget.qml /usr/share/try-omarchy/clock-timezone-refresh.qml
+ 
+ compat_paths=(
++  etc/pacman.d/hooks/95-try-omarchy-host-names.hook
+   usr/local/lib/try-omarchy/apply-host-names
+   usr/share/try-omarchy/host-applications
+   usr/local/lib/try-omarchy/repair-clock-timezone
+@@ -248,7 +249,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 53 reports Linux desktop readiness after the Omarchy shell starts.
+ # Revision 54 names approved apps for Linux and reports agent version 5 there.
+ # Revision 55 names Linux hosts in notices and repairs their shipped clock widget.
+-compat_revision=55
++# Revision 56 recognizes custom Linux bars and retains Linux labels after updates.
++compat_revision=56
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/test_battery_details.py b/guest/tests/test_battery_details.py
+index 4462eda..1cae994 100644
+--- a/guest/tests/test_battery_details.py
++++ b/guest/tests/test_battery_details.py
+@@ -204,7 +204,7 @@ class BatteryDetailsFlowTests(unittest.TestCase):
+     def test_compatibility_delivery_and_dkms_version(self):
+         overlay = GUEST / "factory-overlay"
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+-        self.assertIn("compat_revision=55", finalize)
++        self.assertIn("compat_revision=56", finalize)
+         self.assertIn("usr/src/try-omarchy-battery-1.1.0", finalize)
+         self.assertIn("usr/local/lib/try-omarchy/update-battery-dkms", finalize)
+         self.assertIn('PACKAGE_VERSION="1.1.0"', (MODULE_SOURCE.parent / "dkms.conf").read_text())
+diff --git a/guest/tests/test_desktop_ready.py b/guest/tests/test_desktop_ready.py
+index 972193d..cb1322f 100644
+--- a/guest/tests/test_desktop_ready.py
++++ b/guest/tests/test_desktop_ready.py
+@@ -1,3 +1,4 @@
++import json
+ import os
+ import pathlib
+ import subprocess
+@@ -6,12 +7,12 @@ import unittest
+ 
+ 
+ SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "factory-overlay/usr/local/lib/try-omarchy/desktop-ready"
+-VISIBLE_LAYERS = '{"Virtual-1":{"levels":{"0":[{"namespace":"omarchy-background","w":936,"h":696,"alpha":1}],"2":[{"namespace":"omarchy-bar","w":936,"h":26,"alpha":1}]}}}'
++VISIBLE_LAYERS = '{"Virtual-1":{"levels":{"0":[{"namespace":"omarchy-background","w":936,"h":696,"alpha":1,"pid":100}],"2":[{"namespace":"omarchy-bar","w":936,"h":26,"alpha":1,"pid":100}]}}}'
+ 
+ 
+ class DesktopReadyTests(unittest.TestCase):
+     def run_probe(self, monitor_output: str, shell_running: bool,
+-                  layers_output: str = VISIBLE_LAYERS) -> tuple[subprocess.CompletedProcess, str]:
++                  layers_output: str = VISIBLE_LAYERS, shell_response: str = "ok") -> tuple[subprocess.CompletedProcess, str]:
+         with tempfile.TemporaryDirectory() as temp:
+             root = pathlib.Path(temp)
+             bin_dir = root / "bin"
+@@ -19,15 +20,17 @@ class DesktopReadyTests(unittest.TestCase):
+             (bin_dir / "hyprctl").write_text(
+                 "#!/bin/sh\nif [ \"$2\" = monitors ]; then printf '%s\\n' \"$TEST_MONITORS\"; "
+                 "else printf '%s\\n' \"$TEST_LAYERS\"; fi\n")
++            (bin_dir / "omarchy-shell").write_text(
++                '#!/bin/sh\n[ "$*" = "shell ping" ] || exit 1\nprintf "%s\\n" "$TEST_SHELL_RESPONSE"\n')
+             (bin_dir / "pgrep").write_text("#!/bin/sh\nexit " + ("0" if shell_running else "1") + "\n")
+             (bin_dir / "socat").write_text("#!/bin/sh\ncat > \"$TEST_SIGNAL_FILE\"\n")
+             (bin_dir / "logger").write_text("#!/bin/sh\nexit 0\n")
+-            for name in ("hyprctl", "pgrep", "socat", "logger"):
++            for name in ("hyprctl", "omarchy-shell", "pgrep", "socat", "logger"):
+                 (bin_dir / name).chmod(0o755)
+             signal = root / "signal"
+             env = dict(os.environ, PATH=str(bin_dir) + ":" + os.environ["PATH"],
+                        TEST_SIGNAL_FILE=str(signal), TEST_MONITORS=monitor_output,
+-                       TEST_LAYERS=layers_output, TRY_OMARCHY_DESKTOP_READY_ATTEMPTS="5",
++                       TEST_LAYERS=layers_output, TEST_SHELL_RESPONSE=shell_response, TRY_OMARCHY_DESKTOP_READY_ATTEMPTS="5",
+                        TRY_OMARCHY_DESKTOP_READY_INTERVAL="0")
+             result = subprocess.run([str(SCRIPT)], env=env, capture_output=True, text=True)
+             return result, signal.read_text() if signal.exists() else ""
+@@ -48,8 +51,38 @@ class DesktopReadyTests(unittest.TestCase):
+         self.assertEqual(signal, "")
+ 
+     def test_missing_shell_layers_keep_setup_waiting(self):
+-        for layers in ('{}', '{"Virtual-1":{"levels":{"0":[{"namespace":"omarchy-background","w":936,"h":696,"alpha":1}]}}}'):
++        for layers in ('{}', '{"Virtual-1":{"levels":{"0":[{"namespace":"omarchy-background","w":936,"h":696,"alpha":1,"pid":100}]}}}'):
+             with self.subTest(layers=layers):
+                 result, signal = self.run_probe('[{"id":0}]', True, layers)
+                 self.assertNotEqual(result.returncode, 0)
+                 self.assertEqual(signal, "")
++
++    def test_custom_bar_namespace_signals_ready(self):
++        layers = VISIBLE_LAYERS.replace('omarchy-bar', 'my-custom-bar')
++        result, signal = self.run_probe('[{"id":0}]', True, layers)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertEqual(signal, "desktop-ready\n")
++
++    def test_unresponsive_omarchy_shell_keeps_setup_waiting(self):
++        for response in ('', 'Not ready to accept queries yet', 'Target not found.'):
++            with self.subTest(response=response):
++                result, signal = self.run_probe('[{"id":0}]', True, shell_response=response)
++                self.assertNotEqual(result.returncode, 0)
++                self.assertEqual(signal, "")
++
++    def test_unrelated_layer_cannot_stand_in_for_the_shell_bar(self):
++        layers = json.loads(VISIBLE_LAYERS)
++        layers['Virtual-1']['levels']['2'][0]['pid'] = 200
++        result, signal = self.run_probe('[{"id":0}]', True, json.dumps(layers))
++        self.assertNotEqual(result.returncode, 0)
++        self.assertEqual(signal, "")
++
++    def test_hidden_or_zero_size_shell_layers_keep_setup_waiting(self):
++        for level in ('0', '2'):
++            for field in ('alpha', 'w', 'h', 'pid'):
++                with self.subTest(level=level, field=field):
++                    layers = json.loads(VISIBLE_LAYERS)
++                    layers['Virtual-1']['levels'][level][0][field] = 0
++                    result, signal = self.run_probe('[{"id":0}]', True, json.dumps(layers))
++                    self.assertNotEqual(result.returncode, 0)
++                    self.assertEqual(signal, "")
+diff --git a/guest/tests/test_guest_qol.py b/guest/tests/test_guest_qol.py
+index 444dd43..fa2b6b6 100644
+--- a/guest/tests/test_guest_qol.py
++++ b/guest/tests/test_guest_qol.py
+@@ -215,7 +215,7 @@ class GuestQolTests(unittest.TestCase):
+     def test_compatibility_delivers_guarded_payload_once_per_revision(self):
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+         paths = finalize.split("compat_paths=(", 1)[1].split(")", 1)[0]
+-        self.assertIn("compat_revision=55", finalize)
++        self.assertIn("compat_revision=56", finalize)
+         for path in ("usr/local/bin/omarchy-native-screensaver-text", "usr/local/lib/try-omarchy/install-guest-qol", "usr/share/try-omarchy/guest-qol", "usr/local/bin/omarchy-windows-audio-bridge"):
+             self.assertIn(path, paths)
+         self.assertNotIn("etc/fonts/conf.d/30-try-omarchy.conf", paths)
+diff --git a/guest/tests/test_host_names.py b/guest/tests/test_host_names.py
+index 322271a..321bdee 100644
+--- a/guest/tests/test_host_names.py
++++ b/guest/tests/test_host_names.py
+@@ -2,6 +2,7 @@
+ import json
+ import os
+ from pathlib import Path
++import shlex
+ import shutil
+ import subprocess
+ import tempfile
+@@ -94,3 +95,58 @@ class HostNamesTests(unittest.TestCase):
+             self.assertTrue(paths[2].is_symlink())
+         service = (OVERLAY / 'etc/systemd/system/try-omarchy-catch-up.service').read_text()
+         self.assertIn('ExecStartPost=/usr/local/lib/try-omarchy/apply-host-names', service)
++
++    def test_runtime_transaction_hook_reapplies_linux_power_labels(self):
++        hook = (OVERLAY / 'etc/pacman.d/hooks/95-try-omarchy-host-names.hook').read_text()
++        trigger, action = hook.split('[Action]')
++        self.assertIn('Operation = Install', trigger)
++        self.assertIn('Operation = Upgrade', trigger)
++        self.assertIn('Type = Package', trigger)
++        self.assertIn('Target = try-omarchy-runtime', trigger)
++        self.assertIn('When = PostTransaction', action)
++        command = shlex.split(next(line.removeprefix('Exec = ') for line in action.splitlines()
++                                   if line.startswith('Exec = ')))
++        self.assertEqual(command, ['/usr/local/lib/try-omarchy/apply-host-names', '--linux-only'])
++        payload = OVERLAY / 'usr/share/try-omarchy/guest-qol'
++        power = [item for item in json.loads((payload / 'manifest.json').read_text())
++                 if item['path'] in ('usr/bin/omarchy-powerprofiles-set',
++                     'usr/share/omarchy/shell/plugins/menu/Menu.qml',
++                     'usr/share/omarchy/shell/plugins/panels/power/Panel.qml')]
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            cmdline = root / 'cmdline'
++            entries = root / 'applications'
++            env = dict(os.environ, TRY_OMARCHY_CMDLINE=str(cmdline),
++                       TRY_OMARCHY_APPLICATIONS=str(entries), TRY_OMARCHY_HOST_APPLICATIONS=str(SEEDS),
++                       TRY_OMARCHY_POWER_ROOT=str(root), TRY_OMARCHY_POWER_PAYLOAD=str(payload))
++            command[0] = str(HELPER)
++            for words, linux in (('root=/dev/vda tryomarchy.host=linux quiet', True),
++                                 ('root=/dev/vda', False), ('tryomarchy.host=linuxish', False)):
++                for transaction in ('Install', 'Upgrade'):
++                    with self.subTest(words=words, transaction=transaction):
++                        # Model the runtime extraction restoring the immutable Windows payload.
++                        for item in power:
++                            path = root / item['path']
++                            path.parent.mkdir(parents=True, exist_ok=True)
++                            path.write_bytes((payload / item['asset']).read_bytes())
++                            path.chmod(item['mode'])
++                        shutil.copytree(SEEDS / 'windows', entries, dirs_exist_ok=True)
++                        cmdline.write_text(words)
++                        subprocess.run(command, env=env, check=True)
++                        for item in power:
++                            wanted = (payload / item['asset']).read_bytes()
++                            if linux:
++                                wanted = wanted.replace(b'Managed by Windows', b'Managed by the host computer')
++                                wanted = wanted.replace(b'Power profiles are managed by Windows',
++                                                        b'Power profiles are managed by the host computer')
++                            self.assertEqual((root / item['path']).read_bytes(), wanted)
++                        for path in entries.iterdir():
++                            self.assertEqual(path.read_bytes(), (SEEDS / ('linux' if linux else 'windows') / path.name).read_bytes())
++            # Non-Linux transactions must skip even recognized Linux files and missing payloads.
++            cmdline.write_text('tryomarchy.host=windows')
++            path = root / power[0]['path']
++            path.write_text('Managed by the host computer\n')
++            env['TRY_OMARCHY_POWER_PAYLOAD'] = str(root / 'absent-payload')
++            env['TRY_OMARCHY_HOST_APPLICATIONS'] = str(root / 'absent-seeds')
++            subprocess.run(command, env=env, check=True)
++            self.assertEqual(path.read_text(), 'Managed by the host computer\n')
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 0a82365..fcb417f 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -326,10 +326,11 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=55" in finalize_rootfs
++        "compat_revision=56" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/host-window" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-host-window" in compat_paths
+         and "usr/share/try-omarchy/host-window-idle.qml" in compat_paths
++        and "etc/pacman.d/hooks/95-try-omarchy-host-names.hook" in compat_paths
+         and "usr/local/lib/try-omarchy/apply-host-names" in compat_paths
+         and "usr/share/try-omarchy/host-applications" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-clock-timezone" in compat_paths
+-- 
+2.56.0
+

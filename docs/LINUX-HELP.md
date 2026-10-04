@@ -157,6 +157,9 @@ cannot release unused blocks; Settings says so.
 - Text, images and files move both ways through the clipboard. Dropping files
   on the window sends them to Omarchy. Settings can also share one folder,
   which appears in Omarchy as `/mnt/host`.
+- While Omarchy runs, the Try Omarchy tray menu opens the shared folder,
+  Settings, Reclaim disk space, diagnostics and this help, and shuts Omarchy
+  down. Diagnostics are saved in the VM's `diagnostics` folder.
 
 ### Clipboard permission on GNOME
 

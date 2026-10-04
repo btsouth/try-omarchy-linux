@@ -1359,7 +1359,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						button.SetLabel("Cancel")
 					case "about":
 						pageTitle.SetText("About Try Omarchy")
-						primary.SetLabel("Back")
+						primary.SetLabel(orDefault(next.Primary, "Back"))
 						button.SetLabel("Back")
 						if next.Status == "" {
 							next.Status = "Try Omarchy for Linux, version " + next.Version + "."

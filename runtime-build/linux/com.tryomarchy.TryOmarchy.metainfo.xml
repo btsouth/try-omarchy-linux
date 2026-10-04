@@ -24,7 +24,7 @@
       <li>A persistent disk with backup, restore and move</li>
       <li>Settings for memory, processors, display scale and microphone access</li>
     </ul>
-    <p>The first launch downloads Omarchy, about 2 GB, and needs about 13 GB
+    <p>The first launch downloads Omarchy, about 2 GB, and needs about 14 GB
     of free space for Omarchy, plus space for the Flatpak runtime. The app needs a 64-bit x86 PC with hardware virtualization
     and access to KVM. Removing the app keeps your VM unless you also delete
     its data.</p>
@@ -49,6 +49,17 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-10-04" type="stable">
+      <description>
+        <p>Update Omarchy to 4.0.4 and bring existing Linux guests onto the shared guest image.</p>
+        <ul>
+          <li>Keep older quick-start disks working through the upgrade, with SSH access limited to keys</li>
+          <li>Follow the host computer's time-zone changes while respecting a time zone chosen in Omarchy</li>
+          <li>Use Linux host wording in Settings, file sharing and power menus</li>
+          <li>Bring the shared desktop, audio and battery improvements to Linux guests</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-02" type="stable">
       <description>
         <p>Fix startup on Bazzite and other Fedora Atomic desktops that store home directories under /var/home.</p>

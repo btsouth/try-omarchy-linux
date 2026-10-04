@@ -68,7 +68,7 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 	}
 	for title, want := range map[string]string{
 		"Download": "About 2 GB, once. If it is interrupted, it continues where it stopped.",
-		"Space":    "About 13 GB.",
+		"Space":    "About 14 GB.",
 		"Location": linuxDisplayPath(root),
 		"Account":  "Your own username and password, or a quick-start account",
 	} {
@@ -146,7 +146,7 @@ func TestLinuxHomeWarnsWhenTheDriveCannotHoldOmarchy(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "try-omarchy")
 	stubHomeChecks(t, nil, 5<<30)
 	state, _ := linuxHomeState(root)
-	if state.Notice != "Only 5 GB is free here." || !strings.Contains(state.Status, "Setup needs about 13 GB") || state.HelpURL != linuxHelpURL("space") || state.Setup != "customize" {
+	if state.Notice != "Only 5 GB is free here." || !strings.Contains(state.Status, "Setup needs about 14 GB") || state.HelpURL != linuxHelpURL("space") || state.Setup != "customize" {
 		t.Fatalf("setup space notice: %+v", state)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "vm"), 0o755); err != nil {

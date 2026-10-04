@@ -165,6 +165,14 @@ func forwardsHelpText(live bool) string {
 	return "Each forward opens a port on 127.0.0.1. Changes apply on the next launch."
 }
 
+// The launcher cannot inspect keys already installed inside the guest.
+func sshKeyWarningText(enabled bool, keyPath string) string {
+	if enabled && strings.TrimSpace(keyPath) == "" {
+		return "No public key chosen. Choose one for SSH login unless a key is already installed in Omarchy."
+	}
+	return ""
+}
+
 // reclaimHelpText states what a reclaim pass costs, beside its button.
 const reclaimHelpText = "Deleting files inside Omarchy does not shrink its disk on this drive. Each pass prepares up to 8 GB of Omarchy's free space and keeps at least 4 GB free here. When it is ready, shut Omarchy down; the space comes back during shutdown. Your files are not changed."
 

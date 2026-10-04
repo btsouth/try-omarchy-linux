@@ -157,3 +157,21 @@ func TestFullscreenDisplayChoicesUseConnectorNames(t *testing.T) {
 		t.Fatalf("a disconnected choice is kept: %v %v %d", labels, names, index)
 	}
 }
+
+func TestSSHKeyWarning(t *testing.T) {
+	for _, tc := range []struct {
+		enabled bool
+		keyPath string
+		warn    bool
+	}{
+		{false, "", false},
+		{true, "", true},
+		{true, "  ", true},
+		{true, "/chosen/key.pub", false},
+		{false, "/chosen/key.pub", false},
+	} {
+		if got := sshKeyWarningText(tc.enabled, tc.keyPath); (got != "") != tc.warn {
+			t.Errorf("enabled=%t key=%q: warning=%q", tc.enabled, tc.keyPath, got)
+		}
+	}
+}

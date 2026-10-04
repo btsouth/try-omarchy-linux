@@ -753,9 +753,20 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		formField("SSH port", sshPort)
 		sshEnabled.ConnectToggled(func() { sshPort.SetSensitive(sshEnabled.Active()) })
 		formHelp("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
-		sshKey := entry("SSH public key (optional)")
+		sshKey := entry("SSH public key")
 		sshKey.SetEditable(false)
 		named(sshKey, "SSH public key file")
+		formHelp("Quick start needs a public key for SSH login. Choose its .pub file unless a key is already installed in Omarchy.")
+		sshKeyWarning := formHelp("")
+		sshKeyWarning.AddCSSClass("warning")
+		updateSSHKeyWarning := func() {
+			message := sshKeyWarningText(sshEnabled.Active(), sshKey.Text())
+			sshKeyWarning.SetText(message)
+			sshKeyWarning.SetVisible(message != "")
+		}
+		sshEnabled.ConnectToggled(updateSSHKeyWarning)
+		sshKey.NotifyProperty("text", updateSSHKeyWarning)
+		updateSSHKeyWarning()
 		chooseSSHKey := gtk.NewButtonWithLabel("Choose a public key...")
 		chooseSSHKey.ConnectClicked(func() {
 			id := current.Request

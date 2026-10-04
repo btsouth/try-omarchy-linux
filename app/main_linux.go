@@ -89,6 +89,7 @@ func main() {
 	chooseShare := flag.Bool("choose-share", false, "choose or remove the shared folder before starting")
 	flag.BoolVar(&cfg.fresh, "fresh", false, "start over and retain the previous writable disk for recovery")
 	flag.BoolVar(&cfg.fullscreen, "fullscreen", false, "start fullscreen")
+	flag.StringVar(&cfg.fullscreenDisplay, "fullscreen-display", "", "monitor connector to open fullscreen on, such as DP-1 (blank: the desktop chooses)")
 	flag.IntVar(&cfg.memOverrideMiB, "memory", 0, "guest RAM in MiB (default: sized to this computer)")
 	flag.IntVar(&cfg.cpuOverride, "cpus", 0, "guest CPUs (default: sized to this computer)")
 	resourceProfileFlag := flag.String("resource-profile", "", "resource preset: balanced, maximum-performance, or manual")

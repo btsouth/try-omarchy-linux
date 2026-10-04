@@ -366,6 +366,7 @@ func TestLinuxDirectStartFlags(t *testing.T) {
 	}{
 		{map[string]bool{}, false},
 		{map[string]bool{"launcher": true}, false},
+		{map[string]bool{"autostart": true}, false},
 		{map[string]bool{"dir": true}, true},
 		{map[string]bool{"memory": true}, true},
 		{map[string]bool{"release": true}, true},

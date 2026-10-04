@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -78,5 +79,19 @@ func TestLinuxTrayDiagnosticsWritesABundle(t *testing.T) {
 	matches, _ := filepath.Glob(dir + "/diagnostics/try-omarchy-diagnostics-*.zip")
 	if len(matches) != 1 {
 		t.Fatalf("bundles: %v", matches)
+	}
+}
+
+// The portal helper opens a real folder when a test desktop asks it to.
+func TestLinuxOpenFolderThroughPortalHelper(t *testing.T) {
+	dir := os.Getenv("TRYOMARCHY_PORTAL_OPEN_DIR")
+	if dir == "" {
+		return
+	}
+	if err := openLinuxFolderThroughPortal(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := openLinuxFolderThroughPortal(filepath.Join(dir, "missing")); err == nil {
+		t.Fatal("opened a missing folder")
 	}
 }

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,19 +36,26 @@ func requestLinuxTrayAction(requests chan struct{}) {
 // variable so tests can watch it.
 var linuxOpenFolder = openLinuxFolder
 
-// openLinuxFolder uses the OpenURI portal inside Flatpak. Passing a descriptor
-// works for any folder the sandbox can read, including one granted through
-// the document portal, without exposing other host paths.
+// openLinuxFolder uses the OpenURI portal inside Flatpak and xdg-open
+// outside it.
 func openLinuxFolder(path string) error {
-	if !inFlatpak() {
-		cmd := exec.Command("xdg-open", path)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		go cmd.Wait()
-		return nil
+	if inFlatpak() {
+		return openLinuxFolderThroughPortal(path)
 	}
+	cmd := exec.Command("xdg-open", path)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
+}
+
+// openLinuxFolderThroughPortal passes a descriptor, which works for any folder
+// the sandbox can read, including one granted through the document portal,
+// without exposing other host paths. It waits for the portal's answer, since
+// the call itself only starts the request.
+func openLinuxFolderThroughPortal(path string) error {
 	dir, err := os.Open(path)
 	if err != nil {
 		return err
@@ -61,11 +69,21 @@ func openLinuxFolder(path string) error {
 		return err
 	}
 	defer conn.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	signals := make(chan *dbus.Signal, 8)
+	conn.Signal(signals)
+	if err := conn.AddMatchSignal(dbus.WithMatchSender(linuxPortalDesktop), dbus.WithMatchInterface("org.freedesktop.portal.Request"), dbus.WithMatchMember("Response")); err != nil {
+		return err
+	}
+	// The desktop may ask which app to use.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	var handle dbus.ObjectPath
-	return conn.Object(linuxPortalDesktop, linuxPortalObject).CallWithContext(ctx, "org.freedesktop.portal.OpenURI.OpenFile", 0,
-		"", dbus.UnixFD(dir.Fd()), map[string]dbus.Variant{}).Store(&handle)
+	token := fmt.Sprintf("tryomarchy_%d", time.Now().UnixNano())
+	_, err = linuxPortalRequest(ctx, conn, signals, "org.freedesktop.portal.OpenURI.OpenFile",
+		"", dbus.UnixFD(dir.Fd()), map[string]dbus.Variant{"handle_token": dbus.MakeVariant(token)})
+	if errors.Is(err, errLinuxClipboardDenied) {
+		return errors.New("the desktop did not open it")
+	}
+	return err
 }
 
 // openLinuxSharedFolder opens the folder shared with the running VM. A

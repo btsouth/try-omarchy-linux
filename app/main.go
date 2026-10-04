@@ -1151,10 +1151,6 @@ func waitExit(exited <-chan error, grace time.Duration, cfg *config) bool {
 	}
 }
 
-// hostResumed is signalled by the tray window when Windows resumes from
-// sleep, so the guest clock can be corrected right away.
-var hostResumed = make(chan struct{}, 1)
-
 func runGuestAgent(dir string) {
 	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", agentPort))
 	if err != nil {

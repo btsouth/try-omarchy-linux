@@ -539,7 +539,7 @@ func runLinuxGuestAgent(dir string) {
 	a.reclaimFinished = linuxReclaimFinished
 	a.dropDrag = performLinuxDropDrag
 	theAgent.Store(a)
-	a.run(l, make(chan struct{}))
+	a.run(l, hostResumed)
 }
 
 // vulkanPresentMode resolves -vulkan-present. Automatic copies frames on

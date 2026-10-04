@@ -1,0 +1,127 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"time"
+)
+
+// Both platform power receivers wake the guest agent to correct its clock.
+var hostResumed = make(chan struct{}, 1)
+
+func notifyHostResumed() {
+	select {
+	case hostResumed <- struct{}{}:
+	default:
+	}
+}
+
+// Used by one power event loop. Keep the same connection across sleep so a
+// reboot or replacement runtime can never inherit an old resume obligation.
+// Reading STOP/RESUME events also detects manual changes during our pause.
+type guestPowerState struct {
+	suspended bool
+	client    *qmpClient
+	owned     bool
+	dial      func(context.Context) (*qmpClient, error)
+}
+
+func (p *guestPowerState) close() {
+	if p.client != nil {
+		p.client.Close()
+		p.client = nil
+	}
+	p.owned = false
+}
+
+// prepareForSleep returns true only on the first wake notification. Resume
+// still runs on duplicate wake notifications to retry a rejected command.
+func (p *guestPowerState) prepareForSleep(sleeping bool) bool {
+	if sleeping {
+		if !p.suspended {
+			p.suspended = true
+			p.pause()
+		}
+		return false
+	}
+	firstResume := p.suspended
+	p.suspended = false
+	p.resume()
+	return firstResume
+}
+
+func (p *guestPowerState) pause() {
+	// A rejected cont can leave an owned pause pending for a later resume.
+	if p.client != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	c, err := p.dial(ctx)
+	if err != nil {
+		logf("power: cannot pause for host sleep: %v", err)
+		return
+	}
+	p.client = c
+	var state vmRuntimeStatus
+	if err = c.Call(ctx, "query-status", nil, &state); err != nil {
+		logf("power: cannot inspect guest before sleep: %v", err)
+		p.close()
+		return
+	}
+	if !state.Running || state.Status != "running" {
+		// A manual pause, incoming restore, shutdown or guest suspend is not ours.
+		p.close()
+		return
+	}
+	if err = c.Call(ctx, "stop", nil, nil); err != nil {
+		logf("power: pause for host sleep failed: %v; guest may be paused, resume manually if needed", err)
+		p.close()
+		return
+	}
+	p.owned = true
+	c.onEvent = func(event string) {
+		if event == "STOP" || event == "RESUME" {
+			p.owned = false
+		}
+	}
+	if err = c.Call(ctx, "query-status", nil, &state); err != nil || state.Running || state.Status != "paused" || !p.owned {
+		logf("power: guest pause could not be confirmed: state=%s error=%v; resume manually if needed", state.Status, err)
+		p.close()
+		return
+	}
+	logf("power: paused the guest for host sleep")
+}
+
+func (p *guestPowerState) resume() {
+	if p.client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var state vmRuntimeStatus
+	if err := p.client.Call(ctx, "query-status", nil, &state); err != nil {
+		// Reconnecting would lose intervening manual events and runtime identity.
+		logf("power: cannot inspect guest after sleep: %v; resume manually if needed", err)
+		p.close()
+		return
+	}
+	if !p.owned || state.Running || state.Status != "paused" {
+		p.close()
+		return
+	}
+	if err := p.client.Call(ctx, "cont", nil, nil); err != nil {
+		logf("power: resume after sleep failed: %v; resume manually if needed", err)
+		var remote *qmpCommandError
+		if !errors.As(err, &remote) {
+			p.close()
+		}
+		return
+	}
+	if err := p.client.Call(ctx, "query-status", nil, &state); err != nil || !state.Running {
+		logf("power: guest resume could not be confirmed: state=%s error=%v", state.Status, err)
+	} else {
+		logf("power: resumed the guest after host sleep")
+	}
+	p.close()
+}

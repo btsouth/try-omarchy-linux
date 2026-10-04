@@ -55,8 +55,10 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 			fatalf("QEMU failed to start: %v", err)
 		}
 		exited := make(chan error, 1)
+		vmDone := make(chan struct{})
 		go func() {
 			err := proc.Wait()
+			close(vmDone)
 			if err != nil {
 				logf("QEMU process exited with error: %v", err)
 			}
@@ -65,6 +67,8 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 
 		qmp, died := connectLinuxQMP(exited)
 		if qmp != nil {
+			stopPower := startLinuxPower(vmDone)
+			defer stopPower()
 			lines := qmp.readLines()
 			visibility := &linuxVisibility{}
 			initialInterrupts := 0
@@ -97,6 +101,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 					requestLinuxShutdown(qmp, proc, &initialInterrupts)
 					getUI().finish()
 				case linuxDesktopExited:
+					stopPower()
 					confirmation.close()
 					qmp.close()
 					if stderr != nil {
@@ -108,6 +113,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 				getUI().finish()
 			}
 			err := watchLinux(cfg, qmp, proc, exited, stop, lines, visibility, initialInterrupts, confirmation, desktopTimedOut)
+			stopPower()
 			qmp.close()
 			if stderr != nil {
 				stderr.Close()

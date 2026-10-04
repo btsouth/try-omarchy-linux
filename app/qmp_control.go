@@ -11,7 +11,8 @@ import (
 
 // QEMU's user network lets a guest reach host loopback. Privileged QMP must
 // therefore use local filesystem sockets, never the guest-accessible TCP path.
-// A private role, not a TCP port reservation. Only Windows serves it.
+// A private role, not a TCP port reservation. Separate from the supervisor
+// and tools monitors.
 const qmpPowerRole = -1
 
 var qmpControlDirectory = platformQMPControlDirectory

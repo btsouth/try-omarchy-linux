@@ -51,12 +51,17 @@
   <releases>
     <release version="0.2.0" date="2026-10-04" type="stable">
       <description>
-        <p>Update Omarchy to 4.0.4 and bring existing Linux guests onto the shared guest image.</p>
+        <p>Snapshots, disk space reclaim, a path to installed Omarchy, and a newer Omarchy guest.</p>
         <ul>
-          <li>Keep older quick-start disks working through the upgrade, with SSH access limited to keys</li>
-          <li>Follow the host computer's time-zone changes while respecting a time zone chosen in Omarchy</li>
-          <li>Use Linux host wording in Settings, file sharing and power menus</li>
-          <li>Bring the shared desktop, audio and battery improvements to Linux guests</li>
+          <li>Take snapshots of the VM and roll back to them</li>
+          <li>Give unused disk space back to this computer</li>
+          <li>Bring a trial into an installed Omarchy, including saved sign-ins and password-protected GNOME keyrings</li>
+          <li>Drop files from this computer straight into the Omarchy app under the pointer</li>
+          <li>Open approved apps on this computer from Omarchy</li>
+          <li>Follow this computer's time zone as it changes</li>
+          <li>Choose which monitor the app opens fullscreen on</li>
+          <li>Shared folder, diagnostics and help in the tray menu</li>
+          <li>New installs get Omarchy 4.0.4; existing VMs keep working and update through Update, Omarchy</li>
         </ul>
       </description>
     </release>

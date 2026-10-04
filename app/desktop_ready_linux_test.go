@@ -324,3 +324,22 @@ func testLinuxLateStop(t *testing.T, ready bool) {
 	default:
 	}
 }
+
+func TestLinuxForceStopAfterStartupPromptCancelled(t *testing.T) {
+	confirmation := newLinuxShutdownConfirmation(func(context.Context) <-chan bool { return make(chan bool) })
+	defer confirmation.close()
+	confirmation.request()
+	confirmation.close()
+	confirmation.shutdownAt = time.Now().Add(-linuxShutdownGracePeriod)
+	answer := make(chan bool)
+	confirmation.openForce = func(ctx context.Context) <-chan bool {
+		if ctx.Err() != nil {
+			t.Fatal("force stop inherited the cancelled startup dialog")
+		}
+		return answer
+	}
+	confirmation.requestShutdown(1, time.Now())
+	if confirmation.pending != answer || !confirmation.force {
+		t.Fatal("startup stop left force stop unavailable")
+	}
+}

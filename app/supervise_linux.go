@@ -189,6 +189,15 @@ func linuxAudioUnavailable(cfg *config) bool {
 func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, stop <-chan os.Signal,
 	lines <-chan string, visibility *linuxVisibility, interrupts int, confirmation *linuxShutdownConfirmation, desktopTimedOut bool) {
 	logf("supervisor: watching guest lifecycle")
+	if interrupts > 0 {
+		confirmation.shutdownAt = time.Now()
+	}
+	requestShutdown := func() {
+		if interrupts == 0 {
+			confirmation.shutdownAt = time.Now()
+		}
+		requestLinuxShutdown(qmp, proc, &interrupts)
+	}
 	if getUI().window == nil && interrupts == 0 {
 		getUI().setStatus("Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.")
 	}
@@ -223,7 +232,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			if setupCancelled() {
 				confirmation.close()
 				if interrupts == 0 {
-					requestLinuxShutdown(qmp, proc, &interrupts)
+					requestShutdown()
 				}
 			} else if linuxGUIEnabled {
 				go showLinuxSessionTips(cfg.instant)
@@ -252,13 +261,13 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				reason = r
 			}
 			if closeRequested(line) {
-				if interrupts == 0 && confirmation.pending == nil {
-					logf("window close requested")
-					if !linuxGUIEnabled {
-						requestLinuxShutdown(qmp, proc, &interrupts)
-					} else {
-						confirmation.request()
+				logf("window close requested")
+				if !linuxGUIEnabled {
+					if interrupts == 0 || time.Since(confirmation.shutdownAt) >= linuxShutdownGracePeriod {
+						requestShutdown()
 					}
+				} else {
+					confirmation.requestShutdown(interrupts, time.Now())
 				}
 			}
 			if linuxDropPointerMoved(line) {
@@ -315,24 +324,22 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		case <-linuxHelpRequests:
 			go showLinuxHelp(ctx)
 		case <-linuxShutdownRequests:
-			if interrupts == 0 && confirmation.pending == nil {
-				confirmation.request()
-			}
+			confirmation.requestShutdown(interrupts, time.Now())
 		case confirmed := <-confirmation.pending:
 			confirmation.pending = nil
-			if confirmed && interrupts == 0 {
-				requestLinuxShutdown(qmp, proc, &interrupts)
+			if confirmed && (interrupts == 0 || interrupts == 1 && confirmation.force) {
+				requestShutdown()
 			}
 		case <-startupStop:
 			startupStop = nil
 			confirmation.close()
 			if interrupts == 0 {
-				requestLinuxShutdown(qmp, proc, &interrupts)
+				requestShutdown()
 			}
 			getUI().finish()
 		case <-stop:
 			logf("interrupt")
-			requestLinuxShutdown(qmp, proc, &interrupts)
+			requestShutdown()
 		}
 	}
 }
@@ -441,4 +448,27 @@ func confirmLinuxShutdown(parent context.Context) <-chan bool {
 		result <- err == nil && answer == "shutdown"
 	}()
 	return result
+}
+
+func confirmLinuxForceStop(parent context.Context) <-chan bool {
+	result := make(chan bool, 1)
+	go func() {
+		ctx, cancel := context.WithCancel(parent)
+		defer cancel()
+		w := startLinuxWindow(cancel)
+		if w == nil {
+			logf("Could not open force stop confirmation; Omarchy is still running. Press Ctrl+C in the terminal to stop it.")
+			result <- false
+			return
+		}
+		defer w.stop()
+		answer, err := w.ask(ctx, linuxForceStopState())
+		result <- err == nil && answer == "secondary"
+	}()
+	return result
+}
+
+func linuxForceStopState() linuxSetupState {
+	return linuxSetupState{Prompt: "choice", Title: "Force stop Omarchy?", Primary: "Keep waiting", Secondary: "Force stop", Destructive: true,
+		Status: "Omarchy has not shut down yet. Force stopping turns off the VM immediately. Unsaved work may be lost."}
 }

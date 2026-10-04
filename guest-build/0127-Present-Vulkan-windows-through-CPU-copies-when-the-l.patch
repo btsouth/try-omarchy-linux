@@ -1,0 +1,105 @@
+From 307972eec0b51492f9173957b2308246193fb6ea Mon Sep 17 00:00:00 2001
+From: Try Omarchy Release <actions@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 11:11:49 -0400
+Subject: [PATCH 127/133] Present Vulkan windows through CPU copies when the
+ launcher asks
+
+The Linux launcher can request software presentation with tryomarchy.vulkan-present=cpu. Windows launchers omit the flag. Compatibility revision 50 delivers vulkan-env to existing disks.
+---
+ .../usr/local/lib/try-omarchy/vulkan-env      | 14 +++++++++++++
+ guest/scripts/finalize-rootfs.sh              |  3 ++-
+ guest/tests/test_vulkan_env.py                | 21 +++++++++++++++++++
+ guest/tests/verify.py                         |  2 +-
+ 4 files changed, 38 insertions(+), 2 deletions(-)
+
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/vulkan-env b/guest/factory-overlay/usr/local/lib/try-omarchy/vulkan-env
+index 7a82b59..a0376d9 100644
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/vulkan-env
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/vulkan-env
+@@ -12,3 +12,17 @@ export VN_PERF
+ # Use the loader's supported option, without globally preloading a Vulkan ICD.
+ : "${VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING:=1}"
+ export VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING
++
++# A Linux host whose only GPU is NVIDIA misreads the row pitch of the Vulkan
++# frames it imports and shears them, so its launcher asks for software
++# presentation on the kernel command line: Mesa copies each frame into shared
++# memory instead. Preserve additional user-selected WSI debug flags.
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.vulkan-present=cpu "*)
++    case ",${MESA_VK_WSI_DEBUG-}," in
++      *,sw,*) ;;
++      *) MESA_VK_WSI_DEBUG="${MESA_VK_WSI_DEBUG:+${MESA_VK_WSI_DEBUG},}sw" ;;
++    esac
++    export MESA_VK_WSI_DEBUG
++    ;;
++esac
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index cda101a..274bdb7 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -224,7 +224,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 47 brings guest quality-of-life fixes to matching defaults only.
+ # Revision 48 delivers physical battery details and the updated DKMS source.
+ # Revision 49 allows Media Player software rendering in CPU mode.
+-compat_revision=49
++# Revision 50 lets a Linux launcher ask for CPU presentation of Vulkan windows.
++compat_revision=50
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/test_vulkan_env.py b/guest/tests/test_vulkan_env.py
+index 31c9aba..ae02b38 100644
+--- a/guest/tests/test_vulkan_env.py
++++ b/guest/tests/test_vulkan_env.py
+@@ -1,6 +1,7 @@
+ import os
+ from pathlib import Path
+ import subprocess
++import tempfile
+ import unittest
+ 
+ 
+@@ -8,6 +9,26 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'factory-overlay/usr/local/lib/tr
+ 
+ 
+ class VulkanEnvironmentTests(unittest.TestCase):
++    def presentation(self, cmdline, **values):
++        with tempfile.TemporaryDirectory() as tmp:
++            path = Path(tmp) / 'cmdline'
++            path.write_text(cmdline + '\n')
++            env = dict(os.environ)
++            env.pop('MESA_VK_WSI_DEBUG', None)
++            env.update(values, TRY_OMARCHY_CMDLINE=str(path))
++            command = '. "$1"; . "$1"; printf "%s\n" "${MESA_VK_WSI_DEBUG-unset}"'
++            return subprocess.check_output(['sh', '-c', command, 'test', str(SCRIPT)], env=env, text=True).strip()
++
++    def test_cpu_presentation_only_when_the_launcher_asks(self):
++        self.assertEqual(self.presentation('root=/dev/vda tryomarchy.vulkan-present=cpu quiet'), 'sw')
++        self.assertEqual(self.presentation('root=/dev/vda tryomarchy.vulkan-present=cpu'), 'sw')
++        self.assertEqual(self.presentation('root=/dev/vda tryomarchy.vulkan-present=gpu quiet'), 'unset')
++        self.assertEqual(self.presentation('root=/dev/vda xtryomarchy.vulkan-present=cpu'), 'unset')
++
++    def test_cpu_presentation_keeps_other_wsi_flags(self):
++        self.assertEqual(self.presentation('tryomarchy.vulkan-present=cpu', MESA_VK_WSI_DEBUG='linear'), 'linear,sw')
++        self.assertEqual(self.presentation('tryomarchy.vulkan-present=cpu', MESA_VK_WSI_DEBUG='sw,linear'), 'sw,linear')
++
+     def environment(self, **values):
+         env = dict(os.environ)
+         for key in ('VN_PERF', 'VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING'):
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index b3fb72a..406708c 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -324,7 +324,7 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=49" in finalize_rootfs
++        "compat_revision=50" in finalize_rootfs
+         and "usr/local/bin/mpv" in compat_paths
+         and "usr/share/dkms/modules_to_force_install/try-omarchy" in compat_paths
+         and "usr/local/lib/try-omarchy/try-omarchy-import.pyz" in compat_paths
+-- 
+2.56.0
+

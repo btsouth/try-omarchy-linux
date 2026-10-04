@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 	"slices"
@@ -137,7 +136,12 @@ func screenSize(fullscreen bool) (int, int) {
 	return int(r.right - r.left), int(r.bottom-r.top) - 31 // minus title bar
 }
 
+// foregroundPid is the process of the foreground window. A guest window that
+// is still invisible while Omarchy boots does not count as the VM having focus.
 func foregroundPid() uint32 {
+	if curtainUp.Load() {
+		return 0
+	}
 	hwnd, _, _ := procGetForegroundWindow.Call()
 	if hwnd == 0 {
 		return 0
@@ -178,8 +182,9 @@ func releaseQemuCursor() {
 // handoff needs no locking.
 type displayWindowState struct {
 	index     int
-	last      *windowPlacement
-	themeSet  bool // the title bar theme below was applied or refused
+	last      *windowPlacement // the placement remembered for the window
+	target    *windowPlacement // where the window belongs (see nextPlacementStep)
+	themeSet  bool             // the title bar theme below was applied or refused
 	darkTitle bool
 }
 
@@ -223,6 +228,10 @@ func enumTitleProc(hwnd, _ uintptr) uintptr {
 	title := syscall.UTF16ToString(buf[:])
 	state, known := enumTitleWindows[hwnd]
 	index, parsed := displayIndexFromTitle(title)
+	if !parsed {
+		// The title hook may have renamed it before this saw QEMU's title.
+		index, parsed = recordedDisplayIndex(hwnd)
+	}
 	if !known || parsed && state.index != index {
 		if !parsed {
 			return 1
@@ -235,9 +244,11 @@ func enumTitleProc(hwnd, _ uintptr) uintptr {
 			if err != nil || !placement.usable(monitors) {
 				placement = initialDisplayPlacement(index, monitors)
 			}
+			placement = placement.fittedTo(workAreas(enumTitleMonitorDetails))
 			if placement == nil || !applyPlacement(hwnd, placement) {
 				procShowWindow.Call(hwnd, swShowMaximized)
 			}
+			state.last, state.target = placement, placement
 		}
 		if enumTitleFullscreen {
 			monitors := enumTitleMonitorDetails
@@ -249,16 +260,17 @@ func enumTitleProc(hwnd, _ uintptr) uintptr {
 		}
 		setTaskbarIdentity(hwnd)
 	}
-	uiDone()
+	if curtainUp.Load() {
+		concealForCurtain(hwnd)
+		curtainTaskbar(hwnd)
+	} else {
+		uiDone()
+	}
 	if enumTitleIcon != 0 {
 		procSendMessageW.Call(hwnd, 0x80, 1, enumTitleIcon)
 		procSendMessageW.Call(hwnd, 0x80, 0, enumTitleIcon)
 	}
-	wanted := appTitle
-	if state.index > 0 {
-		wanted = fmt.Sprintf("%s display %d", appTitle, state.index+1)
-	}
-	if title != wanted {
+	if wanted := displayWindowTitle(state.index); title != wanted {
 		value, _ := syscall.UTF16PtrFromString(wanted)
 		procSetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(value)))
 	}
@@ -272,6 +284,11 @@ func enumTitleProc(hwnd, _ uintptr) uintptr {
 		if now := capturePlacement(hwnd); now != nil && !now.usable(enumTitleMonitors) {
 			if restored := initialDisplayPlacement(state.index, enumTitleMonitors); restored != nil {
 				applyPlacement(hwnd, restored)
+				state.target = restored
+				restored.SavedAt = time.Now()
+				if saveDisplayPlacement(enumTitleDir, state.index, *restored) == nil {
+					state.last = restored
+				}
 			}
 		}
 	}
@@ -286,11 +303,16 @@ func enumTitleProc(hwnd, _ uintptr) uintptr {
 		}
 	}
 	if !enumTitleFullscreen {
-		if now := capturePlacement(hwnd); now != nil && !now.sameAs(state.last) {
+		now := capturePlacement(hwnd)
+		switch nextPlacementStep(now, state.last, state.target, takeUserMoved(hwnd), beingDragged(hwnd), !guestFollowsWindow.Load()) {
+		case placementSave:
 			now.SavedAt = time.Now()
 			if saveDisplayPlacement(enumTitleDir, state.index, *now) == nil {
 				state.last = now
 			}
+			state.target = now
+		case placementRestore:
+			applyPlacement(hwnd, state.target)
 		}
 	}
 	return 1
@@ -328,6 +350,13 @@ func enforceDisplayWindows(pid uint32, dir string, fullscreen bool, fullscreenDi
 		selected = foreground
 	}
 	qemuHwnd.Store(selected)
+	primary := uintptr(0)
+	for hwnd, state := range enumTitleWindows {
+		if state.index == 0 {
+			primary = hwnd
+		}
+	}
+	curtainTick(primary)
 }
 
 func clipboardGetText() (string, bool) {

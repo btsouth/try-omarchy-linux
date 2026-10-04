@@ -45,6 +45,27 @@ func displayDevice(cfg *config, hostmem uint64) string {
 	return string(data)
 }
 
+// displayWindowTitle is the title of the window showing guest display index.
+func displayWindowTitle(index int) string {
+	if index == 0 {
+		return appTitle
+	}
+	return fmt.Sprintf("%s display %d", appTitle, index+1)
+}
+
+// isRunningInstanceWindow reports whether a window with this class and title
+// is a running Try Omarchy: its VM window (under our title or QEMU's), or the
+// setup window shown while Omarchy prepares and starts.
+func isRunningInstanceWindow(class, title string) bool {
+	if class == "TryOmarchySetup" {
+		return true
+	}
+	if _, ok := displayIndexFromTitle(title); ok {
+		return class == "SDL_app"
+	}
+	return class == "SDL_app" && (title == appTitle || strings.HasPrefix(title, appTitle+" display "))
+}
+
 func displayIndexFromTitle(title string) (int, bool) {
 	prefix := "QEMU (" + appTitle + "-"
 	if !strings.HasPrefix(title, prefix) {

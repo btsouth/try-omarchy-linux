@@ -23,6 +23,13 @@ sudo rm /var/lib/pacman/db.lck
 # Let optional reboot/orphan prompts time out without accepting them.
 GUM_CONFIRM_TIMEOUT=1s omarchy-update -y > /tmp/upgrade-packages.log 2>&1 || { cat /tmp/upgrade-packages.log; exit 1; }
 if grep -q "command failed to execute correctly" /tmp/upgrade-packages.log; then cat /tmp/upgrade-packages.log; exit 1; fi
+# Matching headers hand the delivered camera and battery modules to DKMS
+# without install errors.
+if grep -q "Installation aborted" /tmp/upgrade-packages.log; then cat /tmp/upgrade-packages.log; exit 1; fi
+# The launcher supplies the kernel, so the update never asks to reboot for the
+# held linux package. A stand-in gum records what would have been asked.
+restart_prompts=$(gum() { printf 'asked: %s\n' "$*"; return 1; }; export -f gum; omarchy-update-restart 2>&1 || true)
+if grep -q "Linux kernel has been updated" <<<"$restart_prompts"; then exit 1; fi
 [[ $(pacman -Q try-omarchy-runtime) == "try-omarchy-runtime $CANDIDATE_RUNTIME" ]]
 [[ $(cat /usr/share/omarchy/version) == "$CANDIDATE_VERSION" ]]
 sha256sum -c "$HOME/upgrade-preserve.sha256"
@@ -69,9 +76,42 @@ else
 fi
 [[ $(cat /run/try-omarchy/pinch-gestures) == ready ]]
 sudo python3 /mnt/host/pinch-udev.py
-# Revision 44 makes SSH accept only keys for the quick-start account on disks
-# that already have it; the seed boot created that account.
+# SSH accepts only keys for the quick-start account the seed boot created.
+# Catch-up adds the rule to disks from before revision 42 and records it there;
+# later disks create the account with the rule and have no record.
 cmp /etc/ssh/sshd_config.d/90-try-omarchy-quick-start.conf /usr/share/try-omarchy/quick-start-sshd.conf
-[[ -f /var/lib/try-omarchy/quick-start-sshd ]]
+# The unified series also delivers dormant Linux helpers to Windows disks.
+# Check payloads without starting a graphical session or contacting the host.
+revision=$(cut -d: -f1 /usr/share/try-omarchy/compat-version)
+if (( revision >= 50 )); then
+  grep -Fq 'tryomarchy.vulkan-present=cpu' /usr/local/lib/try-omarchy/vulkan-env
+fi
+if (( revision >= 51 )); then
+  [[ -x /usr/local/lib/try-omarchy/host-window ]]
+  [[ -x /usr/local/lib/try-omarchy/repair-host-window ]]
+  [[ -f /usr/share/try-omarchy/host-window-idle.qml ]]
+fi
+if (( revision >= 52 )); then
+  grep -Fq 'tryomarchy.host-scale=1' /usr/local/bin/omarchy-native-display-sync
+fi
+if (( revision >= 53 )); then
+  [[ -x /usr/local/lib/try-omarchy/desktop-ready ]]
+  grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/user/try-omarchy-desktop-ready.service
+  [[ $(readlink /etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service) == ../try-omarchy-desktop-ready.service ]]
+fi
+if (( revision >= 54 )); then
+  grep -qx 'version=4' /usr/local/lib/try-omarchy/agent
+  grep -Fq 'version=5' /usr/local/lib/try-omarchy/agent
+fi
+if (( revision >= 55 )); then
+  [[ -x /usr/local/lib/try-omarchy/apply-host-names ]]
+  [[ -x /usr/local/lib/try-omarchy/repair-clock-timezone ]]
+  [[ -f /usr/share/try-omarchy/clock-timezone-refresh.qml ]]
+  grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/system/try-omarchy-linux-clock.service
+  # This Windows harness passes no Linux host flag, so its defaults stay Windows.
+  for entry in try-omarchy-host-settings try-omarchy-file-transfers try-omarchy-follow-timezone; do
+    cmp "/usr/share/applications/$entry.desktop" "/usr/share/try-omarchy/host-applications/windows/$entry.desktop"
+  done
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

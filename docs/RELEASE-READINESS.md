@@ -1,17 +1,28 @@
-# Release readiness review - September 27, 2026
+# Release readiness review - October 1, 2026
 
 ## Current decision
 
 The current normal version is
-[`v0.6.0`](https://github.com/omacom/try-omarchy-windows/releases/tag/v0.6.0),
-published as Latest on September 27 with drops into apps, 1Password unlock
-with Windows Hello, live port-forward changes and package catch-up for older
-disks. Its
-[candidate and release record](evidence/V060-SIGNED-CANDIDATE-2026-09-27.md)
-covers the signed candidate, rollback, upgrade, fresh install and a public
-update from an installed v0.5.0 launcher.
+[`v0.8.0`](https://github.com/omacom/try-omarchy-windows/releases/tag/v0.8.0),
+published as Latest on October 1. Omarchy's window now appears once the desktop
+is drawn, Omarchy pauses while Windows sleeps, the launcher is available in
+Korean, and the guest moves to Omarchy 4.0.4 without its kernel switch. Before
+publishing, disks from `v0.3.0`, `v0.4.0`, `v0.6.2` and `v0.7.1` were upgraded
+with `scripts/release/smoke-guest-upgrade.py`, including Update > Omarchy, a
+reboot, the older image and back. On the AMD laptop the signed candidate
+updated a lived-in `v0.7.1` install, ran Update > Omarchy, rebooted, powered
+off, relaunched and recovered from a forced rollback. See the
+[changelog](../CHANGELOG.md#v080---2026-10-01).
+
+`v0.7.0` and `v0.7.1` (September 30 and October 1) added the importer that
+moves a trial into a real Omarchy install, then hardened it after a security
+review. `v0.6.0` to `v0.6.2` (September 27 to 29) added drops into apps,
+1Password unlock with Windows Hello, live port forwards, package catch-up,
+the Alt+Tab setting and key-only SSH for the quick-start account; see the
+[v0.6.1 record](evidence/V061-SIGNED-CANDIDATE-2026-09-29.md) and
+[v0.6.0 record](evidence/V060-SIGNED-CANDIDATE-2026-09-27.md).
 [`v0.5.0`](https://github.com/omacom/try-omarchy-windows/releases/tag/v0.5.0)
-added opt-in Windows Hello sudo the day before; see its
+added opt-in Windows Hello sudo on September 26; see its
 [record](evidence/V050-SIGNED-CANDIDATE-2026-09-26.md).
 [`v0.4.0`](https://github.com/omacom/try-omarchy-windows/releases/tag/v0.4.0)
 shipped earlier the same day with default pinch and Ctrl+Alt+End; see its
@@ -27,9 +38,7 @@ public `SHA256SUMS` digest is
 passed on the AMD Windows 11 laptop, including public update, GPU desktop,
 live audio, reboot persistence, clean second launch, and interrupted-update
 rollback. Two physical audio endpoints per direction and hotplug remain
-untested. Windows Hello sudo, true LAN bridging, and embedded Windows app
-windows remain feature work; they do not hold back normal 0.x releases. Broader
-user reports continue to guide hardware fixes.
+untested. Broader user reports continue to guide hardware fixes.
 
 ### Previous releases
 
@@ -78,22 +87,28 @@ below and use reports from this normal 0.x release to prioritize further work.
   pass from the earlier Intel/NVIDIA preview-runtime result. On that earlier
   configuration, OpenGL worked but Vulkan initialization failed. The Intel/
   NVIDIA PC is currently unavailable for Windows testing.
-- The current source uses the official Omarchy logo in its icon, names the
-  Windows app Try Omarchy, and identifies the publisher as Omacom. The
-  [brand source](https://omarchy.org/brand/) reserves Omarchy trademark rights;
-  brand presentation and the relationship stated on the site need a deliberate
-  review before making a 1.0 claim.
+- The app uses the official Omarchy logo in its icon, is named Try Omarchy and
+  identifies the publisher as Omacom. The repository lives in the Omacom
+  organization and omarchy.org links to it from its homepage, so the logo is
+  used by an Omacom project under the [brand terms](https://omarchy.org/brand/).
+  Releases stay Authenticode-signed by Brandon South.
 
 ## Brand and product experience pass
 
 The live [Try Omarchy site](https://tryomarchy.com/) uses the same Omarchy
 mark as the Windows app and the same green accent. Its download serves the
-Latest launcher, now `v0.3.0`; on September 24 the live download matched the
+Latest launcher. On September 24 the live download matched the
 published launcher hash and the version text named `v0.3.0`. Its setup and uninstall descriptions
 match the app's actual behavior; the site no longer promises that uninstalling
 means deleting a single folder or that the next normal release must be 1.0.
 Desktop and phone-width Chromium renders were inspected. The live `/download`
 redirect points to the published Latest launcher.
+On September 29, the live Windows setup steps and shared-account FAQ were
+checked against v0.6.2: the account choice comes before the download, your own
+account is the default, and quick-start SSH accepts only keys. The separate
+tryomarchy.com deployment is live; the upstream
+[Omarchy site PR #461](https://github.com/omacom/omarchy-site/pull/461)
+remains open.
 The site's macOS link and the README now point to
 `https://github.com/omacom/try-omarchy`; the live support answer points to the
 built-in diagnostics and GitHub bug-report flow.
@@ -161,17 +176,21 @@ reproducible issues as they arrive; broader hardware coverage is not a gate.
 Feature parity is tracked in [MAC-PARITY.md](MAC-PARITY.md). `v0.3.0` ships
 live audio switching with r20c. The previous `v0.2.0` release shipped in-guest
 host Settings, battery mirroring, measured live RAM reclamation, the approved-app
-launch bridge, and fullscreen monitor choice. Keep Windows Hello sudo and true
-bridged networking as active feature work rather than dropping them for lack of
-bug reports. Their existing password and NAT paths remain usable while
-[Hello #165](https://github.com/omacom/try-omarchy-windows/issues/165) and
-[LAN bridge #166](https://github.com/omacom/try-omarchy-windows/issues/166)
-proceed. The current user base of thousands with relatively few reports is
+launch bridge, and fullscreen monitor choice. Windows Hello sudo shipped as an
+opt-in feature in `v0.5.0`; password fallback remains available. True LAN
+bridging ([#166](https://github.com/omacom/try-omarchy-windows/issues/166)) is
+closed for now: a TAP bridge passed in VMs but needs physical Ethernet and two
+hand-installed drivers, so NAT and port forwarding remain the only network mode.
+The current user base of thousands with relatively few reports is
 positive evidence about the everyday path; broad hardware and Windows 10
 acceptance are not 1.0 gates. Automatic pinch shipped in `v0.4.0`; its
-acceptance limits are in [PINCH-ZOOM.md](PINCH-ZOOM.md). ARM64 and interface translation are open requests
-([#131](https://github.com/omacom/try-omarchy-windows/issues/131),
-[#127](https://github.com/omacom/try-omarchy-windows/issues/127)); neither can be
-claimed as supported. Prioritize any gap that prevents a normal supported PC
+acceptance limits are in [PINCH-ZOOM.md](PINCH-ZOOM.md). Windows on ARM
+([#131](https://github.com/omacom/try-omarchy-windows/issues/131)) is closed until
+there is demand and someone to test it, so it cannot be claimed as supported.
+Interface translation ([#127](https://github.com/omacom/try-omarchy-windows/issues/127))
+covers all of Settings in Korean and the setup screens and Settings section
+titles in Simplified Chinese; the tray, recovery dialogs and status text are
+still English only.
+Prioritize any gap that prevents a normal supported PC
 from installing, using, updating, or removing the app over feature parity for
 its own sake.

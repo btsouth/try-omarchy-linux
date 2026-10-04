@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -46,12 +47,19 @@ func retryableHTTPStatus(status int) bool {
 func setupFailureHelp(err error) string {
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
-		return "Windows could not resolve github.com. Check that this PC or VM has internet access, then start Try Omarchy again."
+		return uiText("setup.help.dns")
 	}
 	// Setup writes several GB, and an image update needs room for the old and
 	// new copies at once. Retrying on connection advice never clears that.
 	if errors.Is(err, errInsufficientDiskSpace) || isDiskFull(err) {
-		return "Your PC is out of disk space. Free up a few gigabytes, then start Try Omarchy again."
+		return uiText("setup.help.disk_full")
 	}
-	return "Check your connection and start Try Omarchy again."
+	if errors.Is(err, os.ErrPermission) {
+		return uiText("setup.help.permission")
+	}
+	var networkErr net.Error
+	if errors.As(err, &networkErr) {
+		return uiText("setup.help.network")
+	}
+	return uiText("setup.help.retry")
 }

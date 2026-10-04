@@ -11,8 +11,24 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
+
+// progressPhases records the translated phase labels that progress callbacks
+// receive in place of a file name. A status line shows a phase on its own
+// instead of as "Backing up {file}...".
+var progressPhases sync.Map
+
+func progressPhase(text string) string {
+	progressPhases.Store(text, struct{}{})
+	return text
+}
+
+func isProgressPhase(name string) bool {
+	_, ok := progressPhases.Load(name)
+	return ok
+}
 
 const backupManifestName = "backup.json"
 const backupMaxFiles = 10000
@@ -51,7 +67,7 @@ func backupNameAllowed(name string) bool {
 			return true
 		}
 	}
-	return name == "vm/disk.raw" || name == "settings.json" || name == desktopPreferencesFilename || name == launchPreferencesFilename || name == audioPreferencesFilename || name == audioEndpointsFilename || name == resourcePreferencesFilename || name == storageSettingsFilename || strings.HasPrefix(name, "guest/") || strings.HasPrefix(name, "runtime/")
+	return name == "vm/disk.raw" || name == "settings.json" || name == desktopPreferencesFilename || name == launchPreferencesFilename || name == usbPreferencesFilename || name == keyboardPreferencesFilename || name == audioPreferencesFilename || name == audioEndpointsFilename || name == resourcePreferencesFilename || name == storageSettingsFilename || strings.HasPrefix(name, "guest/") || strings.HasPrefix(name, "runtime/")
 }
 
 func requiredBackupFiles(files map[string]bool) error {
@@ -96,13 +112,13 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 	rel, err := filepath.Rel(root, parent)
 	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		if !checkpoint || filepath.Base(destination) != "vm.zip" || filepath.Dir(rel) != "checkpoints" || !strings.HasPrefix(filepath.Base(rel), ".pending-") || !validCheckpointID(strings.TrimPrefix(filepath.Base(rel), ".pending-")) {
-			return fmt.Errorf("save the backup outside the Try Omarchy data folder")
+			return uiError(uiText("error.backup.outside_data"), nil)
 		}
 	}
 
 	for _, name := range []string{payloadUpdateStateFilename, updateStateFilename} {
 		if _, err := os.Lstat(filepath.Join(dir, name)); !os.IsNotExist(err) {
-			return fmt.Errorf("finish the pending update before backing up")
+			return uiError(uiText("error.backup.pending_update"), nil)
 		}
 	}
 	inventory, err := inspectInstallationDisk(dir)
@@ -110,7 +126,7 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 		return err
 	}
 	if inventory.Format == "qcow2" && report != nil {
-		report(0, inventory.VirtualBytes, "Preparing portable disk")
+		report(0, inventory.VirtualBytes, progressPhase(uiText("progress.preparing_portable_disk")))
 	}
 	diskPath, cleanup, err := materializeInstallationDisk(dir, filepath.Dir(destination), inventory)
 	if err != nil {
@@ -119,7 +135,7 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 	defer cleanup()
 	disk, err := openBackupDisk(diskPath)
 	if err != nil {
-		return fmt.Errorf("close Try Omarchy before backing up: %w", err)
+		return uiError(uiTextWith("error.backup.close_first", map[string]string{"error": err.Error()}), err)
 	}
 	defer disk.Close()
 	diskBefore, err := disk.Stat()
@@ -129,7 +145,7 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 	var entries []backupEntry
 	seen := map[string]bool{}
 	var total int64
-	roots := []string{"guest", "runtime", "vm/disk.raw", "settings.json", storageSettingsFilename, desktopPreferencesFilename, launchPreferencesFilename, audioPreferencesFilename, audioEndpointsFilename, resourcePreferencesFilename}
+	roots := []string{"guest", "runtime", "vm/disk.raw", "settings.json", storageSettingsFilename, desktopPreferencesFilename, launchPreferencesFilename, usbPreferencesFilename, keyboardPreferencesFilename, audioPreferencesFilename, audioEndpointsFilename, resourcePreferencesFilename}
 	for index := 0; index < maximumGuestDisplays; index++ {
 		roots = append(roots, displayPlacementFilename(index))
 	}
@@ -184,7 +200,7 @@ func writeVMArchive(dir, destination string, report backupProgress, checkpoint b
 		return err
 	}
 	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
-		return fmt.Errorf("choose a new backup filename")
+		return uiError(uiText("error.backup.new_filename"), nil)
 	}
 	f, err := createStagingFile(filepath.Dir(destination), ".try-omarchy-backup-", "backup")
 	if err != nil {
@@ -324,7 +340,7 @@ func restoreVMBackup(source, destination string) error {
 
 func restoreVMBackupProgress(source, destination string, report backupProgress) error {
 	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
-		return fmt.Errorf("restore requires a new data folder; the existing folder was not changed")
+		return uiError(uiText("error.restore.new_folder"), nil)
 	}
 	z, err := zip.OpenReader(source)
 	if err != nil {
@@ -336,7 +352,7 @@ func restoreVMBackupProgress(source, destination string, report backupProgress) 
 
 func restoreVMBackupReader(z *zip.Reader, destination string, report backupProgress) error {
 	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
-		return fmt.Errorf("restore requires a new data folder; the existing folder was not changed")
+		return uiError(uiText("error.restore.new_folder"), nil)
 	}
 	manifest, files, err := readVMBackupReader(z)
 	if err != nil {

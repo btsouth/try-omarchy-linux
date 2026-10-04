@@ -4,7 +4,20 @@ This guide covers setup, everyday controls, storage, and advanced options. For h
 
 ## Install and update
 
-Download [TryOmarchy.exe](https://github.com/omacom/try-omarchy-windows/releases/latest/download/TryOmarchy.exe) (~10 MB, [SHA256](https://github.com/omacom/try-omarchy-windows/releases/latest/download/TryOmarchy.exe.sha256)) and open it. First run asks where to store the virtual machine, graphics runtime, and downloads. Use the default Local AppData location or choose another local drive or folder. If Windows Hypervisor Platform is not enabled, setup asks permission to enable it and restarts once. The app then downloads the GPU runtime (a portable [WINQ-EMU](https://github.com/cmspam/winq-emu) tree, ~84 MB) and the Omarchy image (~2 GB), both SHA256-verified. Choose the instant trial account to go straight to the desktop, or use Omarchy's setup form to choose your own account. Later launches open Settings before boot unless you choose a direct-launch shortcut.
+Download [TryOmarchy.exe](https://github.com/omacom/try-omarchy-windows/releases/latest/download/TryOmarchy.exe) (~10 MB, [SHA256](https://github.com/omacom/try-omarchy-windows/releases/latest/download/TryOmarchy.exe.sha256)) and open it. First run asks where to store the virtual machine, graphics runtime, and downloads. Use the default Local AppData location or choose another local drive or folder. If Windows Hypervisor Platform is not enabled, setup asks permission to enable it and restarts once. Choose how to sign in before the downloads begin. Your own account is preselected and uses Omarchy's setup form to pick a username and password. The quick start skips that form and signs in as `omarchy` / `omarchy`. The app then downloads the GPU runtime (a portable [WINQ-EMU](https://github.com/cmspam/winq-emu) tree, ~84 MB) and the Omarchy image (~2 GB), both SHA256-verified, and starts Omarchy. Later launches open Settings before boot unless you choose a direct-launch shortcut.
+
+Setup keeps Cancel visible and supports Tab, Shift+Tab, Enter and Escape. The
+progress bar moves while a phase has no known total and shows measured progress
+when the download size is known. Cancel asks before removing unfinished setup
+files and keeps an existing working installation. If setup fails, use the error
+to check connection, disk space or folder access, then reopen Try Omarchy to
+retry. Copy a persistent error when contacting support through About.
+
+While Omarchy starts, the setup window stays up with the starter keys and the
+Omarchy window appears once its desktop and wallpaper are drawn, usually 40 to
+60 seconds after launch. Cancel at that point shuts Omarchy down. The first
+start with your own account shows the window right away instead, so Omarchy's
+setup form can be filled in, and so do restarts from inside Omarchy.
 
 Releases are Authenticode-signed by **Brandon South** through Azure Artifact Signing with a Microsoft identity-verified certificate. Windows shows that name as the verified publisher. Check it in the file's Properties > Digital Signatures tab or run `Get-AuthenticodeSignature .\TryOmarchy.exe` in PowerShell; the SignerCertificate subject should read `CN=Brandon South`. A publisher change will be announced in the changelog.
 
@@ -26,7 +39,7 @@ Already have WINQ-EMU at `C:\WINQ-EMU`, or stock QEMU from the old bootstrap? Th
 - **Windows key** acts as Super, but only while the Try Omarchy window is focused. Everywhere else it stays your normal Windows key, so the Start menu and Win+Shift+S keep working.
 - **Ctrl+Alt+F** fullscreens the VM window itself on your Windows desktop (SUPER+F, below, is the in-Omarchy one).
 - **Ctrl+Alt+G** grabs or releases raw keyboard input. If the host steals a shortcut you meant for Omarchy, grab first. Same trick if you're driving the VM over VNC or RDP and focus gets weird.
-- **Alt+Tab** switches windows inside Omarchy while its window is focused. Use **Ctrl+Alt+Tab** for the Windows task switcher, or click another Windows window.
+- **Alt+Tab** switches windows inside Omarchy while its window is focused. Use **Ctrl+Alt+Tab** for the Windows task switcher, or click another Windows window. If you would rather Alt+Tab always go to Windows, turn off **Send Alt+Tab to Omarchy** in Settings > General. The change applies right away.
 - **Ctrl+Alt+End** sends Ctrl+Alt+Delete to Omarchy, where it closes all windows. Windows keeps Ctrl+Alt+Delete for its own security screen and no app can pass it through, the same reason Hyper-V uses Ctrl+Alt+End. Over Remote Desktop, Ctrl+Alt+End opens the remote PC's security screen instead.
 - Hyprland is keyboard-first by design and the first hour is the adjustment period. Learn two keys and the rest follows: **SUPER+SPACE** opens the Omarchy menu, **SUPER+K** opens the keybinding viewer with every binding and its description. The everyday starters: SUPER+RETURN opens a terminal, SUPER+W closes the focused window, SUPER+F fullscreens it.
 
@@ -86,7 +99,12 @@ folder off without forgetting it, and `forwards` are loopback port
 forwards (`-forward`), and `sshKey` is the public key file to authorize when a
 forward targets sshd (`-ssh-key`), and `render` picks the rendering path
 (`-render`). Open Settings from the tray, the Start menu, or
-`TryOmarchy.exe -settings`. Changes apply on the next launch.
+`TryOmarchy.exe -settings`. Save, Cancel and Help stay visible while pages
+scroll. CPU/RAM, graphics, storage, shared-folder, camera, microphone-enable and
+LAN/SSH startup choices take effect on the next start. Audio endpoint choices
+are sent to a running guest, and approved-app, Alt-Tab and local-forward choices
+update live. Audio failures are reported; saving a route does not guarantee an
+unavailable device can be used.
 
 `render` is `auto` by default: the launcher tries GPU rendering and, when this
 PC cannot run it, remembers that in `render-probe.json` so later launches go
@@ -109,7 +127,8 @@ Open **Settings > General > Resource profile** before starting Omarchy:
   logical processors (one eighth of the host on larger machines), and at least
   4 GiB RAM (one eighth of physical RAM on larger machines). RAM is rounded down
   to 256 MiB steps. The supported limits remain 64 vCPUs and 64 GiB RAM.
-- **Manual** enables the CPU count and RAM fields together. RAM is entered in
+- **Manual** shows the CPU count and RAM fields together. Automatic profiles hide
+  these fields and retain their manual values for when you switch back. RAM is entered in
   GiB; either field can be 0 to use Balanced sizing for that resource. Requests
   exceeding the host CPU count or leaving less than 2 GiB physical RAM for
   Windows are rejected with an explanation.
@@ -197,6 +216,8 @@ asks the guest to start sshd for that boot. Nothing on your network can reach
 it. Your `~/.ssh/id_ed25519.pub` (or `id_ecdsa.pub`, `id_rsa.pub`) is authorized
 for the Omarchy account automatically; pass `-ssh-key PATH` to pick another
 public key, or use none and log in with the password you chose in Omarchy.
+The quick-start account only accepts keys over SSH, since its password is
+public.
 Then:
 
 ```
@@ -221,13 +242,22 @@ if ssh complains.
 
 ## Taking your setup to a real Omarchy install
 
-Inside Omarchy, run `try-omarchy-export`. It writes one archive with your
-desktop configuration, theme, and the packages you added, to the shared Windows folder
-when one is mounted (`-share`) or to your home folder otherwise. On the real
-install, extract it and run the `restore.sh` inside. Keys, password stores,
-browser profiles, and unlisted application configs are deliberately left out.
-Review the archive before sharing it with anyone. See the
-[migration guide](MIGRATION.md).
+Install Omarchy next to Windows on the same PC, then run one command in the
+new install:
+
+```
+curl -fsSL https://tryomarchy.com/import | bash
+```
+
+It reads the trial straight off the Windows drive and brings over your
+settings, themes, apps, files and projects, and if you pick them, your
+browser profile and sign-ins. BitLocker and Fast Startup have to be off, and
+Omarchy shut down, before installing. **Settings > Recovery >
+Install Omarchy...** checks these, helps turn them off and shows the steps. The
+[migration guide](MIGRATION.md) has the details.
+
+To replace Windows or move to another computer, run `try-omarchy-export`
+inside the trial first and restore the archive on the new install.
 
 ## Offline portable mode
 
@@ -266,9 +296,9 @@ TryOmarchy.exe is just the launcher. On first run it fetches the GPU runtime (~8
 
 A live USB requires rebooting and needs extra setup to keep changes between sessions. Try Omarchy runs beside your Windows apps and keeps its files between launches.
 
-### What are the instant trial credentials?
+### What are the quick-start credentials?
 
-The local trial account is named `omarchy` and its lock-screen password is `omarchy`. Sudo does not ask for a password in instant trial mode. Try Omarchy does not enable SSH or expose inbound network ports unless you ask for a forward with `-ssh` or `-forward`, and those bind to `127.0.0.1` only.
+The quick-start account is named `omarchy` and its lock-screen password is `omarchy`. Sudo does not ask for a password on this account. Run `passwd` in Omarchy to set your own password. SSH accepts only keys for this account, because its password is public. Try Omarchy does not enable SSH or expose inbound network ports unless you ask for a forward with `-ssh` or `-forward`. Those bind to `127.0.0.1` unless you choose a LAN forward, which other devices on your network can reach.
 
 ### How do I remove Try Omarchy?
 

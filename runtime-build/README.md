@@ -22,6 +22,21 @@ runtime-build/build.sh runtime-output
 Do not update `guest-build/runtime.lock.json` until the resulting runtime has
 passed the Windows test checklist in `docs/RUNTIME-VALIDATION.md`.
 
+The renderer image dispatch checks the exact host-allocation external format
+capabilities before creating or querying an internal host variant, including
+the maintenance4 requirements path. Rejected variants keep plain backing and
+advertise its non-host-visible memory types. Disjoint images keep plain backing
+because independent plane bindings cannot select one shared alternate handle;
+requirements2 and maintenance4 preserve each plane's requirements. Explicit
+external images keep their existing route. Unknown creation-info chains also
+keep plain backing rather than assuming host-import support.
+
+`test-image-capabilities.py <patched-renderer-source>` compiles the actual image
+dispatch against mocked Vulkan entry points. It runs on Linux or MSYS2 without
+a GPU or desktop and covers capability rejection, usable fallback masks,
+dual backing, disjoint planes and bindings, and maintenance4. These checks do
+not establish the cause of issue #276 or prove behavior on a Windows driver.
+
 The r16 candidate adds independent startup SDL playback/recording selection via
 `0013-select-sdl-audio-devices.patch`, with per-direction Windows-default fallback.
 The build runs `test-sdl-audio.py` against the patched route function. On a
@@ -50,6 +65,36 @@ runtime's source provenance includes this patch, so older runtimes retain their
 previous behavior. The [September 23 physical candidate record](../docs/evidence/FEATURE-GAPS-2026-09-23.md)
 includes measured Windows memory return and reuse checks. The published
 `v0.2.0` app pins r19.
+
+The precise-scroll test recipe adds `0018-preserve-precise-sdl-scroll.patch`.
+SDL 2.0.18 and newer supply fractional detents via `preciseX`/`preciseY`;
+the shipped r20c inventory records SDL 2.32.10-1. SDL is selected by the MSYS2
+package installation rather than pinned in `sources.lock.json`. Its Windows
+[wheel message handler](https://github.com/libsdl-org/SDL/blob/release-2.32.10/src/video/windows/SDL_windowsevents.c#L926)
+divides `WM_MOUSEWHEEL`/`WM_MOUSEHWHEEL` deltas by 120, preserving values below
+one notch. Windows touchpad scroll settings are already reflected in those
+messages; QEMU also handles SDL's explicit flipped-direction flag.
+
+QEMU carries those deltas to the launcher's existing `virtio-tablet-pci` as
+`REL_WHEEL_HI_RES`/`REL_HWHEEL_HI_RES`, with legacy events at 120-unit boundaries
+for older Linux clients. The virtio mouse has the same wheel capabilities.
+The dedicated pinch device still accepts only multitouch frames. PS/2 and USB
+input retain accumulated whole-detent button events, and builds with older SDL
+headers use the integer wheel fields. Each SDL window keeps its own fractional
+remainder, cleared on focus loss, window destruction and VM state changes.
+
+The build runs `test-sdl-scroll.py` and `test-virtio-scroll.py` against the actual
+patched handlers. For diskless guest-ABI checks, run:
+
+```sh
+QEMU_SCROLL_TEST_BINARY=/path/to/qemu-system-x86_64 python3 runtime-build/test-virtio-scroll-abi.py
+QEMU_PINCH_TEST_BINARY=/path/to/qemu-system-x86_64 python3 runtime-build/test-virtio-pinch.py
+```
+
+This remains a test runtime. Before pinning or releasing it, check smooth
+vertical and horizontal precision-touchpad scrolling in Chromium and a
+terminal on the Windows laptop, both Windows natural-scroll settings, plain
+wheel-mouse notches, and pinch zoom followed by scrolling.
 
 The r4 recipe enables libusb explicitly and includes its runtime DLL and license.
 The USB host patch adds `auto-reconnect=off` for explicit attachment: the selected

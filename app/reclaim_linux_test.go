@@ -69,7 +69,7 @@ func useReclaimAgent(t *testing.T, a *guestAgent, dir string, supported bool) {
 
 // TestLinuxReclaimMessagesNameThisComputer keeps Windows wording out of Linux.
 func TestLinuxReclaimMessagesNameThisComputer(t *testing.T) {
-	for _, text := range []string{reclaimReadyStatus, reclaimNeedsSpaceMessage, reclaimUnsupportedMessage, reclaimStartedMessage, linuxReclaimPrompt(8192)} {
+	for _, text := range []string{reclaimReadyStatus(), reclaimNeedsSpaceMessage(), reclaimUnsupportedMessage(), reclaimStartedMessage(), linuxReclaimPrompt(8192)} {
 		if strings.Contains(text, "Windows") || strings.Contains(text, "tray") {
 			t.Errorf("Linux reclaim text names another platform or a missing control: %q", text)
 		}
@@ -97,7 +97,7 @@ func TestLinuxReclaimInfoBeforeAndDuringAPass(t *testing.T) {
 	}
 
 	useReclaimAgent(t, newGuestAgent(), dir, false)
-	if info := linuxReclaimInfoFor(dir); info.CanStart || info.Status != reclaimUnsupportedMessage {
+	if info := linuxReclaimInfoFor(dir); info.CanStart || info.Status != reclaimUnsupportedMessage() {
 		t.Fatalf("reclaim offered on a folder that cannot release blocks: %+v", info)
 	}
 
@@ -132,7 +132,7 @@ func TestLinuxReclaimInfoBeforeAndDuringAPass(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("finished pass was not reported")
 	}
-	if info := linuxReclaimInfoFor(dir); info.CanStart || !strings.Contains(info.Status, reclaimReadyStatus) {
+	if info := linuxReclaimInfoFor(dir); info.CanStart || !strings.Contains(info.Status, reclaimReadyStatus()) {
 		t.Fatalf("finished pass did not ask for shutdown: %+v", info)
 	}
 }
@@ -175,7 +175,7 @@ func TestLinuxReclaimFromSettingsStartsAPass(t *testing.T) {
 	a, _, r := connectReclaimAgent(t)
 	useReclaimAgent(t, a, dir, true)
 	info := startLinuxReclaimFromSettings(dir)
-	if info.CanStart || info.Status != reclaimStartedMessage {
+	if info.CanStart || info.Status != reclaimStartedMessage() {
 		t.Fatalf("Settings did not start a pass: %+v", info)
 	}
 	if line, _ := r.ReadString('\n'); line != fmt.Sprintf("zero-fill %d\n", reclaimPassCapMiB) {
@@ -188,7 +188,7 @@ func TestLinuxReclaimFromSettingsStartsAPass(t *testing.T) {
 	a2, _, _ := connectReclaimAgent(t)
 	useReclaimAgent(t, a2, dir, true)
 	reclaimFreeBytes = func(string) (int64, error) { return 3 << 30, nil }
-	if info := startLinuxReclaimFromSettings(dir); info.Status != reclaimNeedsSpaceMessage || a2.reclaimInProgress() {
+	if info := startLinuxReclaimFromSettings(dir); info.Status != reclaimNeedsSpaceMessage() || a2.reclaimInProgress() {
 		t.Fatalf("low space: %+v", info)
 	}
 }
@@ -224,8 +224,8 @@ func TestLinuxReclaimCommandTalksToTheLifecyclePort(t *testing.T) {
 	}
 	defer l.Close()
 	replies := make(chan string, 2)
-	replies <- "ok: " + reclaimStartedMessage + "\n"
-	replies <- "error: " + reclaimNeedsSpaceMessage + "\n"
+	replies <- "ok: " + reclaimStartedMessage() + "\n"
+	replies <- "error: " + reclaimNeedsSpaceMessage() + "\n"
 	go func() {
 		for {
 			c, err := l.Accept()
@@ -242,11 +242,11 @@ func TestLinuxReclaimCommandTalksToTheLifecyclePort(t *testing.T) {
 		}
 	}()
 	var out, errOut bytes.Buffer
-	if code := sendLinuxReclaim(l.Addr().String(), &out, &errOut); code != 0 || strings.TrimSpace(out.String()) != reclaimStartedMessage {
+	if code := sendLinuxReclaim(l.Addr().String(), &out, &errOut); code != 0 || strings.TrimSpace(out.String()) != reclaimStartedMessage() {
 		t.Fatalf("started pass: code %d out %q err %q", code, out.String(), errOut.String())
 	}
 	out.Reset()
-	if code := sendLinuxReclaim(l.Addr().String(), &out, &errOut); code != 1 || strings.TrimSpace(errOut.String()) != reclaimNeedsSpaceMessage {
+	if code := sendLinuxReclaim(l.Addr().String(), &out, &errOut); code != 1 || strings.TrimSpace(errOut.String()) != reclaimNeedsSpaceMessage() {
 		t.Fatalf("refused pass: code %d out %q err %q", code, out.String(), errOut.String())
 	}
 	l.Close()
@@ -323,7 +323,7 @@ func TestLinuxReclaimWindowAsksBeforeStarting(t *testing.T) {
 		if a.reclaimInProgress() != tc.started {
 			t.Fatalf("answer %s: started=%v", tc.answer, a.reclaimInProgress())
 		}
-		if tc.started && result != reclaimStartedMessage || !tc.started && result != "" {
+		if tc.started && result != reclaimStartedMessage() || !tc.started && result != "" {
 			t.Fatalf("answer %s: result %q", tc.answer, result)
 		}
 	}

@@ -31,5 +31,21 @@ class ParseFactsTests(unittest.TestCase):
         self.assertEqual(smoke_guest.parse_facts(transcript), {"foreign": "0"})
 
 
+class GuestRevisionTests(unittest.TestCase):
+    def test_unified_revision_is_read_from_appended_patches(self):
+        self.assertEqual(smoke_guest.guest_compat_revision(), 55)
+
+    def test_linux_payload_checks_follow_delivery_revisions(self):
+        self.assertEqual(smoke_guest.linux_guest_payload_checks(49), {})
+        previous = set()
+        for revision, name in [(50, "vulkan"), (51, "idle"), (52, "display"),
+                               (53, "ready"), (54, "app"), (55, "notices")]:
+            with self.subTest(revision=revision):
+                checks = smoke_guest.linux_guest_payload_checks(revision)
+                self.assertEqual(set(checks) - previous, {f"linux-{name}-payload"})
+                self.assertTrue(all(command.endswith(" && echo yes || echo no") for command in checks.values()))
+                previous = set(checks)
+
+
 if __name__ == "__main__":
     unittest.main()

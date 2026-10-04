@@ -25,7 +25,7 @@ import (
 // restarts setup from what is on disk: downloads continue where they stopped.
 func failLinuxSetup(err error, dir string) {
 	if setupCancelled() || errors.Is(err, errSetupCancelled) {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 	logf("FATAL setup failed: %v", err)
 	fmt.Fprintf(os.Stderr, "%s: setup failed: %v\n", appTitle, err)
@@ -56,18 +56,21 @@ func relaunchLinuxSelf() {
 	}
 }
 
-func fatal(format string, a ...any) {
+// fatal shows a finished message and exits. Shared code passes catalog text
+// from uiText or uiTextWith; Linux-only code formats with fatalf.
+func fatal(msg string) {
 	if setupCancelled() {
 		getUI().finish()
 		logf("Setup cancelled; existing disks and downloaded files retained")
 		os.Exit(0)
 	}
-	msg := fmt.Sprintf(format, a...)
 	logf("FATAL %s", msg)
 	fmt.Fprintf(os.Stderr, "%s: %s\n", appTitle, msg)
 	getUI().showError(msg)
 	os.Exit(1)
 }
+
+func fatalf(format string, a ...any) { fatal(fmt.Sprintf(format, a...)) }
 
 // Inside the Flatpak XDG_DATA_HOME is the app's own data folder.
 func defaultLinuxDataDirectory() string {
@@ -136,12 +139,12 @@ func main() {
 	// desktop launch waits for an explicit Launch choice; CLI use stays direct.
 	runLifecycleListener()
 	if err := recoverLinuxMove(defaultLinuxDataDirectory()); err != nil {
-		fatal("Could not finish moving the Omarchy data folder: %v", err)
+		fatalf("Could not finish moving the Omarchy data folder: %v", err)
 	}
 	if explicitFlags["dir"] {
 		resolved, err := resolveLinuxMovedDirectory(defaultLinuxDataDirectory(), cfg.dir)
 		if err != nil {
-			fatal("Cannot read the data folder move record: %v", err)
+			fatalf("Cannot read the data folder move record: %v", err)
 		}
 		cfg.dir = resolved
 	}
@@ -157,15 +160,15 @@ func main() {
 	selectedRelease, selectedSumsSHA256, err := selectLinuxGuestRelease(*release, *sumsSHA256,
 		explicitFlags["release"], explicitFlags["sums-sha256"])
 	if err != nil {
-		fatal("Cannot select the Linux Omarchy image: %v", err)
+		fatalf("Cannot select the Linux Omarchy image: %v", err)
 	}
 
 	if err := checkKVM(); err != nil {
-		fatal("%v.", err)
+		fatalf("%v.", err)
 	}
 	qemu, err := exec.LookPath(cfg.qemu)
 	if err != nil {
-		fatal("Cannot find QEMU (%s): %v", cfg.qemu, err)
+		fatalf("Cannot find QEMU (%s): %v", cfg.qemu, err)
 	}
 	cfg.qemu = qemu
 	cfg.supportsSharing = true
@@ -176,7 +179,7 @@ func main() {
 	}
 	selected, proceed, err := resolveLinuxDataDirectory(defaultLinuxDataDirectory(), cfg.dir, explicitFlags["dir"], chooser)
 	if err != nil {
-		fatal("Cannot select the data folder: %v", err)
+		fatalf("Cannot select the data folder: %v", err)
 	}
 	if !proceed {
 		return
@@ -186,7 +189,7 @@ func main() {
 		noteLinuxLocationHint(defaultLinuxDataDirectory(), selected)
 	}
 	if cfg.dir, err = filepath.Abs(cfg.dir); err != nil {
-		fatal("Cannot resolve the data directory: %v", err)
+		fatalf("Cannot resolve the data directory: %v", err)
 	}
 	cfg.hostDir = cfg.dir
 	cfg.guestDir = filepath.Join(cfg.dir, "guest")
@@ -196,27 +199,27 @@ func main() {
 	// An interrupted roll back can have moved vm aside. Finish or undo it
 	// before anything creates or reads the VM's files.
 	if err := recoverLinuxSnapshots(cfg.dir); err != nil {
-		fatal("Could not finish an interrupted snapshot operation: %v", err)
+		fatalf("Could not finish an interrupted snapshot operation: %v", err)
 	}
 	if err := os.MkdirAll(cfg.vmDir, 0o755); err != nil {
-		fatal("Could not create the Omarchy data directory: %v", err)
+		fatalf("Could not create the Omarchy data directory: %v", err)
 	}
 	if shellLog, _ := os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); shellLog != nil {
 		openLog(shellLog)
 	}
 	logf("---- %s starting (Linux) ----", appTitle)
 	if err := configureLinuxGraphics(*venusFlag); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 	if cfg.audio, err = linuxAudioMode(*audioFlag); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 
 	if cfg.desktop, err = loadDesktopPreferences(cfg.dir); err != nil {
-		fatal("Cannot read device and update preferences: %v", err)
+		fatalf("Cannot read device and update preferences: %v", err)
 	}
 	if cfg.audioDevices, err = loadAudioPreferences(cfg.dir); err != nil {
-		fatal("Cannot read audio preferences: %v", err)
+		fatalf("Cannot read audio preferences: %v", err)
 	}
 	if explicitFlags["audio-output"] {
 		cfg.audioDevices.Output = *audioOutput
@@ -228,11 +231,11 @@ func main() {
 		cfg.desktop.MicrophoneDisabled = !*microphone
 	}
 	if err := cfg.audioDevices.validate(); err != nil {
-		fatal("Cannot use audio devices: %v", err)
+		fatalf("Cannot use audio devices: %v", err)
 	}
 	experience, err := loadLinuxExperiencePreferences(cfg.dir)
 	if err != nil {
-		fatal("Cannot read display and keyboard preferences: %v", err)
+		fatalf("Cannot read display and keyboard preferences: %v", err)
 	}
 	if !explicitFlags["scale"] {
 		*scaleFlag = experience.Scale
@@ -241,46 +244,46 @@ func main() {
 		*keyboardFlag = experience.Keyboard
 	}
 	if linuxGuestScale, err = parseLinuxScale(*scaleFlag); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 	userSettings, err := loadSettings(settingsPath(cfg.dir))
 	if err != nil {
-		fatal("Cannot read its settings: %v\n\nFix or delete %s and try again.", err, settingsPath(cfg.dir))
+		fatalf("Cannot read its settings: %v\n\nFix or delete %s and try again.", err, settingsPath(cfg.dir))
 	}
 	if err := applySettings(cfg, userSettings, explicitFlags, &forwards, sshKeyPath); err != nil {
-		fatal("Cannot use its settings: %v", err)
+		fatalf("Cannot use its settings: %v", err)
 	}
 	resourcePrefs, err := loadResourcePreferences(cfg.dir)
 	if err != nil {
-		fatal("Cannot read resource preferences: %v", err)
+		fatalf("Cannot read resource preferences: %v", err)
 	}
 	if explicitFlags["resource-profile"] {
 		resourcePrefs.Profile = *resourceProfileFlag
 	}
 	if err := validateResourceProfile(resourcePrefs.Profile); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 	if explicitFlags["render"] {
 		if cfg.renderMode, err = parseRenderMode(*renderFlag); err != nil {
-			fatal("%v", err)
+			fatalf("%v", err)
 		}
 	}
 	if cfg.memOverrideMiB != 0 && (cfg.memOverrideMiB < minimumGuestMemoryMiB || cfg.memOverrideMiB > maximumGuestMemoryMiB) {
-		fatal("-memory must be between %d and %d MiB.", minimumGuestMemoryMiB, maximumGuestMemoryMiB)
+		fatalf("-memory must be between %d and %d MiB.", minimumGuestMemoryMiB, maximumGuestMemoryMiB)
 	}
 	if !explicitFlags["disk-size"] {
 		storage, err := loadStorageSettings(cfg.dir)
 		if err != nil {
-			fatal("Cannot read storage preferences: %v", err)
+			fatalf("Cannot read storage preferences: %v", err)
 		}
 		cfg.diskGiB = storage.DiskGiB
 	}
 	if _, err := requestedDiskMiB(24*1024, cfg.diskGiB, false); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 	home, _ := os.UserHomeDir()
 	if cfg.sshKey, err = resolveSSHPreset(&forwards, *sshPort, *sshKeyPath, home, explicitFlags["ssh-key"]); err != nil {
-		fatal("%v.", err)
+		fatalf("%v.", err)
 	}
 	cfg.forwards = forwards
 	cfg.launchForwards = append([]portForward(nil), cfg.forwards...)
@@ -297,7 +300,7 @@ func main() {
 		}
 	}
 	if err := chooseLinuxProvisionMode(cfg, explicitFlags["instant"], chooseAccount); err != nil {
-		fatal("Cannot select the account setup: %v", err)
+		fatalf("Cannot select the account setup: %v", err)
 	}
 	// A shared folder is chosen in Settings. Asking at first setup put a third
 	// question in front of the desktop, so only -choose-share asks it here.
@@ -308,18 +311,18 @@ func main() {
 		}
 	}
 	if *chooseShare && chooseFolder == nil {
-		fatal("Choosing a shared folder requires the setup window. Use -share with an accessible folder in terminal mode.")
+		fatalf("Choosing a shared folder requires the setup window. Use -share with an accessible folder in terminal mode.")
 	}
 	if err := configureLinuxSharing(cfg, &userSettings, explicitFlags["share"], *chooseShare, chooseFolder); err != nil {
-		fatal("Cannot configure the shared folder: %v", err)
+		fatalf("Cannot configure the shared folder: %v", err)
 	}
 	if cfg.share != "" {
 		if cfg.share, err = validateLinuxSharedFolder(cfg.share, cfg.dir); err != nil {
-			fatal("Cannot share %s: %v", cfg.share, err)
+			fatalf("Cannot share %s: %v", cfg.share, err)
 		}
 	}
 	if err := checkSetupCancelled(); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 
 	var reason string
@@ -329,13 +332,13 @@ func main() {
 	}
 
 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
-		fatal("Could not restore the previous Omarchy image after an interrupted update: %v", err)
+		fatalf("Could not restore the previous Omarchy image after an interrupted update: %v", err)
 	}
 	// A rolled-back VM first boots on the system files saved with it. A newer
 	// image, if this app pins one, is fetched on the launch after that.
 	var runtimeRelease, runtimeSums string
 	if pinned, err := pinCheckpointBoot(cfg.dir, explicitFlags, &selectedRelease, &selectedSumsSHA256, &runtimeRelease, &runtimeSums); err != nil {
-		fatal("Could not prepare the snapshot you rolled back to: %v", err)
+		fatalf("Could not prepare the snapshot you rolled back to: %v", err)
 	} else if pinned {
 		logf("snapshots: first boot after roll back uses its saved system files (%s)", releaseVersion(selectedRelease))
 	}
@@ -344,11 +347,11 @@ func main() {
 	}
 	specData, err := os.ReadFile(filepath.Join(cfg.guestDir, "build-spec.json"))
 	if err != nil {
-		fatal("Cannot read build-spec.json: %v", err)
+		fatalf("Cannot read build-spec.json: %v", err)
 	}
 	var spec buildSpec
 	if err := json.Unmarshal(specData, &spec); err != nil {
-		fatal("Cannot parse build-spec.json: %v", err)
+		fatalf("Cannot parse build-spec.json: %v", err)
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
 	cfg.followHostTimeZone = strings.TrimSpace(*timeZoneFlag) != "keep" && guestAcceptsTimeZone(spec)
@@ -370,7 +373,7 @@ func main() {
 	if cfg.useGpu {
 		present, err := vulkanPresentMode(*vulkanPresentFlag, onlyNVIDIARenderNodes(renderNodeVendors("/sys/class/drm")))
 		if err != nil {
-			fatal("%v", err)
+			fatalf("%v", err)
 		}
 		if present == "cpu" {
 			cmdline += " tryomarchy.vulkan-present=cpu"
@@ -387,7 +390,7 @@ func main() {
 	allocation, err := planGuestResources(profile, host, cfg.useGpu, cfg.cpuOverride, cfg.memOverrideMiB,
 		explicitFlags["cpus"], explicitFlags["memory"])
 	if err != nil {
-		fatal("Cannot allocate resources: %s", linuxResourceErrorText(err))
+		fatalf("Cannot allocate resources: %s", linuxResourceErrorText(err))
 	}
 	cfg.cpus, cfg.memMiB, cfg.hostTotalMiB = allocation.CPUs, allocation.MemoryMiB, host.TotalMiB
 	logf("resources: profile=%s, %d of %d logical processors, %d MiB guest RAM; host available=%d MiB, CPU sample known=%t busy=%.1f%%",
@@ -396,7 +399,7 @@ func main() {
 	cfg.displayWidth, cfg.displayHeight = *width, *height
 	cmdline += fmt.Sprintf(" video=%dx%d", cfg.displayWidth, cfg.displayHeight)
 	if err := checkSetupCancelled(); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 
 	// Optional sharing comes after downloads and disk preparation succeed.
@@ -405,7 +408,7 @@ func main() {
 	stopClipboard := runLinuxClipboardBridge()
 	defer stopClipboard()
 	if err := checkSetupCancelled(); err != nil {
-		fatal("%v", err)
+		fatalf("%v", err)
 	}
 
 	configureLinuxReclaim(cfg)
@@ -428,7 +431,7 @@ func main() {
 		}
 	}
 	if err := checkForwardBindings(cfg.forwards); err != nil {
-		fatal("Could not prepare port forwarding:\n\n%v", err)
+		fatalf("Could not prepare port forwarding:\n\n%v", err)
 	}
 
 	// The first interrupt asks the guest to shut down; a second one stops QEMU.

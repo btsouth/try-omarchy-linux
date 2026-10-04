@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,7 +111,7 @@ func writeLauncherShortcuts(paths []string, target, dir string, startMenu, deskt
 			return fmt.Errorf("checking Windows shortcut %q: %w", path, err)
 		}
 		if !sameShortcutTarget(ownedTarget, target) {
-			return fmt.Errorf("Windows shortcut %q already belongs to another installation", path)
+			return shortcutOwnedError{desktop: i == 2}
 		}
 	}
 	for i, path := range paths {
@@ -174,10 +175,31 @@ func finishLauncherShortcutChoice(paths []string, target, dir string, startMenu,
 		return "", fmt.Errorf("Windows shortcut: %v; folder shortcuts: %w", globalErr, folderErr)
 	}
 	if globalErr != nil {
-		return "Windows could not use the selected shortcut because " + globalErr.Error() +
-			"\n\nOpen Start Omarchy or Settings beside this installation. Your existing Windows shortcuts were not changed.", nil
+		var owned shortcutOwnedError
+		if errors.As(globalErr, &owned) {
+			if owned.desktop {
+				return uiTextWith("shortcuts.taken.desktop", map[string]string{"path": dir}), nil
+			}
+			return uiTextWith("shortcuts.taken.start_menu", map[string]string{"path": dir}), nil
+		}
+		return uiTextWith("shortcuts.failed", map[string]string{"error": globalErr.Error(), "path": dir}), nil
 	}
 	return "", nil
+}
+
+// shortcutOwnedError is a Start menu or desktop shortcut that already starts
+// another Try Omarchy installation.
+type shortcutOwnedError struct{ desktop bool }
+
+func (e shortcutOwnedError) place() string {
+	if e.desktop {
+		return "desktop"
+	}
+	return "Start menu"
+}
+
+func (e shortcutOwnedError) Error() string {
+	return "the " + e.place() + " shortcut belongs to another installation"
 }
 
 func updateLaunchShortcuts(target, dir string, startAutomatically bool) error {
@@ -212,7 +234,7 @@ func chooseProvisionMode(cfg *config, newInstall bool) {
 	if cfg.instant {
 		getUI().setInstantMode(true)
 		if err := writeProvisionMode(cfg.dir, provisionModeInstant); err != nil {
-			fatal("Could not save the instant trial choice: %v", err)
+			fatal(uiTextWith("fatal.save_quick_start", map[string]string{"error": err.Error()}))
 		}
 		return
 	}
@@ -236,7 +258,7 @@ func chooseProvisionMode(cfg *config, newInstall bool) {
 	}
 	getUI().setInstantMode(cfg.instant)
 	if err := writeProvisionMode(cfg.dir, mode); err != nil {
-		fatal("Could not save the first-boot choice: %v", err)
+		fatal(uiTextWith("fatal.save_first_boot", map[string]string{"error": err.Error()}))
 	}
 }
 
@@ -282,13 +304,13 @@ func offerLauncherShortcuts(dir string) {
 	paths, err := launcherShortcutPaths()
 	if err != nil {
 		logf("shortcut paths: %v", err)
-		errorBox("Try Omarchy is ready, but Windows could not find the shortcut locations.\n\n" + err.Error())
+		errorBox(uiTextWith("shortcuts.error.locations", map[string]string{"error": err.Error()}))
 		return
 	}
 	message, err := finishLauncherShortcutChoice(paths, target, installDir, startMenu, desktop, prefs.StartAutomatically)
 	if err != nil {
 		logf("shortcuts: %v", err)
-		errorBox("Try Omarchy is ready, but Windows could not finish creating shortcuts. Open TryOmarchy.exe in this installation's folder.\n\n" + err.Error())
+		errorBox(uiTextWith("shortcuts.error.create", map[string]string{"error": err.Error()}))
 	} else if message != "" {
 		logf("shortcuts: using folder launchers")
 		infoBox(message)

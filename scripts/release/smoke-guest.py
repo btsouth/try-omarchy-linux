@@ -36,6 +36,24 @@ def guest_compat_revision() -> int:
     return latest or 22
 
 
+def linux_guest_payload_checks(revision: int) -> dict[str, str]:
+    """Check delivery of Linux payloads without running them on a Windows boot."""
+    checks = {}
+    if revision >= 50:
+        checks["linux-vulkan-payload"] = "grep -Fq 'tryomarchy.vulkan-present=cpu' /usr/local/lib/try-omarchy/vulkan-env"
+    if revision >= 51:
+        checks["linux-idle-payload"] = "test -x /usr/local/lib/try-omarchy/host-window && test -x /usr/local/lib/try-omarchy/repair-host-window && test -f /usr/share/try-omarchy/host-window-idle.qml"
+    if revision >= 52:
+        checks["linux-display-payload"] = "grep -Fq 'tryomarchy.host-scale=1' /usr/local/bin/omarchy-native-display-sync"
+    if revision >= 53:
+        checks["linux-ready-payload"] = "test -x /usr/local/lib/try-omarchy/desktop-ready && grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/user/try-omarchy-desktop-ready.service && test -L /etc/systemd/user/graphical-session.target.wants/try-omarchy-desktop-ready.service"
+    if revision >= 54:
+        checks["linux-app-payload"] = "grep -qx 'version=4' /usr/local/lib/try-omarchy/agent && grep -Fq 'version=5' /usr/local/lib/try-omarchy/agent"
+    if revision >= 55:
+        checks["linux-notices-payload"] = "test -x /usr/local/lib/try-omarchy/apply-host-names && test -d /usr/share/try-omarchy/host-applications/linux && test -d /usr/share/try-omarchy/host-applications/windows && test -x /usr/local/lib/try-omarchy/repair-clock-timezone && test -f /usr/share/try-omarchy/clock-timezone-refresh.qml && grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/system/try-omarchy-linux-clock.service"
+    return {name: command + " && echo yes || echo no" for name, command in checks.items()}
+
+
 # Facts the built image must satisfy, checked from inside the booted guest
 # and reported on the serial console as TRYOMARCHY_FACT:<name>:<value>.
 FACT_CHECKS = {
@@ -75,11 +93,11 @@ EXPECTED_FACTS = {
     "icon-cache": "yes",
     "system-ownership": "yes",
     "update-repository": "active",
-    "runtime-package": "4.0.3-4",
+    "runtime-package": "from build-spec.json",
     "package-database": "clean",
     "lock-pam": "yes",
     "pacman-unlocked": "yes",
-    "omarchy-version": "4.0.3",
+    "omarchy-version": "from build-spec.json",
     "browser-policy": "yes",
     "media-tools": "yes",
     "browser-repair": "yes",
@@ -171,6 +189,10 @@ def main() -> None:
         FACT_CHECKS["omarchy-nvim-files"] = "sudo pacman -Qk omarchy-nvim >/dev/null 2>&1 && echo yes || echo no"
         EXPECTED_FACTS["omarchy-nvim-files"] = "yes"
 
+    for name, command in linux_guest_payload_checks(args.compat_revision).items():
+        FACT_CHECKS[name] = command
+        EXPECTED_FACTS[name] = "yes"
+
     login_delay = args.login_delay if args.login_delay is not None else (60 if args.accel == "tcg" else 0)
     if login_delay < 0:
         parser.error("login delay must not be negative")
@@ -192,6 +214,7 @@ def main() -> None:
     # The runtime package follows the pinned Omarchy version and the spec's
     # packageRelease, which goes up whenever its dependencies change.
     upstream = spec["upstream"]
+    EXPECTED_FACTS["omarchy-version"] = upstream["version"]
     EXPECTED_FACTS["runtime-package"] = f"{upstream['version']}-{upstream.get('packageRelease', 1)}"
     cmdline = spec["runtime"]["kernelCommandLine"]
     cmdline = cmdline.replace("console=tty0 ", "").replace("console=hvc0", "console=ttyS0")

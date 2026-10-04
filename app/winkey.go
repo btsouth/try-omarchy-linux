@@ -123,14 +123,15 @@ func hookCallback(nCode, wParam, lParam uintptr) uintptr {
 			releaseKey(&printDown, "print")
 		}
 		// Windows consumes Alt+Tab before SDL can deliver the chord to the
-		// guest. Forward it while the VM has focus (see altTabForwarder).
+		// guest. Forward it while the VM has focus (see altTabForwarder),
+		// unless Settings leaves Alt+Tab to Windows.
 		if vk == vkTab {
 			pid := qemuPid.Load()
 			control, _, _ := procGetAsyncKeyState.Call(vkControl)
 			// Ctrl+Alt+Tab is Windows' keyboard-only escape to its task
 			// switcher. A plain Ctrl+Alt release would conflict with AltGr.
 			forward := pid != 0 && foregroundPid() == pid &&
-				(altTab.tabDown || control&0x8000 == 0 && (wParam == wmSyskeydown || wParam == wmSyskeyup))
+				(altTab.tabDown || !altTabToWindows.Load() && control&0x8000 == 0 && (wParam == wmSyskeydown || wParam == wmSyskeyup))
 			keys, swallow := altTab.tab(forward, wParam == wmKeydown || wParam == wmSyskeydown)
 			sendKeys(keys)
 			if swallow {
@@ -196,6 +197,8 @@ func runWinKeyHook() {
 	if mh, _, _ := procSetWindowsHookExW.Call(whMouseLL, mcb, 0, 0); mh == 0 {
 		logf("closeguard: mouse hook failed - X clicks will be ignored (window-close=off)")
 	}
+	// The VM window events share this pump too.
+	installQemuWindowHooks()
 	var m msgStruct
 	for {
 		procMsgWaitForMultipleObj.Call(0, 0, 0, 800, qsAllinput)
@@ -292,7 +295,16 @@ func runTitleEnforcer(dir string, fullscreen bool, fullscreenDisplay string) {
 			enumTitlePid = 0
 			qemuHwnd.Store(0)
 		}
-		time.Sleep(time.Second)
+		wait := time.Second
+		if curtainPolling() {
+			wait = 250 * time.Millisecond
+		}
+		select {
+		case <-qemuWindowChanged:
+			// Let a burst of window events settle, then look once.
+			time.Sleep(30 * time.Millisecond)
+		case <-time.After(wait):
+		}
 	}
 
 }

@@ -10,6 +10,40 @@ scripts/release/build-guest.sh --contract-only
 scripts/release/build-guest.sh --output /path/to/artifacts
 ```
 
+Patches 0121 and 0122 port the everyday guest fixes from Try Omarchy for Mac:
+screensaver text fits the terminal and tracks its effect PID; low disk space
+messages distinguish the guest disk from the PC and point to **Settings >
+General > Storage > Disk capacity (GiB)**; first-run update notifications use
+normal priority; power profiles show **Managed by Windows** without calling
+Linux power-profile tools. Chromium receives `--enable-wayland-ime`, new fcitx5
+profiles offer Chewing after the US keyboard, and Traditional Chinese text
+prefers Noto CJK TC fonts.
+
+Revision 46 retains the audio transport delivery from #278.
+Compatibility revision 47 delivers reviewed payloads and applies them only to
+matching default files. It keeps custom content, missing commands and symlinked
+configs, seeds only missing font/input profiles, and runs once for disks that
+have not reached revision 47.
+Patch 0123 locks Chewing and refreshes the resolved package transaction.
+Chromium flags in existing homes change only when identical to the upstream
+seed. Chewing and man-db are runtime dependencies, so existing disks receive
+missing packages with their next **Update > Omarchy**. Lock PAM seeding,
+passwordless theme/DNS actions and man-db in factory images were already covered.
+The power display is informational; the current bridge opens Try Omarchy
+Settings and has no Windows power-settings action.
+
+Patch 0124 exposes the Windows battery's design and full-charge energy, cycle
+count, manufacturer, model and chemistry where its driver reports them. Energy
+uses microwatt-hours, matching Linux `energy_full_design` and `energy_full`.
+The state message is unchanged; older guests ignore the separate details message,
+and older launchers leave the new properties unavailable. Windows details are
+queried hourly, and failures or unknown values do not invent readings. Charge
+limits are not mirrored.
+Compatibility revision 48 delivers the bridge and battery DKMS source 1.1.0 to
+existing disks. Catch-up retires 1.0.0 while preserving the launcher-delivered
+module, registers the new source, and rebuilds when matching headers exist.
+The force-install entry from patch 0118 remains in place for later header updates.
+
 Patch 0091 adds a Windows audio endpoint mirror to the guest PipeWire picker.
 The bridge talks over a dedicated virtio serial port, and compatibility
 revision 33 delivers its user service to existing persistent disks. It needs
@@ -63,66 +97,73 @@ Patch 0102 applies fixes from an independent review of the Windows Hello
 broker, the 1Password agent, drop delivery and display sync (compatibility
 revision 39).
 
-Patches 0103 through 0107 are for the Linux launcher. Windows launchers never
-pass their kernel flags, so Windows guests behave as before.
+Patch 0103 keeps a monitor scale that the user set in `monitors.lua` across
+display sync and Hyprland config reloads. The script reads
+`omarchy_monitor_scale`; a number wins over the scale guessed from the EDID,
+and "auto" keeps the old behavior. The mode follows the window size, so the
+scale is rounded to the closest value Hyprland accepts for that mode.
+Compatibility revision 40 delivers the script and the fragment to existing
+guests.
 
-Patch 0103 lets a Linux launcher ask for software presentation of guest
-Vulkan windows with `tryomarchy.vulkan-present=cpu`. NVIDIA's GL on a Linux
-host reads imported LINEAR dma-bufs at `align(width * 4, 32)` whatever pitch
-they carry, which shears Venus frames; with the flag `vulkan-env` adds `sw` to
-`MESA_VK_WSI_DEBUG` so Mesa copies each frame instead. Compatibility revision
-40 delivers the file to existing disks.
+Patch 0104 turns off system service watchdogs with a top-level `service.d`
+drop-in. The guest clock keeps running while Windows sleeps, so after a resume
+systemd treated logind, journald and udevd as hung and restarted them under the
+running desktop. Compatibility revision 41 delivers the drop-in to existing
+guests.
 
-Patch 0104 keeps the guest awake while the Linux VM window is visible using
-an expiring lease, independent of the user's stay-awake preference. Revision
-41 carries the helper onto existing disks and updates only recognized idle
-service versions. Customized or newer idle services are left alone. Lost
-host connections restore normal idle behavior after the lease expires.
+Patch 0107 makes SSH accept only keys for the quick-start account, whose
+password (`omarchy`) is public and whose sudo asks for no password. A forward
+to guest port 22 can be bound to the LAN, and Arch's default sshd config allows
+password login. A `Match User omarchy` drop-in in `/etc/ssh/sshd_config.d`
+turns that off for this account only. New quick-start installs get it when the
+account is created, and catch-up adds it once to existing quick-start disks.
+The first-desktop notice now says "Quick-start login" and suggests `passwd`.
+Compatibility revision 42 delivers the drop-in and scripts to existing guests.
 
-Patch 0105 verifies repeated patch targets as a chain, then compares their
-final postimage with the built guest. Every patch digest is still checked.
+Patch 0112 moves `try-omarchy-export` onto the Try Omarchy importer in
+[`migrate/`](../migrate/README.md). The release helper builds the importer into
+`/usr/local/lib/try-omarchy/try-omarchy-import.pyz` after applying the patches,
+so the guest, the release asset and every export carry the same code. The
+command is now a wrapper that runs `try-omarchy-import.pyz export`. The archive
+holds only what the user changed in the groups they pick, the skeleton copies
+of those files as merge bases, and the importer with an `import.sh` that runs
+it on the new install. Keys, sign-ins and browser profiles are only included
+when picked. Compatibility revision 44 delivers the wrapper and the importer to
+existing guests.
 
-Patch 0106 adds an opt-in 96-DPI scale policy for the Linux host display
-bridge. Compatibility revision 42 carries display sync onto existing disks.
-Without the Linux kernel flag, the existing Windows scale thresholds remain
-unchanged.
+Patch 0114 updates the guest to Omarchy 4.0.4. That release moves bare-metal
+installs to Omarchy's own kernel through a migration that installs
+`linux-omarchy` and adds it to the Limine boot menu. The guest has no bootloader
+and boots the kernel the launcher supplies, so the build replaces that one
+migration with a step that only prints a message. The rest of the release is
+installer and hardware files the guest does not use. The runtime package becomes
+`4.0.4-1`, so Update > Omarchy brings existing guests to it.
 
-Patch 0107 adds a graphical-session readiness report for Linux. Its user
-service waits for a visible Hyprland monitor, Quickshell and stable Omarchy
-background and bar layer surfaces before sending `desktop-ready` on the
-existing lifecycle channel. The earlier system `ready` report still serves
-image rollback and does not close Linux setup. Compatibility revision 43
-updates the service on existing disks.
+Patch 0116 stops the launcher's initramfs from copying `vdso/` into
+`/usr/lib/modules/<version>` on the disk. `linux-headers` owns that directory,
+and an unowned copy made pacman refuse the next `linux-headers` upgrade, which
+failed the whole Update > Omarchy after a kernel bump. The archive already left
+out `build/` for the same reason.
 
-Patch 0109 makes SSH accept only keys for the quick-start `omarchy` account,
-whose password is public. Provisioning installs a `Match User omarchy` drop-in
-in `/etc/ssh/sshd_config.d`, and compatibility revision 44 adds it once to
-existing quick-start disks. Own-account disks keep password logins. The
-first-desktop notice now calls it the quick-start login and points to `passwd`.
+Patch 0117 keeps catch-up from putting the quick-start SSH rule back after the
+user removed it. Catch-up records adding the rule to an older disk, but disks
+created since revision 42 get the rule with the account and had no record, so
+the next revision would have added it again. Catch-up now skips the step on any
+disk that already ran it at revision 42 or later.
 
-Patch 0114 names approved apps for the host they open on. The Linux launcher
-passes `tryomarchy.host=linux`; with it the launcher entries read `Host: name`
-and the failure notices point at Try Omarchy Settings on that computer. Agent
-version 5 tells a Linux launcher the guest does this, so older guests receive
-no list. Compatibility revision 46 delivers the scripts to existing disks.
+Patch 0118 stops the first Update > Omarchy after a kernel change from printing
+"Installation aborted" twice. The launcher delivers its kernel's camera and
+battery modules, and when matching headers arrived DKMS refused to install an
+identical module. A `modules_to_force_install` entry for just those two modules
+lets DKMS replace them, keeping the delivered copy and putting it back when the
+headers are removed. Compatibility revision 45 delivers it to existing guests.
 
-Patch 0115 names a Linux host in the rest of the guest's notices. With
-`tryomarchy.host=linux`, the Try Omarchy Settings launcher, file drop notices
-and the file transfer window speak of the host computer instead of Windows.
-The Settings and file transfer desktop entries use wording that fits either
-host. Compatibility revision 47 delivers the scripts to existing disks.
-
-Patches 0116 and 0117 port live time-zone following from the Windows guest.
-The launcher streams the host zone over the root-only `dev.tryomarchy.timezone`
-virtio port, declared in `runtime.optionalDevices`, and a root service applies
-it until a guest user picks another zone. Follow Host Time Zone in the launcher
-menu turns following back on. The first-boot setup form starts from the host
-zone, and the shell clock refreshes its cached zone when it changes.
-Compatibility revision 48 delivers the service to existing disks. Before the
-display manager starts, the service also brings them the clock fix, replacing
-the clock widget only while it has the digest earlier images shipped. Patch
-0118 refreshes the package lock.
-Windows launchers pass no flag and keep the `Windows: name` entries.
+Patch 0119 stops Update > Omarchy from asking to reboot for a new kernel on
+disks older than their launcher. Omarchy asks whenever no installed kernel
+package matches the running kernel, but here the launcher supplies the kernel
+and the guest's `linux` package stays held, so rebooting changed nothing. The
+build turns that one check off and fails if Omarchy moves it. The runtime
+package becomes `4.0.4-2` so existing guests get it.
 
 The second command needs Docker and currently takes about ten minutes. Release
 CI also boots the resulting factory image with `scripts/release/smoke-guest.py`
@@ -176,6 +217,9 @@ Windows VM tests unless noted in the release checklist):
 - `tryomarchy.sshd=1` (set by the launcher when a host port forwards to guest
   port 22) starts sshd for that boot only and authorizes the launcher-supplied
   public key; sshd config and enablement stay untouched
+- The quick-start account (`omarchy`, whose password is public) accepts only
+  SSH keys through a `Match User omarchy` drop-in; own accounts keep password
+  login
 - `try-omarchy-export` archives an allowlist of desktop configuration, the
   theme, and added packages with a restore script for a real Omarchy install
   (docs/MIGRATION.md)
@@ -234,3 +278,96 @@ is now stashed across the replacement. Compatibility revision 22 adds the link
 to the compat overlay for existing disks and has `catch-up` recreate it for
 users who have a packaged Neovim config but no theme link, without replacing a
 file they wrote themselves.
+
+Patch 0120 removes hidden playback attenuation behind the Windows route picker.
+The bridge keeps the virtio ALSA transport at 100% while its remap sinks are
+active; the visible route controls guest volume. It preserves mute and restores
+the previous transport channel volumes on orderly shutdown unless the owner
+changed them. Compatibility revision 46 delivers the bridge to existing disks.
+See [audio behavior](../docs/AUDIO-DEVICES.md) for the signal path and checks.
+
+Patch 0126 allows Media Player to use Mesa software rendering when the launcher
+boots with CPU rendering. GPU mode retains mpv defaults, and explicit command-line
+options take precedence. Compatibility revision 49 delivers the wrapper to existing
+guest disks.
+
+## Linux launcher guest patches
+
+Patches 0001 through 0126 remain the Windows series unchanged. Patch 0126
+already uses compatibility revision 49, so the Linux additions use revisions
+50 through 55. Linux behavior is gated by `tryomarchy.host=linux`,
+`tryomarchy.host-scale=1`, or `tryomarchy.vulkan-present=cpu`. Windows launchers
+pass none of these flags and retain their existing behavior and wording.
+
+| Patch | Linux source patch | Compatibility revision | Purpose |
+| --- | --- | --- | --- |
+| 0127 | 0103 | 50 | Present Vulkan windows through CPU copies when requested, avoiding NVIDIA LINEAR dma-buf pitch artifacts. |
+| 0128 | 0104 | 51 | Keep the guest awake while the Linux host window renews an expiring lease, without changing the user's stay-awake preference. Repair only recognized idle service versions. |
+| 0129 | 0105 | None | Verify each patch digest and the chain of repeated targets before comparing the final postimage with the built guest. |
+| 0130 | 0106 | 52 | Follow Linux host display dimensions at 96 logical DPI when requested. Explicit user scale still wins; Windows keeps its existing thresholds. |
+| 0131 | 0107 | 53 | Report `desktop-ready` after a monitor, Quickshell, background and bar surfaces are stable. The user service runs only on a Linux host; system `ready` still serves image rollback. |
+| 0132 | 0114 | 54 | Name approved Linux apps `Host: name` and report agent version 5 only to Linux. Windows retains its app labels and agent version 4. |
+| 0133 | 0115, differences from 0116 and 0117 | 55 | Name the Linux host in Settings, file transfer, locale, time-zone notices and power menus. Select desktop labels at boot, preserving custom, missing and symlinked entries. Repair only the shipped clock widget, on Linux, before the display manager starts. |
+
+Linux patch 0109 is covered by Windows 0107 and 0117, including preserving a
+removed quick-start SSH rule. Linux 0111 has the same exporter behavior as
+Windows 0112; its only difference is a source comment. Linux 0116 uses the same
+`dev.tryomarchy.timezone` JSON-lines protocol as Windows 0109. Patch 0133 carries
+its Linux wording and `--follow-host` alias while preserving `--follow-windows`.
+Windows 0111 supplies Linux 0117's clock-cache fix; 0133 additionally carries
+Linux's digest-gated repair onto existing disks without changing the Windows
+time-zone service. Linux lock refreshes 0108, 0110, 0112, 0113 and 0118 are omitted.
+No additional packages or lock refresh are required by these patches.
+
+The initramfs records old disk lineage before extracting the compatibility
+overlay, preserving that record if extraction needs a retry. It recognizes
+Linux-only files from old patches 0104 (`usr/local/lib/try-omarchy/host-window`)
+and 0107 (`etc/systemd/user/try-omarchy-desktop-ready.service` or
+`usr/local/lib/try-omarchy/desktop-ready`). The shared `vulkan-env` path alone
+is not evidence: Windows 0064 created it. Shared paths are checked for Linux
+content: old 0103's `tryomarchy.vulkan-present=cpu` in
+`usr/local/lib/try-omarchy/vulkan-env`, old 0106's
+`OMARCHY_DISPLAY_SYNC_HOST_SCALE` in `usr/local/bin/omarchy-native-display-sync`,
+old 0114's `def host_is_linux` in `usr/local/lib/try-omarchy/approved-apps-sync`
+or `Host app launch is unavailable` in `usr/local/bin/try-omarchy-windows-app`,
+and old 0115's `def host_name` in `usr/local/bin/file-transfer-window`.
+Linux evidence takes precedence.
+
+Windows 0103's `configured_scale()` in `usr/local/bin/omarchy-native-display-sync`
+proves Windows lineage from revision 40 onward. Windows 0104's
+`etc/systemd/system/service.d/10-try-omarchy-watchdog.conf` adds evidence from
+revision 41, 0122's `usr/share/try-omarchy/guest-qol/manifest.json` from 47,
+and 0124's `usr/local/lib/try-omarchy/update-battery-dkms` from 48. None of
+these markers shipped in the old Linux fork. Each colliding revision 40-48
+therefore has Windows evidence from a payload delivered by that revision.
+
+Contract tests audit every Linux marker against all Windows patches 0001-0126
+and every Windows marker against the old Linux patch series at `fad17c6`.
+Shallow checkouts use the checked-in old Linux patch target inventory and
+explicitly audited absent content strings; when history is available, the
+same tests verify that inventory against it. Windows lineage fixtures include
+the shared Vulkan payload and the markers available at their actual revision.
+
+A disk at a colliding revision 40-48 with neither marker set is recorded as
+`ambiguous`. It receives Linux's stricter SSH cutoff and missing payload
+catch-up: failing to infer lineage must not leave the public quick-start
+password exposed. Records accept only `linux:0..49`, `windows:0..49` or
+`ambiguous:40..48` with canonical decimal revisions. They are written to a
+same-directory temporary file and renamed atomically. Invalid, empty,
+symlinked or unwritable records stop the update before its revision advances;
+catch-up also validates records before accepting an already-complete revision.
+Catch-up uses the record
+to deliver the Windows defaults and battery payload missing from the old Linux
+revision 48, and to honor Linux's old SSH cutoff of 44. A positively identified Windows disk booted
+with a Linux launcher retains the Windows cutoff of 42, so a removed SSH rule
+stays removed. Subsequent catch-up runs use the unified revision numbers.
+
+After catch-up, the boot label selector changes recognized stock power menu,
+panel and command text to "Managed by the host computer" only with the exact
+`tryomarchy.host=linux` flag. It selects Windows wording on other boots,
+including when switching back from Linux, and preserves customized, missing
+and symlinked files. The Windows patch and quality-of-life assets stay intact.
+
+The release helper applies all patches in filename order, builds the shared
+importer, and supplies the patch series path to the guest contract tests.
+Refresh the lock later through the existing lock workflow.

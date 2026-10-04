@@ -49,7 +49,7 @@ func requestTrayReclaim() {
 // state only; it never starts a pass.
 func linuxReclaimInfoFor(dir string) *linuxReclaimInfo {
 	if !reclaimSupported.Load() {
-		return &linuxReclaimInfo{Status: reclaimUnsupportedMessage}
+		return &linuxReclaimInfo{Status: reclaimUnsupportedMessage()}
 	}
 	a := theAgent.Load()
 	if a == nil {
@@ -102,7 +102,7 @@ func runLinuxReclaim(ctx context.Context, w *linuxSetupWindow, dir string) strin
 	if err := requestReclaimError(); err != nil {
 		return err.Error()
 	}
-	return reclaimStartedMessage
+	return reclaimStartedMessage()
 }
 
 // showLinuxReclaim is the tray's reclaim window.
@@ -136,7 +136,7 @@ func startLinuxReclaimFromSettings(dir string) *linuxReclaimInfo {
 		return info
 	}
 	info = linuxReclaimInfoFor(dir)
-	info.Status = reclaimStartedMessage
+	info.Status = reclaimStartedMessage()
 	return info
 }
 

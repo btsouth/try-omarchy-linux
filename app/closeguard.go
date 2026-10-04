@@ -65,7 +65,7 @@ func requestQuitConfirm() {
 
 // runCloseGuard owns the confirmation dialog and the graceful shutdown.
 func runCloseGuard() {
-	text, _ := syscall.UTF16PtrFromString("Shut down Omarchy?\n\nAnything unsaved inside Omarchy will be lost.")
+	text, _ := syscall.UTF16PtrFromString(uiText("shutdown.confirm"))
 	caption, _ := syscall.UTF16PtrFromString(appTitle)
 	for range confirmQuit {
 		if confirmOpen.Swap(true) {
@@ -85,7 +85,7 @@ func runCloseGuard() {
 			}
 			cancel()
 			if err != nil {
-				errorBox("Omarchy did not acknowledge the shutdown request. Check its window before retrying.\n\n" + err.Error())
+				errorBox(uiTextWith("shutdown.unacknowledged", map[string]string{"error": err.Error()}))
 			}
 
 			// The guest shuts down; the supervisor reaps/exits as usual.

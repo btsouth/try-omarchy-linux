@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// lastReservedPort ends the launcher TCP ports that forwards cannot use. The
+// time zone bridge is a socket file here, so its TCP port stays free.
+const lastReservedPort = helloBridgePort
+
 // timeZoneChardev uses a private filesystem socket, like the camera, so the
 // guest cannot reach the bridge through QEMU's user network.
 func timeZoneChardev(dir string) string {

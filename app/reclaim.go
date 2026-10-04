@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"sync/atomic"
 )
 
@@ -23,23 +23,23 @@ var reclaimFreeBytes = diskFreeBytes
 // space, or says why it cannot start.
 func requestReclaimError() error {
 	if !reclaimSupported.Load() {
-		return fmt.Errorf("%s", reclaimUnsupportedMessage)
+		return errors.New(reclaimUnsupportedMessage())
 	}
 	dir := reclaimDir.Load()
 	a := theAgent.Load()
 	if dir == nil || a == nil {
-		return fmt.Errorf("Omarchy is not ready. Wait for the desktop and try again.")
+		return errors.New(uiText("reclaim.error.not_ready"))
 	}
 	free, err := reclaimFreeBytes(*dir)
 	if err != nil {
-		return fmt.Errorf("Could not check free space: %w", err)
+		return uiError(uiTextWith("reclaim.error.free_space", map[string]string{"error": err.Error()}), err)
 	}
 	budget := reclaimBudgetMiB(free)
 	if budget == 0 {
-		return fmt.Errorf("%s", reclaimNeedsSpaceMessage)
+		return errors.New(reclaimNeedsSpaceMessage())
 	}
 	if !a.requestZeroFill(budget) {
-		return fmt.Errorf("Reclaim was not started. %s", a.reclaimStatus())
+		return errors.New(uiTextWith("reclaim.error.not_started", map[string]string{"status": a.reclaimStatus()}))
 	}
 	return nil
 }

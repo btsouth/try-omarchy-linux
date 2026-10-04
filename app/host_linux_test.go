@@ -111,7 +111,7 @@ func TestLinuxQemuArgsUseKVMAndResetInPlace(t *testing.T) {
 func TestWindowedKernelCmdline(t *testing.T) {
 	var spec buildSpec
 	spec.Runtime.KernelCommandLine = "root=/dev/vda console=tty0 console=hvc0 quiet"
-	if got := windowedKernelCmdline(spec); got != "root=/dev/vda console=ttyS0 quiet vt.global_cursor_default=0" {
+	if got := windowedKernelCmdline(spec); got != "root=/dev/vda console=ttyS0 quiet vt.global_cursor_default=0 edd=off" {
 		t.Fatalf("got %q", got)
 	}
 }

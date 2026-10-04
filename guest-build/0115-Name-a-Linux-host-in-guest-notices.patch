@@ -1,0 +1,248 @@
+From c63287c649d3bd866f6fe9adc2e23f64f6b64e23 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 4 Oct 2026 01:26:06 -0400
+Subject: [PATCH] Name a Linux host in guest notices
+
+The Linux launcher passes tryomarchy.host=linux. With it, the Try Omarchy
+Settings launcher, file drop notices and the file transfer window speak of
+the host computer instead of Windows. Without it, Windows wording is
+unchanged. The Settings and file transfer desktop entries now use wording
+that fits either host.
+
+Compatibility revision 47 delivers the scripts to existing disks.
+---
+ .../usr/local/bin/file-transfer-window          | 15 ++++++++++++---
+ .../usr/local/bin/try-omarchy-drop              | 14 ++++++++++++--
+ .../usr/local/bin/try-omarchy-host-settings     | 16 +++++++++++++---
+ .../try-omarchy-file-transfers.desktop          |  4 ++--
+ .../try-omarchy-host-settings.desktop           |  2 +-
+ guest/scripts/finalize-rootfs.sh                |  3 ++-
+ guest/tests/test_file_drop_target.py            | 15 +++++++++++++++
+ guest/tests/test_overlay_scripts.py             | 17 +++++++++++++++++
+ guest/tests/verify.py                           |  2 +-
+ 9 files changed, 75 insertions(+), 13 deletions(-)
+
+diff --git a/guest/factory-overlay/usr/local/bin/file-transfer-window b/guest/factory-overlay/usr/local/bin/file-transfer-window
+index 23686d2..ee1ab91 100755
+--- a/guest/factory-overlay/usr/local/bin/file-transfer-window
++++ b/guest/factory-overlay/usr/local/bin/file-transfer-window
+@@ -13,6 +13,15 @@ gi.require_version('Gdk', '4.0')
+ from gi.repository import Gdk, Gio, GLib, Gtk
+ 
+ 
++def host_name():
++    '''Windows, unless the Linux launcher names itself on the kernel command line.'''
++    try:
++        words = Path(os.environ.get('TRY_OMARCHY_CMDLINE', '/proc/cmdline')).read_text().split()
++    except OSError:
++        return 'Windows'
++    return 'the host computer' if 'tryomarchy.host=linux' in words else 'Windows'
++
++
+ class Transfers(Gtk.Application):
+     def __init__(self):
+         super().__init__(application_id='org.omarchy.FileTransfers', flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+@@ -65,9 +74,9 @@ class Transfers(Gtk.Application):
+         if self.window:
+             self.window.present()
+             return
+-        self.window = Gtk.ApplicationWindow(application=self, title='Files between Windows and Omarchy', default_width=560, default_height=400)
++        self.window = Gtk.ApplicationWindow(application=self, title=f'Files between {host_name()} and Omarchy', default_width=560, default_height=400)
+         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=20, margin_bottom=20, margin_start=20, margin_end=20)
+-        box.append(Gtk.Label(label='Drop files here to send them to Windows.\nDrag received files below into Files or another application.', wrap=True))
++        box.append(Gtk.Label(label=f'Drop files here to send them to {host_name()}.\nDrag received files below into Files or another application.', wrap=True))
+         target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+         target.connect('drop', self.drop)
+         box.add_controller(target)
+@@ -90,7 +99,7 @@ class Transfers(Gtk.Application):
+             self.window.present()
+ 
+     def choose(self, *_):
+-        dialog = Gtk.FileDialog(title='Send files to Windows')
++        dialog = Gtk.FileDialog(title=f'Send files to {host_name()}')
+         def selected(dialog, result):
+             try:
+                 files = dialog.open_multiple_finish(result)
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-drop b/guest/factory-overlay/usr/local/bin/try-omarchy-drop
+index 1a14250..98184ad 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-drop
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-drop
+@@ -4,6 +4,7 @@
+ from __future__ import annotations
+ 
+ import json
++import os
+ import subprocess
+ import sys
+ from pathlib import Path
+@@ -211,6 +212,15 @@ def downloads_folder():
+     return path
+ 
+ 
++def host_name():
++    '''Windows, unless the Linux launcher names itself on the kernel command line.'''
++    try:
++        words = Path(os.environ.get('TRY_OMARCHY_CMDLINE', '/proc/cmdline')).read_text().split()
++    except OSError:
++        return 'Windows'
++    return 'the host computer' if 'tryomarchy.host=linux' in words else 'Windows'
++
++
+ def notify(title, message):
+     # This runs in a background receiver, never on a GTK/UI thread.
+     try:
+@@ -265,11 +275,11 @@ def receive_ticket(ticket_path, point):
+             # stay in Downloads either way.
+             delivered = deliver_to_app(paths, dict(found, ticket=ticket['id']))
+         if fallback and not delivered:
+-            notify('Files saved to Downloads', f'{len(paths)} item(s) received from Windows.')
++            notify('Files saved to Downloads', f'{len(paths)} item(s) received from {host_name()}.')
+         print(json.dumps({'paths': [str(p) for p in paths], 'fallback': fallback,
+                           'delivered': delivered}), flush=True)
+     except Exception as error:
+-        notify('Could not copy files', str(error)[:250] + '. Original files are still on Windows.')
++        notify('Could not copy files', str(error)[:250] + f'. Original files are still on {host_name()}.')
+         raise
+     finally:
+         ticket_path.unlink(missing_ok=True)
+diff --git a/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings b/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings
+index ee5804a..1f5fe7e 100755
+--- a/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings
++++ b/guest/factory-overlay/usr/local/bin/try-omarchy-host-settings
+@@ -1,12 +1,22 @@
+ #!/bin/bash
+-# Open the native Windows settings window through the local host agent.
++# Open the host's Try Omarchy settings window through the local host agent.
++# The host is Windows unless the Linux launcher names itself on the kernel
++# command line.
+ set -u
++unavailable='Try Omarchy settings are unavailable. Start Omarchy from Windows and try again.'
++refused='Could not open Try Omarchy settings on Windows.'
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*)
++    unavailable='Try Omarchy settings are unavailable. Start Omarchy from Try Omarchy on the host computer and try again.'
++    refused='Could not open Try Omarchy settings on the host computer.'
++    ;;
++esac
+ host=${TRY_OMARCHY_AGENT_HOST:-10.0.2.2}
+ port=${TRY_OMARCHY_AGENT_PORT:-4451}
+ if ! { exec 3<>"/dev/tcp/$host/$port"; } 2>/dev/null; then
+-  message='Try Omarchy settings are unavailable. Start Omarchy from Windows and try again.'
++  message=$unavailable
+ elif ! printf 'open-settings\n' >&3 || ! IFS= read -r -t 5 response <&3 || [[ $response != ok ]]; then
+-  message='Could not open Try Omarchy settings on Windows.'
++  message=$refused
+ else
+   exec 3>&-
+   exit 0
+diff --git a/guest/factory-overlay/usr/share/applications/try-omarchy-file-transfers.desktop b/guest/factory-overlay/usr/share/applications/try-omarchy-file-transfers.desktop
+index 7d8b6c9..7a43fed 100644
+--- a/guest/factory-overlay/usr/share/applications/try-omarchy-file-transfers.desktop
++++ b/guest/factory-overlay/usr/share/applications/try-omarchy-file-transfers.desktop
+@@ -1,7 +1,7 @@
+ [Desktop Entry]
+ Type=Application
+-Name=Files between Windows and Omarchy
+-Comment=Drop files to send them to Windows or receive files from Windows
++Name=Files between the host computer and Omarchy
++Comment=Drop files to send them to the host computer or receive files from it
+ Exec=file-transfer-window
+ Icon=folder-remote
+ Terminal=false
+diff --git a/guest/factory-overlay/usr/share/applications/try-omarchy-host-settings.desktop b/guest/factory-overlay/usr/share/applications/try-omarchy-host-settings.desktop
+index 2601cd2..71e6940 100644
+--- a/guest/factory-overlay/usr/share/applications/try-omarchy-host-settings.desktop
++++ b/guest/factory-overlay/usr/share/applications/try-omarchy-host-settings.desktop
+@@ -1,7 +1,7 @@
+ [Desktop Entry]
+ Type=Application
+ Name=Try Omarchy Settings
+-Comment=Change Windows host settings for Try Omarchy
++Comment=Change Try Omarchy settings on the host computer
+ Exec=try-omarchy-host-settings
+ Icon=preferences-system
+ Categories=Settings;System;
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index d6829f0..6f3d5f9 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -215,7 +215,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 43 reports desktop readiness after the Omarchy shell starts.
+ # Revision 44 makes SSH accept only keys for the quick-start account.
+ # Revision 46 names approved apps for a Linux host and reports agent version 5.
+-compat_revision=46
++# Revision 47 names a Linux host in Settings, drop and file transfer notices.
++compat_revision=47
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/test_file_drop_target.py b/guest/tests/test_file_drop_target.py
+index 917d337..41f9844 100644
+--- a/guest/tests/test_file_drop_target.py
++++ b/guest/tests/test_file_drop_target.py
+@@ -93,6 +93,21 @@ class DropTargetTests(unittest.TestCase):
+     def test_a_refused_app_drag_still_reports_downloads(self):
+         self.receive_onto_app(False).assert_called_once_with('Files saved to Downloads', '1 item(s) received from Windows.')
+ 
++    def test_notices_name_a_linux_host(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            cmdline = Path(tmp) / 'cmdline'
++            for words, name in (('root=/dev/vda rw tryomarchy.host=linux quiet', 'the host computer'),
++                                ('root=/dev/vda rw', 'Windows')):
++                cmdline.write_text(words + '\n')
++                with patch.dict(os.environ, {'TRY_OMARCHY_CMDLINE': str(cmdline)}):
++                    self.assertEqual(module.host_name(), name)
++            with patch.dict(os.environ, {'TRY_OMARCHY_CMDLINE': str(Path(tmp) / 'missing')}):
++                self.assertEqual(module.host_name(), 'Windows')
++            cmdline.write_text('tryomarchy.host=linux\n')
++            with patch.dict(os.environ, {'TRY_OMARCHY_CMDLINE': str(cmdline)}):
++                self.receive_onto_app(False).assert_called_once_with(
++                    'Files saved to Downloads', '1 item(s) received from the host computer.')
++
+     def test_tablet_position_follows_scale_and_monitor_size(self):
+         monitor = {'width': 2560, 'height': 1440, 'scale': 2, 'x': 0, 'y': 0}
+         self.assertEqual(module.tablet_position(0, 0, monitor), (0, 0))
+diff --git a/guest/tests/test_overlay_scripts.py b/guest/tests/test_overlay_scripts.py
+index 570dbd1..142fe26 100644
+--- a/guest/tests/test_overlay_scripts.py
++++ b/guest/tests/test_overlay_scripts.py
+@@ -463,6 +463,23 @@ class AgentTests(OverlayCase):
+                 self.assertEqual(received.result(timeout=5), f"launch-app {app_id}\n".encode())
+                 self.assertEqual(result.returncode, 1)
+ 
++    def test_host_settings_names_a_linux_host(self) -> None:
++        cmdline = self.root / "cmdline"
++        with socket.socket() as server:
++            server.bind(("127.0.0.1", 0))
++            port = server.getsockname()[1]
++        for words, message in (("root=/dev/vda rw tryomarchy.host=linux quiet", "Try Omarchy on the host computer"),
++                               ("root=/dev/vda rw tryomarchy.host=linuxish", "Start Omarchy from Windows")):
++            with self.subTest(words=words):
++                cmdline.write_text(words + "\n")
++                env = dict(self.env, TRY_OMARCHY_AGENT_HOST="127.0.0.1", TRY_OMARCHY_AGENT_PORT=str(port),
++                           TRY_OMARCHY_CMDLINE=str(cmdline))
++                result = subprocess.run([str(HOST_SETTINGS)], env=env, capture_output=True, text=True, timeout=10)
++                self.assertEqual(result.returncode, 1)
++                self.assertIn(message, result.stderr)
++        desktop = (OVERLAY / "usr/share/applications/try-omarchy-host-settings.desktop").read_text()
++        self.assertNotIn("Windows", desktop)
++
+     def test_host_settings_request_and_failure(self) -> None:
+         with socket.socket() as server:
+             server.bind(("127.0.0.1", 0))
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 07e7cf0..49d03aa 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -292,7 +292,7 @@ def main() -> None:
+     finalize_rootfs = read(GUEST / "scripts/finalize-rootfs.sh")
+     compat_paths = finalize_rootfs.split("compat_paths=(", 1)[1].split(")", 1)[0]
+     check(
+-        "compat_revision=46" in finalize_rootfs
++        "compat_revision=47" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/try-omarchy-import.pyz" in compat_paths
+         and "usr/share/try-omarchy/quick-start-sshd.conf" in compat_paths
+         and "usr/local/lib/try-omarchy/desktop-ready" in compat_paths
+-- 
+2.43.0
+

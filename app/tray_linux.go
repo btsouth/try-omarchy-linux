@@ -40,16 +40,43 @@ type linuxMenuNode struct {
 	Children   []dbus.Variant
 }
 
-// linuxTrayLayout describes the tray menu for dbusmenu hosts: Settings,
-// Reclaim disk space and Shut down.
+// Tray menu item IDs. Separators have IDs too so hosts can address them.
+const (
+	linuxTraySettings    int32 = 1
+	linuxTrayShutdown    int32 = 2
+	linuxTrayReclaim     int32 = 3
+	linuxTrayShare       int32 = 4
+	linuxTrayDiagnostics int32 = 5
+	linuxTrayHelp        int32 = 6
+	linuxTraySeparator1  int32 = 7
+	linuxTraySeparator2  int32 = 8
+)
+
+var linuxTrayOrder = []int32{
+	linuxTrayShare, linuxTraySeparator1,
+	linuxTraySettings, linuxTrayReclaim, linuxTrayDiagnostics, linuxTrayHelp, linuxTraySeparator2,
+	linuxTrayShutdown,
+}
+
+var linuxTrayLabels = map[int32]string{
+	linuxTrayShare:       "Open shared folder",
+	linuxTraySettings:    "Settings...",
+	linuxTrayReclaim:     "Reclaim disk space...",
+	linuxTrayDiagnostics: "Create diagnostics",
+	linuxTrayHelp:        "Help and shortcuts...",
+	linuxTrayShutdown:    "Shut down Omarchy...",
+}
+
+// linuxTrayLayout describes the tray menu for dbusmenu hosts.
 func linuxTrayLayout(id int32) linuxMenuNode {
 	n := linuxMenuNode{ID: id, Properties: map[string]dbus.Variant{}, Children: []dbus.Variant{}}
-	labels := map[int32]string{1: "Settings...", 3: "Reclaim disk space...", 2: "Shut down Omarchy..."}
-	if label, ok := labels[id]; ok {
+	if label, ok := linuxTrayLabels[id]; ok {
 		n.Properties = map[string]dbus.Variant{"label": dbus.MakeVariant(label), "enabled": dbus.MakeVariant(true), "visible": dbus.MakeVariant(true)}
+	} else if id == linuxTraySeparator1 || id == linuxTraySeparator2 {
+		n.Properties = map[string]dbus.Variant{"type": dbus.MakeVariant("separator"), "visible": dbus.MakeVariant(true)}
 	} else if id == 0 {
 		n.Properties["children-display"] = dbus.MakeVariant("submenu")
-		for _, child := range []int32{1, 3, 2} {
+		for _, child := range linuxTrayOrder {
 			n.Children = append(n.Children, dbus.MakeVariant(linuxTrayLayout(child)))
 		}
 	}
@@ -64,15 +91,18 @@ func (*linuxTrayMenu) AboutToShow(id int32) (bool, *dbus.Error) { return false, 
 func (*linuxTrayMenu) Event(id int32, event string, data dbus.Variant, timestamp uint32) *dbus.Error {
 	if event == "clicked" {
 		switch id {
-		case 1:
+		case linuxTraySettings:
 			requestTraySettings()
-		case 3:
+		case linuxTrayReclaim:
 			requestTrayReclaim()
-		case 2:
-			select {
-			case linuxShutdownRequests <- struct{}{}:
-			default:
-			}
+		case linuxTrayShare:
+			requestLinuxTrayAction(linuxShareRequests)
+		case linuxTrayDiagnostics:
+			requestLinuxTrayAction(linuxDiagnosticsRequests)
+		case linuxTrayHelp:
+			requestLinuxTrayAction(linuxHelpRequests)
+		case linuxTrayShutdown:
+			requestLinuxTrayAction(linuxShutdownRequests)
 		}
 	}
 	return nil
@@ -92,7 +122,7 @@ type linuxMenuProperties struct {
 
 func (*linuxTrayMenu) GetGroupProperties(ids []int32, names []string) ([]linuxMenuProperties, *dbus.Error) {
 	if len(ids) == 0 {
-		ids = []int32{0, 1, 2}
+		ids = append([]int32{0}, linuxTrayOrder...)
 	}
 	out := make([]linuxMenuProperties, 0, len(ids))
 	for _, id := range ids {

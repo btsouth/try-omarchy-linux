@@ -302,6 +302,12 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			go showLinuxSettings(ctx, cfg.dir)
 		case <-linuxReclaimRequests:
 			go showLinuxReclaim(ctx, cfg.dir)
+		case <-linuxShareRequests:
+			go openLinuxSharedFolder(cfg.share)
+		case <-linuxDiagnosticsRequests:
+			go createLinuxDiagnostics(cfg.dir)
+		case <-linuxHelpRequests:
+			go showLinuxHelp(ctx)
 		case <-linuxShutdownRequests:
 			if interrupts == 0 && confirmation.pending == nil {
 				confirmation.request()

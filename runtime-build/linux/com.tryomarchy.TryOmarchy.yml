@@ -2,7 +2,7 @@
 # Flatpak. QEMU and virglrenderer are upstream releases; the patches are the
 # Windows runtime's file-drop event plus the Linux window behavior the
 # launcher needs (close requests, keyboard grab on focus and its release,
-# window title).
+# window title), plus precise SDL scrolling through virtio input.
 # GNOME 51 provides GTK4/libadwaita and the Freedesktop 26.08 GL extensions.
 #
 # Build with build-flatpak.sh beside this file.
@@ -155,6 +155,8 @@ modules:
         path: patches/qemu/0110-release-wayland-input-outside-the-guest.patch
       - type: patch
         path: patches/qemu/0111-report-sdl-drop-positions.patch
+      - type: patch
+        path: patches/qemu/0112-preserve-precise-sdl-scroll.patch
 
   # Build GTK separately so launcher edits reuse the expensive bindings build.
   - name: try-omarchy-setup

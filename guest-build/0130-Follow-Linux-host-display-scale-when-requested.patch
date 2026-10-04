@@ -1,0 +1,97 @@
+From 4602fa632054cb542771be758fda28e055b456b8 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sat, 26 Sep 2026 19:25:31 -0400
+Subject: [PATCH 130/133] Follow Linux host display scale when requested
+
+---
+ .../usr/local/bin/omarchy-native-display-sync |  6 ++++++
+ guest/scripts/finalize-rootfs.sh              |  3 ++-
+ guest/tests/verify.py                         | 20 ++++++++++++++++++-
+ 3 files changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/guest/native-overlay/usr/local/bin/omarchy-native-display-sync b/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
+index dfcfe19..35d13b5 100755
+--- a/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
++++ b/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
+@@ -6,6 +6,9 @@ drm_root=${OMARCHY_DISPLAY_SYNC_DRM_ROOT:-/sys/class/drm}
+ # The QEMU profile in monitors.lua reads the last applied mode from here, so a
+ # config reload keeps that mode instead of falling back to "preferred".
+ state_file=${OMARCHY_DISPLAY_SYNC_STATE:-${XDG_RUNTIME_DIR:-/run/user/$UID}/try-omarchy/display-mode}
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host-scale=1 "*) export OMARCHY_DISPLAY_SYNC_HOST_SCALE=1 ;;
++esac
+ 
+ # Omarchy's monitors.lua keeps the user's catch-all scale in a Lua variable.
+ # A number there is explicit intent and outranks the scale guessed from the
+@@ -24,6 +27,7 @@ configured_scale() {
+ preferred_mode_from_edid() {
+   python3 - "$1" "${2:-}" <<'PY'
+ import pathlib
++import os
+ import sys
+ from math import hypot
+ 
+@@ -100,6 +104,8 @@ def scale_for_mode(
+ 
+         ppi = hypot(width, height) / diagonal_inches
+         requested = 2.0 if ppi > 200 else 1.5 if ppi > 140 else 1.0
++        if os.environ.get("OMARCHY_DISPLAY_SYNC_HOST_SCALE") == "1":
++            requested = min(4.0, max(1.0, round(ppi / 96.0 * 4) / 4))
+ 
+     # Hyprland requires the scaled logical dimensions to land on whole pixels.
+     # It searches scale values in 1/120 increments around the requested value;
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 223d9ed..02f2e12 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -232,7 +232,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 49 allows Media Player software rendering in CPU mode.
+ # Revision 50 lets a Linux launcher ask for CPU presentation of Vulkan windows.
+ # Revision 51 adds a temporary Linux host-window idle lease.
+-compat_revision=51
++# Revision 52 follows Linux host display scale while preserving explicit user scale.
++compat_revision=52
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 483683c..e6d6d3c 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -326,7 +326,7 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=51" in finalize_rootfs
++        "compat_revision=52" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/host-window" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-host-window" in compat_paths
+         and "usr/share/try-omarchy/host-window-idle.qml" in compat_paths
+@@ -699,6 +699,24 @@ HOTPLUG=1
+             "native display sync applies the EDID modes again after a config reload",
+         )
+ 
++        # Linux supplies physical dimensions at 96 logical DPI. Preserve the
++        # established Windows thresholds unless the Linux boot flag is set.
++        cmdline = temporary_path / "cmdline"
++        cmdline.write_text("tryomarchy.host-scale=1\n")
++        environment["TRY_OMARCHY_CMDLINE"] = str(cmdline)
++        displayid[12:14] = (3840 - 1).to_bytes(2, "little")
++        displayid[20:22] = (2160 - 1).to_bytes(2, "little")
++        displayid[28] = (-sum(displayid[1:28])) & 0xFF
++        displayid[127] = (-sum(displayid[:127])) & 0xFF
++        qemu_edid[256:384] = displayid
++        for width_cm, height_cm, expected in [(102, 57, "1"), (68, 38, "1.5"), (51, 29, "2")]:
++            qemu_edid[21:23] = bytes([width_cm, height_cm])
++            qemu_edid[127] = (-sum(qemu_edid[:127])) & 0xFF
++            (connector / "edid").write_bytes(qemu_edid)
++            reload_log.write_text("")
++            subprocess.run([str(display_sync), "--from-stdin"], input="ACTION=change\nHOTPLUG=1\n", text=True, env=environment, check=True)
++            check(f'scale = "{expected}"' in reload_log.read_text().splitlines()[0], f"Linux host display scale {expected} follows 96 DPI physical dimensions")
++
+     shell_files = [
+         GUEST / "test",
+         display_sync,
+-- 
+2.56.0
+

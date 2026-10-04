@@ -1,4 +1,4 @@
-From 6f4573b054628401c81e77abceb7f9013c63d5e5 Mon Sep 17 00:00:00 2001
+From 1d73d9e5d560812e76bc005978ab8f6736b843bf Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Sun, 4 Oct 2026 01:26:06 -0400
 Subject: [PATCH 133/133] Name a Linux host in guest notices
@@ -26,13 +26,15 @@ Compatibility revision 55 delivers Linux host wording, flag-selected desktop lab
  .../windows/try-omarchy-host-settings.desktop |  8 ++
  guest/scripts/finalize-rootfs.sh              | 12 ++-
  guest/spec.json                               | 28 +++----
+ guest/tests/test_battery_details.py           |  2 +-
  guest/tests/test_file_drop_target.py          | 15 ++++
+ guest/tests/test_guest_qol.py                 |  2 +-
  guest/tests/test_host_names.py                | 42 +++++++++++
  guest/tests/test_kernel_module_delivery.py    | 18 +++++
  guest/tests/test_overlay_scripts.py           | 50 +++++++++++++
  guest/tests/test_timezone.py                  | 74 +++++++++++++++++++
  guest/tests/verify.py                         | 10 ++-
- 27 files changed, 441 insertions(+), 40 deletions(-)
+ 29 files changed, 443 insertions(+), 42 deletions(-)
  create mode 120000 guest/factory-overlay/etc/systemd/system/multi-user.target.wants/try-omarchy-linux-clock.service
  create mode 100644 guest/factory-overlay/etc/systemd/system/try-omarchy-linux-clock.service
  create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
@@ -622,6 +624,19 @@ index a0cbd30..61f0730 100644
        }
      ],
      "requiredPaths": [
+diff --git a/guest/tests/test_battery_details.py b/guest/tests/test_battery_details.py
+index e52a1e0..4462eda 100644
+--- a/guest/tests/test_battery_details.py
++++ b/guest/tests/test_battery_details.py
+@@ -204,7 +204,7 @@ class BatteryDetailsFlowTests(unittest.TestCase):
+     def test_compatibility_delivery_and_dkms_version(self):
+         overlay = GUEST / "factory-overlay"
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+-        self.assertIn("compat_revision=49", finalize)
++        self.assertIn("compat_revision=55", finalize)
+         self.assertIn("usr/src/try-omarchy-battery-1.1.0", finalize)
+         self.assertIn("usr/local/lib/try-omarchy/update-battery-dkms", finalize)
+         self.assertIn('PACKAGE_VERSION="1.1.0"', (MODULE_SOURCE.parent / "dkms.conf").read_text())
 diff --git a/guest/tests/test_file_drop_target.py b/guest/tests/test_file_drop_target.py
 index 917d337..41f9844 100644
 --- a/guest/tests/test_file_drop_target.py
@@ -648,6 +663,19 @@ index 917d337..41f9844 100644
      def test_tablet_position_follows_scale_and_monitor_size(self):
          monitor = {'width': 2560, 'height': 1440, 'scale': 2, 'x': 0, 'y': 0}
          self.assertEqual(module.tablet_position(0, 0, monitor), (0, 0))
+diff --git a/guest/tests/test_guest_qol.py b/guest/tests/test_guest_qol.py
+index 2a5acab..444dd43 100644
+--- a/guest/tests/test_guest_qol.py
++++ b/guest/tests/test_guest_qol.py
+@@ -215,7 +215,7 @@ class GuestQolTests(unittest.TestCase):
+     def test_compatibility_delivers_guarded_payload_once_per_revision(self):
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+         paths = finalize.split("compat_paths=(", 1)[1].split(")", 1)[0]
+-        self.assertIn("compat_revision=49", finalize)
++        self.assertIn("compat_revision=55", finalize)
+         for path in ("usr/local/bin/omarchy-native-screensaver-text", "usr/local/lib/try-omarchy/install-guest-qol", "usr/share/try-omarchy/guest-qol", "usr/local/bin/omarchy-windows-audio-bridge"):
+             self.assertIn(path, paths)
+         self.assertNotIn("etc/fonts/conf.d/30-try-omarchy.conf", paths)
 diff --git a/guest/tests/test_host_names.py b/guest/tests/test_host_names.py
 new file mode 100644
 index 0000000..fb4c35c

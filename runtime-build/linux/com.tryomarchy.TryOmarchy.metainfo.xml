@@ -24,10 +24,11 @@
       <li>A persistent disk with backup, restore and move</li>
       <li>Settings for memory, processors, display scale and microphone access</li>
     </ul>
-    <p>The first launch downloads Omarchy, about 2 GB, and needs about 14 GB
-    of free space for Omarchy, plus space for the Flatpak runtime. The app needs a 64-bit x86 PC with hardware virtualization
-    and access to KVM. Removing the app keeps your VM unless you also delete
-    its data.</p>
+    <p>The first launch downloads Omarchy, about 2 GB, and needs at least
+    14 GiB (about 15 GB) of free space for Omarchy setup, plus space for the
+    Flatpak runtime if missing. The app needs a 64-bit x86 PC with hardware
+    virtualization and access to KVM. Removing the app keeps your VM unless you
+    also delete its data.</p>
   </description>
   <screenshots>
     <screenshot type="default">

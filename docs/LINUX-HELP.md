@@ -159,6 +159,10 @@ cannot release unused blocks; Settings says so.
   onto another app that app receives them, and otherwise they go to
   Downloads. Settings can also share one folder, which appears in Omarchy as
   `/mnt/host`.
+- Omarchy uses this computer's time zone and follows changes while it runs,
+  with the latest Omarchy system image. Choosing another zone inside Omarchy
+  stops that; **Follow Host Time Zone** in Omarchy's app launcher turns it
+  back on.
 - While Omarchy runs, the Try Omarchy tray menu opens the shared folder,
   Settings, Reclaim disk space, diagnostics and this help, and shuts Omarchy
   down. Diagnostics are saved in the VM's `diagnostics` folder.

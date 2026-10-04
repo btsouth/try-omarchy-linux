@@ -15,6 +15,7 @@ type config struct {
 	hostCursor                  bool
 	experimentalPinch           bool
 	disablePinch, guestPinch    bool
+	followHostTimeZone          bool
 	lanPublic                   bool
 	instant, portable           bool
 	guestDir, vmDir, disk       string

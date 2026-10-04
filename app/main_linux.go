@@ -350,6 +350,7 @@ func main() {
 		fatal("Cannot parse build-spec.json: %v", err)
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
+	cfg.followHostTimeZone = strings.TrimSpace(*timeZoneFlag) != "keep" && guestAcceptsTimeZone(spec)
 	// Tells the guest which host it runs on, for wording such as approved apps.
 	cmdline := windowedKernelCmdline(spec) + " tryomarchy.host=linux"
 	if linuxGuestScale != "keep" {
@@ -409,6 +410,22 @@ func main() {
 	configureLinuxReclaim(cfg)
 	go runLinuxGuestAgent(cfg.dir)
 	runCameraBridge(cfg.desktop)
+	if cfg.followHostTimeZone {
+		override := strings.TrimSpace(*timeZoneFlag)
+		stopTimeZone, err := startLinuxTimeZoneBridge(func() string {
+			if override != "" {
+				return override
+			}
+			return liveHostTimeZone()
+		})
+		if err != nil {
+			logf("live time-zone following unavailable: %v", err)
+			cfg.followHostTimeZone = false
+		} else {
+			defer stopTimeZone()
+			logf("guest follows this computer's time zone while it runs")
+		}
+	}
 	if err := checkForwardBindings(cfg.forwards); err != nil {
 		fatal("Could not prepare port forwarding:\n\n%v", err)
 	}

@@ -63,6 +63,8 @@ def linux_guest_payload_checks(revision: int) -> dict[str, str]:
         checks["linux-live-update-payload"] = "test -x /usr/local/lib/try-omarchy/live-update && test -f /etc/pacman.d/hooks/00-try-omarchy-live-update.hook && test -f /etc/pacman.d/hooks/zz-try-omarchy-live-update.hook"
     if revision >= 61:
         checks["linux-nightlight-adoption-payload"] = "grep -Fq 'previous_revision < 61' /usr/local/lib/try-omarchy/catch-up && test -f /usr/share/try-omarchy/nightlight/bin_omarchy-update-system-pkgs-when-conflicted"
+    if revision >= 62:
+        checks["linux-output-scale-payload"] = "grep -Fq 'configured_output_scale()' /usr/local/bin/omarchy-native-display-sync && grep -Fq 'tryomarchy.host=linux' /usr/local/bin/omarchy-native-display-sync && grep -Fq 'omarchy_synced_display_outputs' /usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua"
     return {name: command + " && echo yes || echo no" for name, command in checks.items()}
 
 

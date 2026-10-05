@@ -12,6 +12,8 @@ import (
 	"github.com/godbus/dbus/v5/prop"
 )
 
+var linuxResumeRequests = make(chan struct{}, 1)
+
 var linuxSettingsRequests = make(chan struct{}, 1)
 var linuxShutdownRequests = make(chan struct{}, 1)
 
@@ -42,6 +44,7 @@ type linuxMenuNode struct {
 
 // Tray menu item IDs. Separators have IDs too so hosts can address them.
 const (
+	linuxTrayResume      int32 = 10
 	linuxTraySettings    int32 = 1
 	linuxTrayShutdown    int32 = 2
 	linuxTrayReclaim     int32 = 3
@@ -56,10 +59,11 @@ const (
 var linuxTrayOrder = []int32{
 	linuxTrayShare, linuxTraySeparator1,
 	linuxTraySettings, linuxTrayUSB, linuxTrayReclaim, linuxTrayDiagnostics, linuxTrayHelp, linuxTraySeparator2,
-	linuxTrayShutdown,
+	linuxTrayResume, linuxTrayShutdown,
 }
 
 var linuxTrayLabels = map[int32]string{
+	linuxTrayResume:      uiText("tray.menu.resume"),
 	linuxTrayShare:       uiText("tray.linux.open_shared_folder"),
 	linuxTrayUSB:         uiText("usb.title"),
 	linuxTraySettings:    uiText("tray.menu.settings"),
@@ -93,6 +97,8 @@ func (*linuxTrayMenu) AboutToShow(id int32) (bool, *dbus.Error) { return false, 
 func (*linuxTrayMenu) Event(id int32, event string, data dbus.Variant, timestamp uint32) *dbus.Error {
 	if event == "clicked" {
 		switch id {
+		case linuxTrayResume:
+			requestLinuxTrayAction(linuxResumeRequests)
 		case linuxTraySettings:
 			requestTraySettings()
 		case linuxTrayUSB:

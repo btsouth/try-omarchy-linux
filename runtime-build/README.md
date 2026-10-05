@@ -8,10 +8,10 @@ virglrenderer fork commits in `sources.lock.json`. It produces:
 - `SHA256SUMS`, hashes for both archives
 
 The portable archive includes source provenance, the MSYS2 package inventory,
-per-file hashes, and licenses. The Runtime workflow remains manual. Its r20c
-output is published as `runtime-v1-r20c` and is pinned by public `v0.3.0`;
-future runtime replacements stay test artifacts until they pass physical
-Windows validation.
+per-file hashes, and licenses. The Runtime workflow remains manual. Its r21
+output is published as `runtime-v1-r21` and is pinned from `v0.9.0`; r20c
+shipped from `v0.3.0` through `v0.8.0`. Future runtime replacements stay test
+artifacts until they pass physical Windows validation.
 
 To build in an MSYS2 UCRT64 shell with the packages in `packages.txt` installed:
 
@@ -167,3 +167,22 @@ mask before closing the socket. The old zero-mask call left protection enabled
 when the original flags were zero. A compiled source fixture covers all original
 flag combinations. Saved-session tests require a complete socket stream and
 never accept an idle timeout as end of data.
+
+The r22 engineering candidate adds `0019-honor-whpx-cpu-model.patch` for the
+launcher's `qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+aes` CPU recovery mode.
+WHP partition setup waits for the realized model, masks its instruction feature
+bank and disables XSAVE. CPUID exits return QEMU's model, with live CR4 for
+OSXSAVE and WHP's synthetic hypervisor leaves retained. Adding XSAVE, AVX, FMA,
+F16C, XOP or FMA4 to qemu64 is rejected explicitly. Other CPU models, including
+GPU mode's `host`, retain WHP's existing CPUID and native XSAVE layout. The
+compiled setup fixture checks masks, ordering and fail-closed setup failures.
+This restriction is a recovery control, not an explanation for issue #276.
+
+`0020-allow-external-sdl-keyboard-hook.patch` recognizes
+`OMARCHY_SDL_EXTERNAL_KEYBOARD_HOOK=1` on Windows. It disables SDL's keyboard
+grab hook while preserving the mouse grab. The launcher sets it only when the
+runtime provenance declares the patch, then chains host-owned Win events through
+`CallNextHookEx`. Older runtimes retain the existing hook bypass. The SDL hint
+fixture covers default behavior, the exact opt-out and hint priority.
+
+Neither candidate changes `guest-build/runtime.lock.json` or publishes a release.

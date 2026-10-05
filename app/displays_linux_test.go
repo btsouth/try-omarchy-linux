@@ -69,7 +69,15 @@ func TestLinuxDisplaySizesAndArguments(t *testing.T) {
 	if !reflect.DeepEqual(cfg.displaySizes, want) {
 		t.Fatalf("sizes: %v", cfg.displaySizes)
 	}
-	args := linuxDisplayArgs(cfg, []string{"-device", "virtio-vga-gl,blob=on,hostmem=1073741824,venus=on", "-full-screen"})
+	single := linuxDisplayArgs(&config{displays: 1}, []string{"-device", "virtio-vga-gl,blob=on,hostmem=1073741824"})
+	if single[1] != "virtio-vga-gl,blob=on,hostmem=1073741824" {
+		t.Fatalf("single display device changed: %v", single)
+	}
+	gpu := `{"driver":"virtio-vga-gl","id":"gpu0","blob":true,"hostmem":1073741824,"venus":true,"max_outputs":3,"outputs":[]}`
+	args := linuxDisplayArgs(cfg, []string{"-device", gpu, "-full-screen"})
+	if !strings.Contains(args[1], `"blob":true`) || !strings.Contains(args[1], `"hostmem":1073741824`) {
+		t.Fatalf("typed GPU properties changed: %v", args[1])
+	}
 	args = linuxGraphicsArgs(args, false, false)
 	var device struct {
 		Max     int `json:"max_outputs"`

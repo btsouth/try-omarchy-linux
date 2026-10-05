@@ -202,43 +202,29 @@ func linuxDisplayEnvironment(env []string, cfg *config) []string {
 // Keep the shared Windows device builder untouched. Linux supplies per-output
 // EDID sizes, including output 1, before its graphics policy removes Venus.
 func linuxDisplayArgs(cfg *config, args []string) []string {
-	if len(cfg.displaySizes) == 0 {
-		return args
-	}
-	outputs := make([]map[string]any, guestDisplayCount(cfg.displays))
-	for i := range outputs {
-		size := [2]int{cfg.displayWidth, cfg.displayHeight}
-		if i < len(cfg.displaySizes) {
-			size = cfg.displaySizes[i]
+	if len(cfg.displaySizes) > 0 {
+		outputs := make([]map[string]any, guestDisplayCount(cfg.displays))
+		for i := range outputs {
+			size := [2]int{cfg.displayWidth, cfg.displayHeight}
+			if i < len(cfg.displaySizes) {
+				size = cfg.displaySizes[i]
+			}
+			outputs[i] = map[string]any{"name": fmt.Sprintf("Omarchy %d", i+1), "xres": size[0], "yres": size[1]}
 		}
-		outputs[i] = map[string]any{"name": fmt.Sprintf("Omarchy %d", i+1), "xres": size[0], "yres": size[1]}
-	}
-	for i := 1; i < len(args); i++ {
-		if args[i-1] != "-device" {
-			continue
-		}
-		value := args[i]
-		if !strings.HasPrefix(value, "virtio-gpu-pci") && !strings.HasPrefix(value, "virtio-vga-gl") && !strings.HasPrefix(value, "{") {
-			continue
-		}
-		device := map[string]any{}
-		if strings.HasPrefix(value, "{") {
-			if json.Unmarshal([]byte(value), &device) != nil || (device["driver"] != "virtio-gpu-pci" && device["driver"] != "virtio-vga-gl") {
+		// Only the typed JSON device from displayDevice is rewritten. QEMU
+		// rejects JSON strings such as "on" for boolean and size properties.
+		for i := 1; i < len(args); i++ {
+			if args[i-1] != "-device" || !strings.HasPrefix(args[i], "{") {
 				continue
 			}
-		} else {
-			parts := strings.Split(value, ",")
-			device["driver"] = parts[0]
-			for _, part := range parts[1:] {
-				kv := strings.SplitN(part, "=", 2)
-				if len(kv) == 2 {
-					device[kv[0]] = kv[1]
-				}
+			device := map[string]any{}
+			if json.Unmarshal([]byte(args[i]), &device) != nil || (device["driver"] != "virtio-gpu-pci" && device["driver"] != "virtio-vga-gl") {
+				continue
 			}
+			device["max_outputs"], device["outputs"] = len(outputs), outputs
+			data, _ := json.Marshal(device)
+			args[i] = string(data)
 		}
-		device["max_outputs"], device["outputs"] = len(outputs), outputs
-		data, _ := json.Marshal(device)
-		args[i] = string(data)
 	}
 	// Per-console startup fullscreen is handled by the Linux SDL patch.
 	for i := 1; i < len(args); i++ {

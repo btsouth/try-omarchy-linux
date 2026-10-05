@@ -404,7 +404,11 @@ func main() {
 		profile, cfg.cpus, host.LogicalCPUs, cfg.memMiB, host.AvailableMiB, host.CPUKnown, host.CPUBusy*100)
 
 	cfg.displayWidth, cfg.displayHeight = *width, *height
-	setLinuxDisplaySizes(cfg, probeLinuxMonitors(), explicitFlags)
+	// One display keeps the existing device string and video= mode. Typed
+	// per-output sizes only go into the JSON device built for several outputs.
+	if guestDisplayCount(cfg.displays) > 1 {
+		setLinuxDisplaySizes(cfg, probeLinuxMonitors(), explicitFlags)
+	}
 	cmdline += linuxDisplayKernelOption(cfg)
 	if err := checkSetupCancelled(); err != nil {
 		fatalf("%v", err)

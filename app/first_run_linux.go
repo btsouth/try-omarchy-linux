@@ -20,27 +20,27 @@ func linuxSetupSpaceError(dir string) error {
 	if free < 0 || free >= linuxGuestSpaceBytes {
 		return nil
 	}
-	return fmt.Errorf("only %s is free where %s would go, and setup needs about %s. Free some space or choose another folder", linuxGB(free), linuxDisplayPath(dir), linuxGB(linuxGuestSpaceBytes))
+	return uiError(uiTextWith("setup.linux.only_is_free_where_would_go_and_setup", map[string]string{"free": linuxGB(free), "path": linuxDisplayPath(dir), "space_bytes": linuxGB(linuxGuestSpaceBytes)}), nil)
 }
 
 func linuxLocationState(defaultDir, notice string) linuxSetupState {
 	rows := []linuxRow{
-		{Title: "Default location", Detail: linuxDisplayPath(defaultDir) + "\nInside the app's own storage."},
-		{Title: "Space", Detail: "About " + linuxGB(linuxGuestSpaceBytes) + ". Omarchy sees a " + linuxGB(int64(24)<<30) + " disk, but only what it uses takes space."},
+		{Title: uiText("setup.linux.default_location"), Detail: uiTextWith("setup.linux.inside_the_app_s_own_storage", map[string]string{"path": linuxDisplayPath(defaultDir)})},
+		{Title: uiText("setup.linux.space"), Detail: uiTextWith("setup.linux.about_omarchy_sees_a_disk_but_only_what", map[string]string{"space_bytes": linuxGB(linuxGuestSpaceBytes), "capacity": linuxGB(int64(24) << 30)})},
 	}
 	if free := linuxFreeBytes(defaultDir); free >= 0 {
-		rows[0].Detail += " " + linuxGB(free) + " is free."
+		rows[0].Detail += uiTextWith("setup.linux.is_free", map[string]string{"free": linuxGB(free)})
 	}
 	return linuxSetupState{Prompt: "location", Path: defaultDir, Notice: notice,
-		Status:   "Omarchy lives in one folder on this computer. Use the default, or pick a bigger drive. You can move it later.",
+		Status:   uiText("setup.linux.omarchy_lives_in_one_folder_on_this_computer"),
 		Sections: []linuxSection{{Rows: rows}}}
 }
 
 // linuxAccountState explains both sign-in choices and how to return host shortcuts.
 func linuxAccountState() linuxSetupState {
 	return linuxSetupState{Prompt: "account",
-		Status: "Create your Linux account on the first Omarchy screen. Quick start signs in as " + trialUsername + ".",
-		Detail: "Quick start uses the public password " + trialPassword + " and password-free sudo. It is intended for a first look.\n\nSuper+Space opens Omarchy's menu; Super+K shows shortcuts. Ctrl+Alt+G returns keyboard control to your Linux desktop."}
+		Status: uiTextWith("setup.linux.create_your_linux_account_on_the_first_omarchy", map[string]string{"username": trialUsername}),
+		Detail: uiTextWith("setup.linux.quick_start_uses_the_public_password_and_password", map[string]string{"password": trialPassword})}
 }
 
 // Explicit flags bypass saved choices. Remembered removable locations must
@@ -62,10 +62,10 @@ func resolveLinuxDataDirectory(defaultDir, requested string, explicit bool, choo
 		if found {
 			info, err := os.Stat(saved)
 			if err != nil {
-				return "", false, fmt.Errorf("saved data folder %s is unavailable: %w; reconnect its drive and try again", saved, err)
+				return "", false, uiError(uiTextWith("setup.linux.saved_data_folder_is_unavailable_reconnect_its_drive", map[string]string{"path": saved, "error": fmt.Sprint(err)}), err)
 			}
 			if !info.IsDir() {
-				return "", false, fmt.Errorf("saved data folder %s is not a directory", saved)
+				return "", false, uiError(uiTextWith("setup.linux.saved_data_folder_is_not_a_directory", map[string]string{"path": saved}), nil)
 			}
 		}
 		// Settings saved from the idle home must not silently claim the default
@@ -88,7 +88,7 @@ func resolveLinuxDataDirectory(defaultDir, requested string, explicit bool, choo
 					}
 					if prefs.Share != "" && !prefs.ShareDisabled {
 						if _, err := validateLinuxSharedFolder(prefs.Share, selected); err != nil {
-							return "", false, fmt.Errorf("selected storage conflicts with the saved shared folder: %w", err)
+							return "", false, uiError(uiTextWith("setup.linux.selected_storage_conflicts_with_the_saved_shared_folder", map[string]string{"error": fmt.Sprint(err)}), err)
 						}
 					}
 					if err := saveSettings(settingsPath(selected), prefs); err != nil {
@@ -257,7 +257,7 @@ func (u *progressUI) chooseLocation(defaultDir string) (string, bool, error) {
 			var selectable bool
 			selectable, err = linuxDataLocationSelectable(selected, defaultDir)
 			if err == nil && !selectable {
-				err = fmt.Errorf("%s already contains other files or an incomplete installation. Choose an empty folder, or use -dir to resume that installation", linuxDisplayPath(selected))
+				err = uiError(uiTextWith("setup.linux.already_contains_other_files_or_an_incomplete_installation", map[string]string{"path": linuxDisplayPath(selected)}), nil)
 			}
 		}
 		if err == nil {
@@ -278,7 +278,7 @@ func (u *progressUI) chooseLocation(defaultDir string) (string, bool, error) {
 			return selected, true, nil
 		}
 		linuxQuickSetup.Store(false)
-		notice = "Cannot use that folder: " + err.Error()
+		notice = uiTextWith("setup.linux.cannot_use_that_folder", map[string]string{"error": err.Error()})
 	}
 }
 
@@ -307,20 +307,20 @@ func attachLinuxDataDirectory(defaultDir, selected string) (string, error) {
 		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("the selected location is not a folder")
+		return "", uiError(uiText("setup.linux.the_selected_location_is_not_a_folder"), nil)
 	}
 	required := []string{"vm/disk.raw", "guest/build-spec.json", "guest/rootfs.ext4", "guest/vmlinuz-linux", "guest/initramfs-linux.img"}
 	for _, name := range required {
 		info, err := os.Lstat(filepath.Join(selected, filepath.FromSlash(name)))
 		if err != nil || !info.Mode().IsRegular() {
-			return "", fmt.Errorf("the selected folder has no complete Try Omarchy VM: %s", name)
+			return "", uiError(uiTextWith("setup.linux.the_selected_folder_has_no_complete_try_omarchy", map[string]string{"name": name}), nil)
 		}
 	}
 	// The drive can disappear after validation. Probe only the existing folder;
 	// the first-run helper would create a replacement directory in that case.
 	probe, err := os.CreateTemp(selected, ".tryomarchy-write-test-*")
 	if err != nil {
-		return "", fmt.Errorf("the selected data folder is not writable: %w", err)
+		return "", uiError(uiTextWith("setup.linux.the_selected_data_folder_is_not_writable", map[string]string{"error": fmt.Sprint(err)}), err)
 	}
 	probeName := probe.Name()
 	if err := probe.Close(); err != nil {
@@ -334,7 +334,7 @@ func attachLinuxDataDirectory(defaultDir, selected string) (string, error) {
 	for _, name := range required {
 		info, err := os.Lstat(filepath.Join(selected, filepath.FromSlash(name)))
 		if err != nil || !info.Mode().IsRegular() {
-			return "", fmt.Errorf("the selected folder changed before it could be attached: %s", name)
+			return "", uiError(uiTextWith("setup.linux.the_selected_folder_changed_before_it_could_be", map[string]string{"name": name}), nil)
 		}
 	}
 	if pathsEqual(defaultDir, selected) {
@@ -365,7 +365,7 @@ func forgetLinuxDataLocation(defaultDir string) error {
 		return err
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("saved location record is not a regular file")
+		return uiError(uiText("setup.linux.saved_location_record_is_not_a_regular_file"), nil)
 	}
 	return os.Remove(path)
 }

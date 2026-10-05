@@ -87,34 +87,34 @@ func linuxMoveDestination(parent string) string {
 
 func moveLinuxInstallation(w *linuxSetupWindow, defaultDir, dir string) string {
 	if !completeInstallExists(dir, "disk.raw") {
-		return "There is no complete VM here to move."
+		return uiText("move.linux.there_is_no_complete_vm_here_to_move")
 	}
 	if retained, _ := linuxRetainedMove(defaultDir, dir); retained != nil {
-		return "Remove the previous copy from the last move before moving again."
+		return uiText("move.linux.remove_the_previous_copy_from_the_last_move")
 	}
-	parent, err := w.ask(context.Background(), linuxSetupState{Prompt: "move-folder", Status: "Choose the folder that will hold this VM. A try-omarchy folder is created inside it. The current copy is kept until the moved VM starts."})
+	parent, err := w.ask(context.Background(), linuxSetupState{Prompt: "move-folder", Status: uiText("move.linux.choose_the_folder_that_will_hold_this_vm")})
 	if err != nil || parent == "cancel" {
 		return ""
 	}
 	if !filepath.IsAbs(parent) {
-		return "Choose an absolute destination folder."
+		return uiText("recovery.linux.choose_an_absolute_destination_folder")
 	}
 	destination := linuxMoveDestination(parent)
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Move this VM?", Primary: "Move this VM", Secondary: "Keep it here",
-		Status: "From: " + dir + "\nTo: " + destination + "\n\nFiles are copied and checked before Try Omarchy switches to the new location. The current copy stays until you start the moved VM and remove it from Backup and recovery."})
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiText("move.linux.move_this_vm"), Primary: uiText("launcher.linux.move_this_vm_2"), Secondary: uiText("move.linux.keep_it_here"),
+		Status: uiTextWith("move.linux.from_to_files_are_copied_and_checked_before", map[string]string{"path": dir, "path_2": destination})})
 	if err != nil || answer != "primary" {
 		return ""
 	}
 	s := linuxMoveStore(defaultDir)
 	lock, err := lockMoveStore(s)
 	if err != nil {
-		return "Could not start the move: " + err.Error()
+		return uiTextWith("move.linux.could_not_start_the_move", map[string]string{"error": err.Error()})
 	}
 	defer lock.Close()
 	configureSetupCancellation(false)
 	linuxRecoveryActive.Store(true)
-	w.update(linuxSetupState{Status: "Checking the VM and the space needed..."})
-	_, err = s.prepare(dir, destination, linuxRecoveryProgress(w, "Moving"))
+	w.update(linuxSetupState{Status: uiText("move.linux.checking_the_vm_and_the_space_needed")})
+	_, err = s.prepare(dir, destination, linuxRecoveryProgress(w, uiText("move.linux.moving")))
 	linuxRecoveryActive.Store(false)
 	configureSetupCancellation(false)
 	if err != nil {
@@ -127,35 +127,35 @@ func moveLinuxInstallation(w *linuxSetupWindow, defaultDir, dir string) string {
 		}
 		return linuxRecoveryResult(err, "")
 	}
-	w.update(linuxSetupState{Status: "Finishing the move. Keep this window open...", NonCancellable: true})
+	w.update(linuxSetupState{Status: uiText("move.linux.finishing_the_move_keep_this_window_open"), NonCancellable: true})
 	if err := s.recover(activateLinuxMove); err != nil {
-		return "The checked copy is safe. Open Try Omarchy again to finish switching locations: " + err.Error()
+		return uiTextWith("move.linux.the_checked_copy_is_safe_open_try_omarchy", map[string]string{"error": err.Error()})
 	}
-	return "This VM now lives at " + destination + ". Launch it to check your files. After it starts, Backup and recovery can remove the previous copy at " + dir + "."
+	return uiTextWith("move.linux.this_vm_now_lives_at_launch_it_to", map[string]string{"path": destination, "path_2": dir})
 }
 
 func cleanupLinuxMove(w *linuxSetupWindow, defaultDir, dir string) string {
 	retained, booted := linuxRetainedMove(defaultDir, dir)
 	if retained == nil {
-		return "There is no previous copy to remove."
+		return uiText("move.linux.there_is_no_previous_copy_to_remove")
 	}
 	if !booted {
-		return "Start the moved VM once before removing its previous copy."
+		return uiText("move.linux.start_the_moved_vm_once_before_removing_its")
 	}
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Remove the previous copy?", Primary: "Keep previous copy", Secondary: "Remove previous copy", Destructive: true,
-		Status: "Remove the copy this VM was moved from?\n\n" + retained.Source + "\n\nThe moved VM at " + dir + " stays. If files in the previous copy changed since the move, nothing is removed."})
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiText("move.linux.remove_the_previous_copy"), Primary: uiText("move.linux.keep_previous_copy"), Secondary: uiText("move.linux.remove_previous_copy"), Destructive: true,
+		Status: uiTextWith("move.linux.remove_the_copy_this_vm_was_moved_from", map[string]string{"retained_source": retained.Source, "path": dir})})
 	if err != nil || answer != "secondary" {
-		return "The previous copy was kept."
+		return uiText("move.linux.the_previous_copy_was_kept")
 	}
 	s := linuxMoveStore(defaultDir)
 	lock, err := lockMoveStore(s)
 	if err != nil {
-		return "Could not remove the previous copy: " + err.Error()
+		return uiTextWith("move.linux.could_not_remove_the_previous_copy", map[string]string{"error": err.Error()})
 	}
 	defer lock.Close()
-	w.update(linuxSetupState{Status: "Checking and removing the previous copy. Keep this window open...", NonCancellable: true})
+	w.update(linuxSetupState{Status: uiText("move.linux.checking_and_removing_the_previous_copy_keep_this"), NonCancellable: true})
 	if err := s.cleanup(dir); err != nil {
-		return "Could not remove the previous copy: " + err.Error()
+		return uiTextWith("move.linux.could_not_remove_the_previous_copy", map[string]string{"error": err.Error()})
 	}
-	return "The previous copy was removed. This VM stays at " + dir + "."
+	return uiTextWith("move.linux.the_previous_copy_was_removed_this_vm_stays", map[string]string{"path": dir})
 }

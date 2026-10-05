@@ -27,31 +27,31 @@ func requestLinuxSignIn(parent context.Context, enabled bool) error {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		logf("start with login: %v", err)
-		return linuxSignInError("Start with login is unavailable on this desktop. Your saved choice has not changed.")
+		return linuxSignInError(uiText("startup.linux.login.unavailable"))
 	}
 	defer conn.Close()
 	signals := make(chan *dbus.Signal, 16)
 	conn.Signal(signals)
 	if err = conn.AddMatchSignal(dbus.WithMatchSender(linuxPortalDesktop), dbus.WithMatchInterface("org.freedesktop.portal.Request"), dbus.WithMatchMember("Response")); err != nil {
 		logf("start with login: %v", err)
-		return linuxSignInError("Start with login is unavailable on this desktop. Your saved choice has not changed.")
+		return linuxSignInError(uiText("startup.linux.login.unavailable"))
 	}
 	results, err := linuxPortalRequest(ctx, conn, signals, "org.freedesktop.portal.Background.RequestBackground", "", map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(fmt.Sprintf("trylogin_%d", time.Now().UnixNano())),
 		"autostart":    dbus.MakeVariant(enabled),
 		"commandline":  dbus.MakeVariant(linuxSignInCommandline()),
-		"reason":       dbus.MakeVariant("Open Try Omarchy when you log in."),
+		"reason":       dbus.MakeVariant(uiText("startup.linux.login.reason")),
 	})
 	if err != nil {
 		logf("start with login: %v", err)
 		if errors.Is(err, errLinuxClipboardDenied) {
-			return linuxSignInError("Your desktop did not allow this login change. Your saved choice has not changed.")
+			return linuxSignInError(uiText("startup.linux.login.denied"))
 		}
-		return linuxSignInError("Could not change Start with login. Your saved choice has not changed. Try again when the desktop permission service is available.")
+		return linuxSignInError(uiText("startup.linux.login.failed"))
 	}
 	allowed, valid := results["autostart"].Value().(bool)
 	if !valid || allowed != enabled {
-		return linuxSignInError("Your desktop did not allow this login change. Your saved choice has not changed.")
+		return linuxSignInError(uiText("startup.linux.login.denied"))
 	}
 	return nil
 }
@@ -71,7 +71,7 @@ func saveLinuxLaunchPreferences(ctx context.Context, dir string, previous, next 
 			defer cancel()
 			if rollbackErr := requestLinuxSignIn(rollback, previous.LaunchAtSignIn); rollbackErr != nil {
 				logf("restore start with login: %v", rollbackErr)
-				return linuxSignInError(fmt.Sprintf("Could not save startup preferences or restore the login choice. Check Start with login in your desktop settings: %v", err))
+				return linuxSignInError(uiTextWith("startup.linux.login.rollback_failed", map[string]string{"error": err.Error()}))
 			}
 		}
 		return err

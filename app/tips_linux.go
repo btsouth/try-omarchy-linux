@@ -47,11 +47,11 @@ func markLinuxTipsShown() {
 }
 
 func linuxSessionTips(trialAccount bool) (title, body string) {
-	body = "Ctrl+Alt+G gives your keyboard back to your desktop, and clicking the window returns it to Omarchy. Ctrl+Alt+F switches fullscreen, and files dropped on the window go to Omarchy."
+	body = uiText("launcher.linux.session_tips")
 	if !trialAccount {
-		body += " Super+Space opens Omarchy's menu."
+		body = uiText("launcher.linux.session_tips_personal")
 	}
-	return "Omarchy is ready", body
+	return uiText("launcher.linux.ready_title"), body
 }
 
 // showLinuxSessionTips runs once Omarchy's desktop has appeared. It is marked

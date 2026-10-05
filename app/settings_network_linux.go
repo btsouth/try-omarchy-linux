@@ -30,7 +30,7 @@ func linuxForwardsFromForm(sshEnabled bool, sshPort, additional string) (string,
 	}
 	port, err := strconv.Atoi(strings.TrimSpace(sshPort))
 	if err != nil || port < 1024 || port > 65535 {
-		return "", fmt.Errorf("choose an SSH port between 1024 and 65535")
+		return "", uiError(uiText("settings.network.linux.choose_an_ssh_port_between_1024_and_65535"), nil)
 	}
 	if text != "" {
 		text += "\n"
@@ -45,7 +45,7 @@ func validateLinuxLocalForwards(values []string) error {
 			return err
 		}
 		if forward.address() != "127.0.0.1" {
-			return fmt.Errorf("Linux port forwarding is currently available only on this computer")
+			return uiError(uiText("settings.network.linux.linux_port_forwarding_is_currently_available_only_on"), nil)
 		}
 	}
 	return nil

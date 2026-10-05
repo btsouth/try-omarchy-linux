@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -29,7 +28,7 @@ func (p linuxExperiencePreferences) validate() error {
 	if p.Keyboard != "" && p.Keyboard != "keep" {
 		layout, variant := splitKeyboardSpec(p.Keyboard)
 		if !validLayoutName.MatchString(layout) || !validVariantName.MatchString(variant) || strings.Count(p.Keyboard, ":") > 1 {
-			return fmt.Errorf("choose a valid keyboard layout")
+			return uiError(uiText("settings.linux.invalid_keyboard"), nil)
 		}
 	}
 	return nil
@@ -45,7 +44,7 @@ func loadLinuxExperiencePreferences(dir string) (linuxExperiencePreferences, err
 		return defaults, err
 	}
 	if len(data) > 4096 {
-		return defaults, fmt.Errorf("display and keyboard preferences are too large")
+		return defaults, uiError(uiText("settings.linux.experience_too_large"), nil)
 	}
 	var p linuxExperiencePreferences
 	d := json.NewDecoder(bytes.NewReader(data))
@@ -54,7 +53,7 @@ func loadLinuxExperiencePreferences(dir string) (linuxExperiencePreferences, err
 		return defaults, err
 	}
 	if d.Decode(&struct{}{}) != io.EOF || p.SchemaVersion != 1 {
-		return defaults, fmt.Errorf("invalid display and keyboard preferences")
+		return defaults, uiError(uiText("settings.linux.invalid_experience"), nil)
 	}
 	return p, p.validate()
 }

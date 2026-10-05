@@ -26,7 +26,7 @@ func (p *linuxPortalClipboard) stopFileTransfer(key string) {
 func (p *linuxPortalClipboard) setPaths(paths []string) bool {
 	if err := p.publishFiles(paths); err != nil {
 		logf("portal clipboard files: %v", err)
-		setLinuxClipboardStatus("Could not share files copied from Omarchy: "+err.Error(), true)
+		setLinuxClipboardStatus(uiTextWith("settings.clipboard.linux.share_files_error", map[string]string{"error": err.Error()}), true)
 		return false
 	}
 	return true

@@ -59,12 +59,12 @@ var linuxTrayOrder = []int32{
 }
 
 var linuxTrayLabels = map[int32]string{
-	linuxTrayShare:       "Open shared folder",
-	linuxTraySettings:    "Settings...",
-	linuxTrayReclaim:     "Reclaim disk space...",
-	linuxTrayDiagnostics: "Create diagnostics",
-	linuxTrayHelp:        "Help and shortcuts...",
-	linuxTrayShutdown:    "Shut down Omarchy...",
+	linuxTrayShare:       uiText("tray.linux.open_shared_folder"),
+	linuxTraySettings:    uiText("tray.menu.settings"),
+	linuxTrayReclaim:     uiText("tray.menu.reclaim"),
+	linuxTrayDiagnostics: uiText("launcher.linux.create_diagnostics"),
+	linuxTrayHelp:        uiText("tray.menu.help"),
+	linuxTrayShutdown:    uiText("tray.menu.shutdown"),
 }
 
 // linuxTrayLayout describes the tray menu for dbusmenu hosts.

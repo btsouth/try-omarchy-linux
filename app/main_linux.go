@@ -56,7 +56,7 @@ func relaunchLinuxSelf() {
 }
 
 // fatal shows a finished message and exits. Shared code passes catalog text
-// from uiText or uiTextWith; Linux-only code formats with fatalf.
+// from uiText or uiTextWith; fatalf formats already-resolved errors.
 func fatal(msg string) {
 	if setupCancelled() {
 		getUI().finish()
@@ -85,42 +85,42 @@ func defaultLinuxDataDirectory() string {
 // guest and runs it until it shuts down.
 func main() {
 	cfg := &config{}
-	flag.StringVar(&cfg.dir, "dir", defaultLinuxDataDirectory(), "Try Omarchy data directory (virtual machine and settings)")
-	flag.StringVar(&cfg.qemu, "qemu", "qemu-system-x86_64", "QEMU to run")
-	flag.StringVar(&cfg.share, "share", "", "folder shared into Omarchy at /mnt/host and as ~/<folder name>")
-	chooseShare := flag.Bool("choose-share", false, "choose or remove the shared folder before starting")
-	flag.BoolVar(&cfg.fresh, "fresh", false, "start over and retain the previous writable disk for recovery")
-	flag.BoolVar(&cfg.fullscreen, "fullscreen", false, "start fullscreen")
-	flag.StringVar(&cfg.fullscreenDisplay, "fullscreen-display", "", "monitor connector to open fullscreen on, such as DP-1 (blank: the desktop chooses)")
-	flag.IntVar(&cfg.memOverrideMiB, "memory", 0, "guest RAM in MiB (default: sized to this computer)")
-	flag.IntVar(&cfg.cpuOverride, "cpus", 0, "guest CPUs (default: sized to this computer)")
-	resourceProfileFlag := flag.String("resource-profile", "", "resource preset: balanced, maximum-performance, or manual")
-	flag.IntVar(&cfg.diskGiB, "disk-size", 0, "guest disk capacity in GiB (0: default; grows existing disks, never shrinks)")
-	renderFlag := flag.String("render", "", "rendering path: auto (default), gpu, or cpu")
-	venusFlag := flag.String("venus", "auto", "Vulkan acceleration: auto (compatible KVM kernels), on, or off; off keeps hardware OpenGL")
-	scaleFlag := flag.String("scale", "auto", "guest UI scale: auto follows Wayland, keep uses the guest policy, or 1 through 4")
-	audioFlag := flag.String("audio", "auto", "audio backend: auto, pipewire, sdl, or none")
-	audioOutput := flag.String("audio-output", "", "PipeWire output node name; blank follows the default")
-	audioInput := flag.String("audio-input", "", "PipeWire input node name; blank follows the default")
-	microphone := flag.Bool("microphone", true, "allow the guest to use a microphone")
-	vulkanPresentFlag := flag.String("vulkan-present", "auto", "how guest Vulkan windows reach the screen: auto, gpu, or cpu (cpu copies frames and avoids the NVIDIA import bug)")
-	timeZoneFlag := flag.String("timezone", "", "guest time zone: blank follows this computer, keep leaves the guest alone, or an IANA name")
-	keyboardFlag := flag.String("keyboard", "", "guest keyboard layout: blank follows exposed host XKB settings, keep preserves the guest, or an XKB layout such as de or us:intl")
-	localeFlag := flag.String("locale", "", "guest language: blank follows this computer, keep leaves the guest alone, or a locale such as de_DE")
-	flag.BoolVar(&cfg.instant, "instant", false, "skip the account question and use the quick-start omarchy account")
+	flag.StringVar(&cfg.dir, "dir", defaultLinuxDataDirectory(), uiText("launcher.linux.flag.dir"))
+	flag.StringVar(&cfg.qemu, "qemu", "qemu-system-x86_64", uiText("launcher.linux.flag.qemu"))
+	flag.StringVar(&cfg.share, "share", "", uiText("launcher.linux.flag.share"))
+	chooseShare := flag.Bool("choose-share", false, uiText("launcher.linux.flag.choose_share"))
+	flag.BoolVar(&cfg.fresh, "fresh", false, uiText("launcher.linux.flag.fresh"))
+	flag.BoolVar(&cfg.fullscreen, "fullscreen", false, uiText("launcher.linux.flag.fullscreen"))
+	flag.StringVar(&cfg.fullscreenDisplay, "fullscreen-display", "", uiText("launcher.linux.flag.fullscreen_display"))
+	flag.IntVar(&cfg.memOverrideMiB, "memory", 0, uiText("launcher.linux.flag.memory"))
+	flag.IntVar(&cfg.cpuOverride, "cpus", 0, uiText("launcher.linux.flag.cpus"))
+	resourceProfileFlag := flag.String("resource-profile", "", uiText("launcher.linux.flag.resource_profile"))
+	flag.IntVar(&cfg.diskGiB, "disk-size", 0, uiText("launcher.linux.flag.disk_size"))
+	renderFlag := flag.String("render", "", uiText("launcher.linux.flag.render"))
+	venusFlag := flag.String("venus", "auto", uiText("launcher.linux.flag.venus"))
+	scaleFlag := flag.String("scale", "auto", uiText("launcher.linux.flag.scale"))
+	audioFlag := flag.String("audio", "auto", uiText("launcher.linux.flag.audio"))
+	audioOutput := flag.String("audio-output", "", uiText("launcher.linux.flag.audio_output"))
+	audioInput := flag.String("audio-input", "", uiText("launcher.linux.flag.audio_input"))
+	microphone := flag.Bool("microphone", true, uiText("launcher.linux.flag.microphone"))
+	vulkanPresentFlag := flag.String("vulkan-present", "auto", uiText("launcher.linux.flag.vulkan_present"))
+	timeZoneFlag := flag.String("timezone", "", uiText("launcher.linux.flag.timezone"))
+	keyboardFlag := flag.String("keyboard", "", uiText("launcher.linux.flag.keyboard"))
+	localeFlag := flag.String("locale", "", uiText("launcher.linux.flag.locale"))
+	flag.BoolVar(&cfg.instant, "instant", false, uiText("launcher.linux.flag.instant"))
 	var forwards forwardList
-	flag.Var(&forwards, "forward", "forward a local port into Omarchy: tcp:2222:22; repeatable")
-	sshPort := flag.Int("ssh", 0, "forward this loopback port to Omarchy's sshd and start sshd for the session")
-	sshKeyPath := flag.String("ssh-key", "", "public key to authorize for the Omarchy account (default: your ~/.ssh/id_*.pub when -ssh is used)")
-	width := flag.Int("width", 1280, "initial guest display width")
-	height := flag.Int("height", 800, "initial guest display height")
-	release := flag.String("release", linuxGuestReleaseURL, "base URL the guest image is downloaded from on first run")
-	sumsSHA256 := flag.String("sums-sha256", linuxGuestSumsSHA256, "trusted SHA256 digest of the release's SHA256SUMS file")
-	noGUI := flag.Bool("no-gui", false, "show setup status in the terminal only")
-	startDirect := flag.Bool("start", false, "start Omarchy without the launcher home")
-	showLauncher := flag.Bool("launcher", false, "show the launcher home even with other options")
-	autostart := flag.Bool("autostart", false, "open the launcher at login using saved startup preferences")
-	reclaim := flag.Bool("reclaim", false, "ask the running Omarchy to prepare its free space, so its disk file shrinks after shutdown, then exit")
+	flag.Var(&forwards, "forward", uiText("launcher.linux.flag.forward"))
+	sshPort := flag.Int("ssh", 0, uiText("launcher.linux.flag.ssh"))
+	sshKeyPath := flag.String("ssh-key", "", uiText("launcher.linux.flag.ssh_key"))
+	width := flag.Int("width", 1280, uiText("launcher.linux.flag.width"))
+	height := flag.Int("height", 800, uiText("launcher.linux.flag.height"))
+	release := flag.String("release", linuxGuestReleaseURL, uiText("launcher.linux.flag.release"))
+	sumsSHA256 := flag.String("sums-sha256", linuxGuestSumsSHA256, uiText("launcher.linux.flag.sums_sha256"))
+	noGUI := flag.Bool("no-gui", false, uiText("launcher.linux.flag.no_gui"))
+	startDirect := flag.Bool("start", false, uiText("launcher.linux.flag.start"))
+	showLauncher := flag.Bool("launcher", false, uiText("launcher.linux.flag.launcher"))
+	autostart := flag.Bool("autostart", false, uiText("launcher.linux.flag.autostart"))
+	reclaim := flag.Bool("reclaim", false, uiText("launcher.linux.flag.reclaim"))
 	flag.Parse()
 	if *reclaim {
 		// The running launcher owns the lifecycle port; this only talks to it.
@@ -139,12 +139,12 @@ func main() {
 	// desktop launch waits for an explicit Launch choice; CLI use stays direct.
 	runLifecycleListener()
 	if err := recoverLinuxMove(defaultLinuxDataDirectory()); err != nil {
-		fatalf("Could not finish moving the Omarchy data folder: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_finish_moving_the_omarchy_data_folder", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if explicitFlags["dir"] {
 		resolved, err := resolveLinuxMovedDirectory(defaultLinuxDataDirectory(), cfg.dir)
 		if err != nil {
-			fatalf("Cannot read the data folder move record: %v", err)
+			fatal(uiTextWith("settings.linux.cannot_read_the_data_folder_move_record", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		cfg.dir = resolved
 	}
@@ -160,7 +160,7 @@ func main() {
 	selectedRelease, selectedSumsSHA256, err := selectLinuxGuestRelease(*release, *sumsSHA256,
 		explicitFlags["release"], explicitFlags["sums-sha256"])
 	if err != nil {
-		fatalf("Cannot select the Linux Omarchy image: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_select_the_linux_omarchy_image_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 
 	if err := checkKVM(); err != nil {
@@ -168,7 +168,7 @@ func main() {
 	}
 	qemu, err := exec.LookPath(cfg.qemu)
 	if err != nil {
-		fatalf("Cannot find QEMU (%s): %v", cfg.qemu, err)
+		fatal(uiTextWith("fatal.linux.cannot_find_qemu_s_v", map[string]string{"qemu": cfg.qemu, "error": fmt.Sprintf("%v", err)}))
 	}
 	cfg.qemu = qemu
 	cfg.supportsSharing = true
@@ -179,7 +179,7 @@ func main() {
 	}
 	selected, proceed, err := resolveLinuxDataDirectory(defaultLinuxDataDirectory(), cfg.dir, explicitFlags["dir"], chooser)
 	if err != nil {
-		fatalf("Cannot select the data folder: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_select_the_data_folder_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if !proceed {
 		return
@@ -189,7 +189,7 @@ func main() {
 		noteLinuxLocationHint(defaultLinuxDataDirectory(), selected)
 	}
 	if cfg.dir, err = filepath.Abs(cfg.dir); err != nil {
-		fatalf("Cannot resolve the data directory: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_resolve_the_data_directory_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	cfg.hostDir = cfg.dir
 	cfg.guestDir = filepath.Join(cfg.dir, "guest")
@@ -200,10 +200,10 @@ func main() {
 	// An interrupted roll back can have moved vm aside. Finish or undo it
 	// before anything creates or reads the VM's files.
 	if err := recoverLinuxSnapshots(cfg.dir); err != nil {
-		fatalf("Could not finish an interrupted snapshot operation: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_finish_an_interrupted_snapshot_operation_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if err := os.MkdirAll(cfg.vmDir, 0o700); err != nil {
-		fatalf("Could not create the Omarchy data directory: %v", err)
+		fatal(uiTextWith("fatal.data_directory", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if shellLog, _ := os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); shellLog != nil {
 		openLog(shellLog)
@@ -217,10 +217,10 @@ func main() {
 	}
 
 	if cfg.desktop, err = loadDesktopPreferences(cfg.dir); err != nil {
-		fatalf("Cannot read device and update preferences: %v", err)
+		fatal(uiTextWith("fatal.preferences.desktop", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if cfg.audioDevices, err = loadAudioPreferences(cfg.dir); err != nil {
-		fatalf("Cannot read audio preferences: %v", err)
+		fatal(uiTextWith("fatal.preferences.audio", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if explicitFlags["audio-output"] {
 		cfg.audioDevices.Output = *audioOutput
@@ -232,11 +232,11 @@ func main() {
 		cfg.desktop.MicrophoneDisabled = !*microphone
 	}
 	if err := cfg.audioDevices.validate(); err != nil {
-		fatalf("Cannot use audio devices: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_use_audio_devices_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	experience, err := loadLinuxExperiencePreferences(cfg.dir)
 	if err != nil {
-		fatalf("Cannot read display and keyboard preferences: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_read_display_and_keyboard_preferences_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if !explicitFlags["scale"] {
 		*scaleFlag = experience.Scale
@@ -249,14 +249,14 @@ func main() {
 	}
 	userSettings, err := loadSettings(settingsPath(cfg.dir))
 	if err != nil {
-		fatalf("Cannot read its settings: %v\n\nFix or delete %s and try again.", err, settingsPath(cfg.dir))
+		fatal(uiTextWith("fatal.linux.cannot_read_its_settings_v_fix_or_delete", map[string]string{"error": fmt.Sprintf("%v", err), "path": settingsPath(cfg.dir)}))
 	}
 	if err := applySettings(cfg, userSettings, explicitFlags, &forwards, sshKeyPath); err != nil {
-		fatalf("Cannot use its settings: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_use_its_settings_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	resourcePrefs, err := loadResourcePreferences(cfg.dir)
 	if err != nil {
-		fatalf("Cannot read resource preferences: %v", err)
+		fatal(uiTextWith("fatal.preferences.resources", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if explicitFlags["resource-profile"] {
 		resourcePrefs.Profile = *resourceProfileFlag
@@ -270,12 +270,12 @@ func main() {
 		}
 	}
 	if cfg.memOverrideMiB != 0 && (cfg.memOverrideMiB < minimumGuestMemoryMiB || cfg.memOverrideMiB > maximumGuestMemoryMiB) {
-		fatalf("-memory must be between %d and %d MiB.", minimumGuestMemoryMiB, maximumGuestMemoryMiB)
+		fatal(uiTextWith("fatal.linux.memory_must_be_between_d_and_d_mib", map[string]string{"minimum": fmt.Sprintf("%d", minimumGuestMemoryMiB), "maximum": fmt.Sprintf("%d", maximumGuestMemoryMiB)}))
 	}
 	if !explicitFlags["disk-size"] {
 		storage, err := loadStorageSettings(cfg.dir)
 		if err != nil {
-			fatalf("Cannot read storage preferences: %v", err)
+			fatal(uiTextWith("fatal.preferences.storage", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		cfg.diskGiB = storage.DiskGiB
 	}
@@ -301,7 +301,7 @@ func main() {
 		}
 	}
 	if err := chooseLinuxProvisionMode(cfg, explicitFlags["instant"], chooseAccount); err != nil {
-		fatalf("Cannot select the account setup: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_select_the_account_setup_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	// A shared folder is chosen in Settings. Asking at first setup put a third
 	// question in front of the desktop, so only -choose-share asks it here.
@@ -312,14 +312,14 @@ func main() {
 		}
 	}
 	if *chooseShare && chooseFolder == nil {
-		fatalf("Choosing a shared folder requires the setup window. Use -share with an accessible folder in terminal mode.")
+		fatal(uiText("fatal.linux.choosing_a_shared_folder_requires_the_setup_window"))
 	}
 	if err := configureLinuxSharing(cfg, &userSettings, explicitFlags["share"], *chooseShare, chooseFolder); err != nil {
-		fatalf("Cannot configure the shared folder: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_configure_the_shared_folder_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if cfg.share != "" {
 		if cfg.share, err = validateLinuxSharedFolder(cfg.share, cfg.dir); err != nil {
-			fatalf("Cannot share %s: %v", cfg.share, err)
+			fatal(uiTextWith("fatal.linux.cannot_share_s_v", map[string]string{"path": cfg.share, "error": fmt.Sprintf("%v", err)}))
 		}
 	}
 	if err := checkSetupCancelled(); err != nil {
@@ -333,13 +333,13 @@ func main() {
 	}
 
 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
-		fatalf("Could not restore the previous Omarchy image after an interrupted update: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_restore_the_previous_omarchy_image_after", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	// A rolled-back VM first boots on the system files saved with it. A newer
 	// image, if this app pins one, is fetched on the launch after that.
 	var runtimeRelease, runtimeSums string
 	if pinned, err := pinCheckpointBoot(cfg.dir, explicitFlags, &selectedRelease, &selectedSumsSHA256, &runtimeRelease, &runtimeSums); err != nil {
-		fatalf("Could not prepare the snapshot you rolled back to: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_prepare_the_snapshot_you_rolled_back", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	} else if pinned {
 		logf("snapshots: first boot after roll back uses its saved system files (%s)", releaseVersion(selectedRelease))
 	}
@@ -348,11 +348,11 @@ func main() {
 	}
 	specData, err := os.ReadFile(filepath.Join(cfg.guestDir, "build-spec.json"))
 	if err != nil {
-		fatalf("Cannot read build-spec.json: %v", err)
+		fatal(uiTextWith("fatal.build_spec.read", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	var spec buildSpec
 	if err := json.Unmarshal(specData, &spec); err != nil {
-		fatalf("Cannot parse build-spec.json: %v", err)
+		fatal(uiTextWith("fatal.build_spec.parse", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
 	cfg.followHostTimeZone = strings.TrimSpace(*timeZoneFlag) != "keep" && guestAcceptsTimeZone(spec)
@@ -391,7 +391,7 @@ func main() {
 	allocation, err := planGuestResources(profile, host, cfg.useGpu, cfg.cpuOverride, cfg.memOverrideMiB,
 		explicitFlags["cpus"], explicitFlags["memory"])
 	if err != nil {
-		fatalf("Cannot allocate resources: %s", linuxResourceErrorText(err))
+		fatal(uiTextWith("fatal.resources", map[string]string{"error": linuxResourceErrorText(err)}))
 	}
 	cfg.cpus, cfg.memMiB, cfg.hostTotalMiB = allocation.CPUs, allocation.MemoryMiB, host.TotalMiB
 	logf("resources: profile=%s, %d of %d logical processors, %d MiB guest RAM; host available=%d MiB, CPU sample known=%t busy=%.1f%%",
@@ -432,7 +432,7 @@ func main() {
 		}
 	}
 	if err := checkForwardBindings(cfg.forwards); err != nil {
-		fatalf("Could not prepare port forwarding:\n\n%v", err)
+		fatal(uiTextWith("fatal.forwarding", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 
 	// The first interrupt asks the guest to shut down; a second one stops QEMU.
@@ -466,13 +466,13 @@ func validateLinuxSharedFolder(path, dataDir string) (string, error) {
 		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("not a folder")
+		return "", uiError(uiText("share.linux.not_folder"), nil)
 	}
 	if linuxPathWithin(abs, dataDir) {
-		return "", fmt.Errorf("it contains the Try Omarchy data folder")
+		return "", uiError(uiText("share.linux.contains_data"), nil)
 	}
 	if linuxPathWithin(dataDir, abs) {
-		return "", fmt.Errorf("it is inside the Try Omarchy data folder")
+		return "", uiError(uiText("share.linux.inside_data"), nil)
 	}
 	return abs, nil
 }
@@ -554,5 +554,5 @@ func vulkanPresentMode(flagValue string, nvidiaOnly bool) (string, error) {
 	case "gpu", "cpu":
 		return flagValue, nil
 	}
-	return "", fmt.Errorf("-vulkan-present must be auto, gpu, or cpu")
+	return "", uiError(uiText("error.linux.vulkan_present"), nil)
 }

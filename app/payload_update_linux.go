@@ -16,6 +16,6 @@ func recoverLinuxGuestUpdate(dir string, release, sumsSHA256 *string) error {
 		return err
 	}
 	logf("restored the previous guest image after an unconfirmed update")
-	showLinuxRuntimeError("Omarchy update", "The updated Omarchy image did not finish starting last time, so Try Omarchy restored the previous image. Your files stay in place. Try Omarchy will try the update again next time.")
+	showLinuxRuntimeError(uiText("update.linux.title"), uiText("update.linux.restored_previous"))
 	return nil
 }

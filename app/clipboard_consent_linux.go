@@ -60,12 +60,12 @@ func setLinuxClipboardSharing(on bool) error {
 }
 
 func linuxClipboardConsentState() linuxSetupState {
-	return linuxSetupState{Prompt: "choice", Title: "Share your clipboard with Omarchy?", Primary: "Continue", Secondary: "Not now",
-		Status: "Copy and paste between your desktop and Omarchy needs GNOME's permission. GNOME asks in a window called Remote Desktop.",
+	return linuxSetupState{Prompt: "choice", Title: uiText("settings.clipboard.linux.share_your_clipboard_with_omarchy"), Primary: uiText("setup.continue"), Secondary: uiText("setup.share.no"),
+		Status: uiText("settings.clipboard.linux.copy_and_paste_between_your_desktop_and_omarchy"),
 		Sections: []linuxSection{{Rows: []linuxRow{
-			{Title: "In GNOME's window", Detail: "Turn on Allow Clipboard Access. GNOME only enables Share once Allow Remote Interaction is on too. Then press Share."},
-			{Title: "What Try Omarchy does with it", Detail: "It shares the clipboard and nothing else. It never moves your pointer or types for you."},
-			{Title: "If you skip this", Detail: "Omarchy works the same, and you can still drop files on its window. Turn clipboard sharing on later in Settings."},
+			{Title: uiText("settings.clipboard.linux.in_gnome_s_window"), Detail: uiText("settings.clipboard.linux.turn_on_allow_clipboard_access_gnome_only_enables")},
+			{Title: uiText("settings.clipboard.linux.what_try_omarchy_does_with_it"), Detail: uiText("settings.clipboard.linux.it_shares_the_clipboard_and_nothing_else_it")},
+			{Title: uiText("settings.clipboard.linux.if_you_skip_this"), Detail: uiText("settings.clipboard.linux.omarchy_works_the_same_and_you_can_still")},
 		}}}}
 }
 
@@ -109,6 +109,6 @@ func rememberLinuxClipboardDenial(err error) {
 	}
 }
 
-const linuxClipboardHowToTurnOn = "Omarchy works normally and you can still drop files on its window. To turn it on, open Try Omarchy, choose Settings, and check Share the clipboard with Omarchy."
+var linuxClipboardHowToTurnOn = uiText("settings.clipboard.linux.omarchy_works_normally_and_you_can_still_drop")
 
-const linuxClipboardOffMessage = "Clipboard sharing is off. " + linuxClipboardHowToTurnOn
+var linuxClipboardOffMessage = uiTextWith("settings.clipboard.linux.clipboard_sharing_is_off", map[string]string{"linux_clipboard_how_to_turn_on": linuxClipboardHowToTurnOn})

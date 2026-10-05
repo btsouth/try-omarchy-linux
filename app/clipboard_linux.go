@@ -30,7 +30,7 @@ var linuxClipboardStatus atomic.Value
 func setLinuxClipboardStatus(message string, visible bool) {
 	linuxClipboardStatus.Store(message)
 	if visible {
-		showLinuxRuntimeError("Clipboard access", message)
+		showLinuxRuntimeError(uiText("settings.clipboard.linux.clipboard_access"), message)
 	}
 }
 
@@ -156,7 +156,7 @@ func (c *linuxClipboard) sequence() uint32 {
 		var grantErr error
 		c.paths, grantErr = linuxPortalClipboardFiles(string(data))
 		if grantErr != nil {
-			setLinuxClipboardStatus("Could not access files copied from the desktop: "+grantErr.Error(), true)
+			setLinuxClipboardStatus(uiTextWith("settings.clipboard.linux.access_files_error", map[string]string{"error": grantErr.Error()}), true)
 		}
 	case "text/uri-list":
 		c.paths, _ = linuxClipboardPaths(data)
@@ -268,9 +268,9 @@ func runLinuxClipboardBridge() func() {
 			supported = false
 		} else if portal, err := linuxPortalClipboardSession(c); err != nil {
 			rememberLinuxClipboardDenial(err)
-			message := "GNOME did not allow clipboard sharing, so it is off. " + linuxClipboardHowToTurnOn
+			message := uiTextWith("settings.clipboard.linux.denied", map[string]string{"help": linuxClipboardHowToTurnOn})
 			if !errors.Is(err, errLinuxClipboardDenied) {
-				message = "GNOME did not answer the clipboard request in time, so sharing is off for this session. Quit Omarchy and start it again to be asked once more. You can still drop files on its window."
+				message = uiText("settings.clipboard.linux.timed_out")
 			}
 			// Declining an optional permission is a choice, not an error.
 			// The explanation already says how to enable it later.
@@ -279,11 +279,11 @@ func runLinuxClipboardBridge() func() {
 			supported = false
 		} else {
 			c.portal = portal
-			setLinuxClipboardStatus("GNOME clipboard access granted.", false)
+			setLinuxClipboardStatus(uiText("settings.clipboard.linux.gnome_granted"), false)
 		}
 		names = nil
 	} else if _, err := clipboardCommand(nil, 128, "try-omarchy-clipboard-capabilities"); err != nil {
-		message := "Automatic clipboard sharing is unavailable in this session. You can still drop files on Omarchy or use a shared folder."
+		message := uiText("settings.clipboard.linux.unavailable")
 		// Missing optional compositor support is a capability notice, not a
 		// runtime error. A separate window disrupts tiling desktops at startup.
 		setLinuxClipboardStatus(message, false)
@@ -322,7 +322,7 @@ func runLinuxClipboardBridge() func() {
 		listeners = append(listeners, l)
 	}
 	if supported {
-		setLinuxClipboardStatus("Text, images, and files synchronize through the clipboard.", false)
+		setLinuxClipboardStatus(uiText("settings.clipboard.linux.synchronizes"), false)
 	}
 	if supported {
 		c.sequence()
@@ -331,7 +331,7 @@ func runLinuxClipboardBridge() func() {
 		sequence: c.sequence, dropRequests: make(chan droppedFiles, 8),
 		transferError: func(err error) {
 			logf("file transfer: %v", err)
-			showLinuxRuntimeError("File transfer failed", err.Error())
+			showLinuxRuntimeError(uiText("error.linux.file_transfer_failed"), err.Error())
 		},
 		setDropPaths: c.setPaths, transfers: newFileTransferService(cache, clipboardTransferLimits), showTransfer: showLinuxTransfer}
 	if !supported {

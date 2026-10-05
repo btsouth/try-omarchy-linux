@@ -119,6 +119,11 @@ func launchLinuxSetupWindow(cmd *exec.Cmd) *linuxSetupWindow {
 }
 
 func launchLinuxWindow(cmd *exec.Cmd, cancel func()) *linuxSetupWindow {
+	labels, err := json.Marshal(linuxUILabels())
+	if err != nil {
+		panic(err)
+	}
+	cmd.Env = append(cmd.Environ(), "TRY_OMARCHY_UI_MESSAGES="+string(labels))
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		return nil

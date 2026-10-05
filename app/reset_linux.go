@@ -16,45 +16,45 @@ const linuxResetRetainedPrefix = "before-reset-"
 
 func resetLinuxVM(w *linuxSetupWindow, dir string) string {
 	if !completeInstallExists(dir, "disk.raw") {
-		return "There is no complete VM here to reset."
+		return uiText("recovery.linux.there_is_no_complete_vm_here_to_reset")
 	}
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Start over with a clean VM?", Primary: "Back up first", Secondary: "Reset without backup", Destructive: true,
-		Status: "Resetting replaces the Omarchy guest with a clean one: its account, installed apps and files inside Omarchy. Settings and shared folders are kept, and the next launch sets up the same kind of account as before.\n\nThe current disk is kept in this VM's folder until you remove it from Backup and recovery."})
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiText("recovery.linux.start_over_with_a_clean_vm"), Primary: uiText("recovery.linux.back_up_first"), Secondary: uiText("recovery.linux.reset_without_backup"), Destructive: true,
+		Status: uiText("recovery.linux.resetting_replaces_the_omarchy_guest_with_a_clean")})
 	if err != nil || (answer != "primary" && answer != "secondary") {
-		return "The VM was kept."
+		return uiText("settings.linux.the_vm_was_kept")
 	}
 	if answer == "primary" {
 		result, saved := backupLinuxVM(w, dir)
 		if !saved {
 			if result == "" {
-				return "The VM was kept."
+				return uiText("settings.linux.the_vm_was_kept")
 			}
-			return result + " The VM was not reset."
+			return uiTextWith("recovery.linux.the_vm_was_not_reset", map[string]string{"result": result})
 		}
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "guest", "build-spec.json"))
 	if err != nil {
-		return "Could not reset the VM: " + err.Error()
+		return uiTextWith("recovery.linux.could_not_reset_the_vm", map[string]string{"error": err.Error()})
 	}
 	var spec buildSpec
 	if err := json.Unmarshal(data, &spec); err != nil {
-		return "Could not reset the VM: " + err.Error()
+		return uiTextWith("recovery.linux.could_not_reset_the_vm", map[string]string{"error": err.Error()})
 	}
 	storage, err := loadStorageSettings(dir)
 	if err != nil {
-		return "Could not reset the VM: " + err.Error()
+		return uiTextWith("recovery.linux.could_not_reset_the_vm", map[string]string{"error": err.Error()})
 	}
 	cfg := &config{dir: dir, guestDir: filepath.Join(dir, "guest"), vmDir: filepath.Join(dir, "vm"), disk: filepath.Join(dir, "vm", "disk.raw"), diskFormat: "raw", diskGiB: storage.DiskGiB}
 	configureSetupCancellation(false)
 	linuxRecoveryActive.Store(true)
-	w.update(linuxSetupState{Status: "Preparing a clean Omarchy disk..."})
+	w.update(linuxSetupState{Status: uiText("recovery.linux.preparing_a_clean_omarchy_disk")})
 	old, err := resetStandardDisk(cfg, spec.Runtime.Storage.ExpandedSizeMiB)
 	linuxRecoveryActive.Store(false)
 	configureSetupCancellation(false)
 	if err != nil {
 		return linuxRecoveryResult(err, "")
 	}
-	return "The VM will start clean at its next launch. The previous disk is kept at " + old + " until you remove it from Backup and recovery."
+	return uiTextWith("recovery.linux.the_vm_will_start_clean_at_its_next", map[string]string{"path": old})
 }
 
 // linuxRetainedResetDisks lists the disks kept by earlier resets, oldest first.
@@ -89,11 +89,11 @@ func removeLinuxRetainedResetDisks(dir string) error {
 			return err
 		}
 		if len(entries) != 1 || entries[0].Name() != "disk.raw" {
-			return fmt.Errorf("the kept disk folder contains unexpected files; nothing in that folder was removed: %s", filepath.Dir(disk))
+			return uiError(uiTextWith("recovery.linux.the_kept_disk_folder_contains_unexpected_files_nothing", map[string]string{"path": filepath.Dir(disk)}), nil)
 		}
 		held, err := openBackupDisk(disk)
 		if err != nil {
-			return fmt.Errorf("the kept disk is in use: %w", err)
+			return uiError(uiTextWith("recovery.linux.the_kept_disk_is_in_use", map[string]string{"error": fmt.Sprint(err)}), err)
 		}
 		if err := os.Remove(disk); err != nil {
 			held.Close()
@@ -101,7 +101,7 @@ func removeLinuxRetainedResetDisks(dir string) error {
 		}
 		held.Close()
 		if err := os.Remove(filepath.Dir(disk)); err != nil {
-			return fmt.Errorf("removed the kept disk but not its folder: %w", err)
+			return uiError(uiTextWith("recovery.linux.removed_the_kept_disk_but_not_its_folder", map[string]string{"error": fmt.Sprint(err)}), err)
 		}
 	}
 	return nil
@@ -110,15 +110,15 @@ func removeLinuxRetainedResetDisks(dir string) error {
 func cleanupLinuxResetDisks(w *linuxSetupWindow, dir string) string {
 	disks := linuxRetainedResetDisks(dir)
 	if len(disks) == 0 {
-		return "There is no disk kept from a reset."
+		return uiText("recovery.linux.there_is_no_disk_kept_from_a_reset")
 	}
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Remove the disk kept from reset?", Primary: "Keep it", Secondary: "Remove kept disk", Destructive: true,
-		Status: "Permanently remove all disks kept from previous resets? Files inside them will be lost. The current VM is not affected.\n\n" + strings.Join(disks, "\n")})
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiText("recovery.linux.remove_the_disk_kept_from_reset"), Primary: uiText("recovery.linux.keep_it"), Secondary: uiText("recovery.linux.remove_kept_disk"), Destructive: true,
+		Status: uiTextWith("recovery.linux.permanently_remove_all_disks_kept_from_previous_resets", map[string]string{"names": strings.Join(disks, "\n")})})
 	if err != nil || answer != "secondary" {
-		return "The kept disk was not removed."
+		return uiText("recovery.linux.the_kept_disk_was_not_removed")
 	}
 	if err := removeLinuxRetainedResetDisks(dir); err != nil {
-		return "Could not remove the kept disk: " + err.Error()
+		return uiTextWith("recovery.linux.could_not_remove_the_kept_disk", map[string]string{"error": err.Error()})
 	}
-	return "The disk kept from the reset was removed."
+	return uiText("recovery.linux.the_disk_kept_from_the_reset_was_removed")
 }

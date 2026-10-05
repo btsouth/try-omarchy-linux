@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 )
@@ -41,7 +40,7 @@ func linuxHelpURL(section string) string {
 
 func selectLinuxGuestRelease(release, sumsSHA256 string, releaseExplicit, sumsExplicit bool) (string, string, error) {
 	if releaseExplicit != sumsExplicit {
-		return "", "", fmt.Errorf("a custom Omarchy image needs both -release and -sums-sha256")
+		return "", "", uiError(uiText("error.linux.custom_image_flags"), nil)
 	}
 	if !releaseExplicit {
 		release, sumsSHA256 = linuxGuestReleaseURL, linuxGuestSumsSHA256
@@ -49,14 +48,14 @@ func selectLinuxGuestRelease(release, sumsSHA256 string, releaseExplicit, sumsEx
 	release = normalizedRelease(release)
 	sumsSHA256 = normalizedSHA256(sumsSHA256)
 	if !validSHA256(sumsSHA256) {
-		return "", "", fmt.Errorf("the Linux Omarchy image has no valid trusted SHA256SUMS digest")
+		return "", "", uiError(uiText("error.linux.image_digest"), nil)
 	}
 	u, err := url.Parse(release)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return "", "", fmt.Errorf("the Linux Omarchy image URL is invalid")
+		return "", "", uiError(uiText("error.linux.image_url"), nil)
 	}
 	if u.Scheme == "http" && !strings.EqualFold(u.Hostname(), "localhost") && u.Hostname() != "127.0.0.1" && u.Hostname() != "[::1]" && u.Hostname() != "::1" {
-		return "", "", fmt.Errorf("the Linux Omarchy image needs HTTPS outside local test fixtures")
+		return "", "", uiError(uiText("error.linux.image_https"), nil)
 	}
 	return release, sumsSHA256, nil
 }

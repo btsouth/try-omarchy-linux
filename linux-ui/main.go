@@ -136,11 +136,10 @@ type audioDevice struct {
 }
 
 func keyboardHelpText(host string) string {
-	text := "Host layout could not be detected. Choose a layout explicitly, or keep the guest choice."
 	if host != "" {
-		text = "Detected host layout: " + host + ". Host layout changes while Omarchy runs apply on its next launch."
+		return uiTextWith("settings.linux.keyboard_detected", map[string]string{"layout": host})
 	}
-	return text + " Press Ctrl+Alt+G to release keyboard capture."
+	return uiText("settings.linux.keyboard_undetected")
 }
 
 func namedChoices(defaultLabel, unavailableLabel string, devices []audioDevice, selected string) (labels, names []string, index uint) {
@@ -238,17 +237,17 @@ func fillSections(box *gtk.Box, sections []section, choose func(string)) {
 				item.AddPrefix(icon)
 			}
 			if r.State != "" {
-				text, style := "Next launch", "dim-label"
+				text, style := uiText("launcher.linux.next_launch"), "dim-label"
 				switch r.State {
 				case "enabled":
-					text, style = "On", "success"
-					if r.Title == "Microphone" || r.Title == "Camera" {
-						text = "Allowed"
+					text, style = uiText("launcher.linux.on"), "success"
+					if r.Title == uiText("settings.sound.microphone") || r.Title == uiText("settings.camera.camera") {
+						text = uiText("launcher.linux.allowed")
 					}
 				case "disabled":
-					text = "Off"
+					text = uiText("launcher.linux.off")
 				case "unavailable":
-					text, style = "Unavailable", "warning"
+					text, style = uiText("launcher.linux.unavailable"), "warning"
 				}
 				status := gtk.NewLabel(text)
 				status.AddCSSClass(style)
@@ -301,13 +300,13 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	glib.SetPrgname("com.tryomarchy.TryOmarchy")
-	glib.SetApplicationName("Try Omarchy")
+	glib.SetApplicationName(uiText("brand.name"))
 	app := adw.NewApplication("com.tryomarchy.TryOmarchy", gio.ApplicationNonUnique)
 	app.ConnectActivate(func() {
 		window := adw.NewApplicationWindow(&app.Application)
 		var current state
 		answered := false
-		window.SetTitle("Try Omarchy")
+		window.SetTitle(uiText("brand.name"))
 		window.SetDefaultSize(640, 700)
 		window.SetResizable(true)
 		applyBrand(window)
@@ -318,8 +317,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		// Less common home actions sit behind the header's overflow button.
 		menuButton := gtk.NewMenuButton()
 		menuButton.SetIconName("view-more-symbolic")
-		menuButton.SetTooltipText("More actions")
-		named(menuButton, "More actions")
+		menuButton.SetTooltipText(uiText("launcher.linux.more_actions"))
+		named(menuButton, uiText("launcher.linux.more_actions"))
 		menuButton.SetVisible(false)
 		menuPopover := gtk.NewPopover()
 		menuBox := gtk.NewBox(gtk.OrientationVertical, 2)
@@ -383,7 +382,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		pageIcon.AddCSSClass("error")
 		pageIcon.SetVisible(false)
 		content.Append(pageIcon)
-		label := gtk.NewLabel("Preparing Omarchy...")
+		label := gtk.NewLabel(uiText("launcher.linux.preparing_omarchy"))
 		label.SetWrap(true)
 		label.SetWrapMode(pango.WrapWordChar)
 		label.SetMaxWidthChars(48)
@@ -394,8 +393,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		pageSections.SetVisible(false)
 		content.Append(pageSections)
 		accountOptions := gtk.NewBox(gtk.OrientationVertical, 16)
-		personalAccount := gtk.NewCheckButtonWithLabel("My own username and password (recommended)")
-		quickAccount := gtk.NewCheckButtonWithLabel("Quick start (omarchy / omarchy)")
+		personalAccount := gtk.NewCheckButtonWithLabel(uiText("setup.account.personal"))
+		quickAccount := gtk.NewCheckButtonWithLabel(uiText("setup.account.quick"))
 		quickAccount.SetGroup(personalAccount)
 		personalAccount.SetActive(true)
 		accountOptions.Append(personalAccount)
@@ -405,11 +404,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		nameEntry := gtk.NewEntry()
 		nameEntry.SetMaxLength(80)
 		nameEntry.SetActivatesDefault(true)
-		named(nameEntry, "Snapshot name")
+		named(nameEntry, uiText("snapshots.name"))
 		nameEntry.SetVisible(false)
 		content.Append(nameEntry)
 		progress := gtk.NewProgressBar()
-		named(progress, "Progress")
+		named(progress, uiText("launcher.linux.progress"))
 		content.Append(progress)
 		detail := gtk.NewLabel("")
 		detail.SetWrap(true)
@@ -420,7 +419,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		detail.AddCSSClass("dim-label")
 		detail.SetVisible(false)
 		content.Append(detail)
-		helpLink := gtk.NewLinkButtonWithLabel("", "How to fix this")
+		helpLink := gtk.NewLinkButtonWithLabel("", uiText("launcher.linux.how_to_fix_this"))
 		helpLink.SetVisible(false)
 		content.Append(helpLink)
 		homeContent := gtk.NewBox(gtk.OrientationVertical, 12)
@@ -453,7 +452,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		homeSections := gtk.NewBox(gtk.OrientationVertical, 12)
 		homeContent.Append(homeSections)
 		homeSetup := gtk.NewBox(gtk.OrientationVertical, 12)
-		homeDetails := gtk.NewExpander("What setup does")
+		homeDetails := gtk.NewExpander(uiText("launcher.linux.what_setup_does"))
 		homeDetails.SetChild(homeSetup)
 		homeContent.Append(homeDetails)
 		homeClamp := adw.NewClamp()
@@ -486,7 +485,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		form.SetHhomogeneous(false)
 		form.SetVhomogeneous(false)
 		form.AddCSSClass("settings-pages")
-		named(form, "Settings pages")
+		named(form, uiText("settings.linux.settings_pages"))
 		settingsTabs := gtk.NewStackSwitcher()
 		settingsTabs.SetStack(form)
 		settingsTabs.SetHAlign(gtk.AlignFill)
@@ -500,7 +499,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		for _, title := range []string{"General", "Devices", "Advanced"} {
 			body := gtk.NewBox(gtk.OrientationVertical, 20)
 			settingsPages[title] = body
-			form.AddTitled(body, title, title)
+			pageLabels := map[string]string{"General": uiText("settings.tab.general"), "Devices": uiText("settings.tab.devices"), "Advanced": uiText("settings.tab.advanced")}
+			form.AddTitled(body, title, pageLabels[title])
 		}
 		settingsPages["Devices"].Append(settingsStatus)
 		var groupContent *gtk.Box
@@ -548,17 +548,17 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			formField(title, input)
 			return input
 		}
-		beginGroup("Display and startup", "General")
-		fullscreen := gtk.NewCheckButtonWithLabel("Open fullscreen")
+		beginGroup(uiText("settings.section.display"), "General")
+		fullscreen := gtk.NewCheckButtonWithLabel(uiText("settings.linux.open_fullscreen"))
 		groupContent.Append(fullscreen)
-		fullscreenDisplay := gtk.NewDropDownFromStrings([]string{"Automatic"})
-		named(fullscreenDisplay, "Fullscreen display")
-		formField("Fullscreen display", fullscreenDisplay)
+		fullscreenDisplay := gtk.NewDropDownFromStrings([]string{uiText("settings.graphics.automatic")})
+		named(fullscreenDisplay, uiText("settings.display.fullscreen_display"))
+		formField(uiText("settings.display.fullscreen_display"), fullscreenDisplay)
 		fullscreenDisplayNames := []string{""}
-		formHelp("Automatic lets your desktop choose. A change applies the next time Omarchy starts.")
+		formHelp(uiText("settings.linux.automatic_lets_your_desktop_choose_a_change_applies"))
 		fullscreen.ConnectToggled(func() { fullscreenDisplay.SetSensitive(fullscreen.Active()) })
 		showDisplays := func(selected string) {
-			labels, names, index := namedChoices("Automatic", "Not connected: ", connectedDisplays(), selected)
+			labels, names, index := namedChoices(uiText("settings.graphics.automatic"), uiText("settings.linux.not_connected"), connectedDisplays(), selected)
 			fullscreenDisplayNames = names
 			fullscreenDisplay.SetModel(gtk.NewStringList(labels))
 			fullscreenDisplay.SetSelected(index)
@@ -568,17 +568,17 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				showDisplays(fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)])
 			})
 		}
-		startAutomatically := gtk.NewCheckButtonWithLabel("Start Omarchy when I open Try Omarchy")
+		startAutomatically := gtk.NewCheckButtonWithLabel(uiText("settings.linux.start_omarchy_when_i_open_try_omarchy"))
 		groupContent.Append(startAutomatically)
-		launchAtSignIn := gtk.NewCheckButtonWithLabel("Start with login")
+		launchAtSignIn := gtk.NewCheckButtonWithLabel(uiText("settings.linux.start_with_login"))
 		groupContent.Append(launchAtSignIn)
-		formHelp("Open this launcher when you log in. Omarchy starts if automatic start is on.")
-		formHelp("Automatic start waits 10 seconds; Settings or Close stops it.")
-		fullscreen.SetTooltipText("Ctrl+Alt+F toggles fullscreen. Ctrl+Alt+G releases the keyboard.")
-		beginGroup("Resources", "General")
-		resourceProfile := gtk.NewDropDownFromStrings([]string{"Balanced (recommended)", "Maximum performance", "Manual"})
-		named(resourceProfile, "Resource profile")
-		formField("Resource profile", resourceProfile)
+		formHelp(uiText("settings.linux.open_this_launcher_when_you_log_in_omarchy"))
+		formHelp(uiText("settings.linux.automatic_start_waits_10_seconds_settings_or_close"))
+		fullscreen.SetTooltipText(uiText("settings.linux.ctrl_alt_f_toggles_fullscreen_ctrl_alt_g"))
+		beginGroup(uiText("settings.section.resources"), "General")
+		resourceProfile := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.balanced_recommended"), uiText("settings.resources.maximum"), uiText("settings.resources.manual")})
+		named(resourceProfile, uiText("settings.resources.profile"))
+		formField(uiText("settings.resources.profile"), resourceProfile)
 		resourceSummary := formHelp("")
 		automaticSummary := ""
 		resourceCard := groupContent
@@ -588,36 +588,36 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			manualResources.SetVisible(resourceProfile.Selected() == 2)
 			switch resourceProfile.Selected() {
 			case 1:
-				resourceSummary.SetText("Uses available resources at the next launch while leaving room for Linux. The running VM is not resized.")
+				resourceSummary.SetText(uiText("settings.linux.uses_available_resources_at_the_next_launch_while"))
 			case 2:
-				resourceSummary.SetText("Choose memory and processors below. Saved manual values are retained when you use another profile.")
+				resourceSummary.SetText(uiText("settings.linux.choose_memory_and_processors_below_saved_manual_values"))
 			default:
 				resourceSummary.SetText(automaticSummary)
 			}
 		}
 		resourceProfile.NotifyProperty("selected", updateResources)
 		groupContent = manualResources
-		formLabel("Memory for Omarchy (GiB)")
-		autoMemory := gtk.NewCheckButtonWithLabel("Choose memory automatically")
+		formLabel(uiText("settings.linux.memory_for_omarchy_gib"))
+		autoMemory := gtk.NewCheckButtonWithLabel(uiText("settings.linux.choose_memory_automatically"))
 		memory := gtk.NewSpinButtonWithRange(1, 64, 0.25)
 		memory.SetDigits(2)
 		memory.SetNumeric(true)
-		named(memory, "Memory for Omarchy in GiB")
+		named(memory, uiText("settings.linux.memory_for_omarchy_in_gib"))
 		groupContent.Append(autoMemory)
 		groupContent.Append(memory)
 		autoMemory.ConnectToggled(func() { memory.SetVisible(!autoMemory.Active()) })
-		formLabel("Processors")
-		autoCPUs := gtk.NewCheckButtonWithLabel("Choose processors automatically")
+		formLabel(uiText("settings.linux.processors"))
+		autoCPUs := gtk.NewCheckButtonWithLabel(uiText("settings.linux.choose_processors_automatically"))
 		cpus := gtk.NewSpinButtonWithRange(1, 64, 1)
 		cpus.SetNumeric(true)
-		named(cpus, "Processors for Omarchy")
+		named(cpus, uiText("settings.linux.processors_for_omarchy"))
 		groupContent.Append(autoCPUs)
 		groupContent.Append(cpus)
 		autoCPUs.ConnectToggled(func() { cpus.SetVisible(!autoCPUs.Active()) })
 		groupContent = resourceCard
-		render := gtk.NewDropDownFromStrings([]string{"Automatic (recommended)", "Graphics acceleration", "Software rendering"})
-		named(render, "Rendering")
-		defaults := gtk.NewButtonWithLabel("Restore resource defaults")
+		render := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.automatic_recommended"), uiText("settings.linux.graphics_acceleration"), uiText("settings.linux.software_rendering")})
+		named(render, uiText("settings.graphics.rendering"))
+		defaults := gtk.NewButtonWithLabel(uiText("settings.linux.restore_resource_defaults"))
 		defaults.ConnectClicked(func() {
 			resourceProfile.SetSelected(0)
 			autoMemory.SetActive(true)
@@ -625,21 +625,21 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			render.SetSelected(0)
 		})
 		defaults.SetHAlign(gtk.AlignStart)
-		beginGroup("Storage and sharing", "General")
-		standardDisk := gtk.NewCheckButtonWithLabel("Keep current capacity")
+		beginGroup(uiText("settings.section.storage"), "General")
+		standardDisk := gtk.NewCheckButtonWithLabel(uiText("settings.linux.keep_current_capacity"))
 		diskGiB := gtk.NewSpinButtonWithRange(24, 1024, 1)
 		diskGiB.SetNumeric(true)
-		named(diskGiB, "Disk capacity in GiB")
+		named(diskGiB, uiText("settings.linux.disk_capacity_in_gib"))
 		groupContent.Append(standardDisk)
-		diskField := formField("Disk capacity (GiB)", diskGiB)
+		diskField := formField(uiText("settings.storage.capacity"), diskGiB)
 		standardDisk.ConnectToggled(func() { diskField.SetVisible(!standardDisk.Active()) })
-		formHelp("New VMs start at 24 GiB. A larger capacity grows the disk on the next launch. Existing disks are never shrunk.")
-		share := entry("Shared folder")
+		formHelp(uiText("settings.linux.new_vms_start_at_24_gib_a_larger"))
+		share := entry(uiText("settings.linux.shared_folder"))
 		share.SetEditable(false)
-		named(share, "Shared folder")
-		shareEnabled := gtk.NewCheckButtonWithLabel("Share this folder with Omarchy")
+		named(share, uiText("settings.linux.shared_folder"))
+		shareEnabled := gtk.NewCheckButtonWithLabel(uiText("settings.linux.share_this_folder_with_omarchy"))
 		groupContent.Append(shareEnabled)
-		clearShare := gtk.NewButtonWithLabel("Stop sharing this folder")
+		clearShare := gtk.NewButtonWithLabel(uiText("settings.linux.stop_sharing_this_folder"))
 		var sharePath string
 		setSharedFolder := func(path, display string) {
 			sharePath = path
@@ -649,20 +649,20 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		}
 		clearShare.ConnectClicked(func() { setSharedFolder("", ""); shareEnabled.SetActive(false) })
 		groupContent.Append(clearShare)
-		chooseShare := gtk.NewButtonWithLabel("Choose a shared folder...")
+		chooseShare := gtk.NewButtonWithLabel(uiText("settings.linux.choose_a_shared_folder"))
 		groupContent.Append(chooseShare)
-		formHelp("Omarchy can read, change and delete files in the folder you share. Access changes apply on the next launch.")
-		beginGroup("Apps on this computer", "General")
+		formHelp(uiText("settings.linux.omarchy_can_read_change_and_delete_files_in"))
+		beginGroup(uiText("settings.linux.apps_on_this_computer"), "General")
 		hostAppRows := gtk.NewBox(gtk.OrientationVertical, 6)
 		groupContent.Append(hostAppRows)
-		hostAppChoice := gtk.NewDropDownFromStrings([]string{noHostAppsLabel})
-		named(hostAppChoice, "App to allow")
-		formField("Add an app", hostAppChoice)
-		hostAppAdd := gtk.NewButtonWithLabel("Allow this app")
+		hostAppChoice := gtk.NewDropDownFromStrings([]string{noHostAppsLabel()})
+		named(hostAppChoice, uiText("settings.linux.app_to_allow"))
+		formField(uiText("settings.linux.add_an_app"), hostAppChoice)
+		hostAppAdd := gtk.NewButtonWithLabel(uiText("settings.linux.allow_this_app"))
 		hostAppAdd.SetHAlign(gtk.AlignStart)
 		groupContent.Append(hostAppAdd)
 		hostAppsNote := formHelp("")
-		formHelp("Allowed apps appear in Omarchy's app launcher as \"Host: name\" and open on this computer, outside Omarchy. Omarchy can start only the apps listed here, and cannot pass them files or options.")
+		formHelp(uiText("settings.linux.allowed_apps_appear_in_omarchy_s_app_launcher"))
 		var hostApps, hostAppChoices, hostAppOffers []hostApp
 		var showHostApps func()
 		showHostApps = func() {
@@ -674,9 +674,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				name.SetWrapMode(pango.WrapWordChar)
 				name.SetXAlign(0)
 				name.SetSizeRequest(160, -1)
-				remove := gtk.NewButtonWithLabel("Remove")
+				remove := gtk.NewButtonWithLabel(uiText("settings.linux.remove"))
 				remove.SetHExpand(true)
-				named(remove, "Remove "+app.Name)
+				named(remove, uiTextWith("settings.linux.remove_app", map[string]string{"name": app.Name}))
 				remove.ConnectClicked(func() {
 					hostApps = withoutHostApp(hostApps, id)
 					showHostApps()
@@ -686,7 +686,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				hostAppRows.Append(row)
 			}
 			if len(hostApps) == 0 {
-				none := gtk.NewLabel("No apps are allowed.")
+				none := gtk.NewLabel(uiText("settings.linux.no_apps_are_allowed"))
 				none.SetXAlign(0)
 				none.AddCSSClass("dim-label")
 				hostAppRows.Append(none)
@@ -705,71 +705,71 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				showHostApps()
 			}
 		})
-		reclaimGroup := beginGroup("Disk space", "General")
+		reclaimGroup := beginGroup(uiText("settings.linux.disk_space"), "General")
 		reclaimStatus := gtk.NewLabel("")
 		reclaimStatus.SetWrap(true)
 		reclaimStatus.SetXAlign(0)
 		reclaimStatus.SetSelectable(true)
 		groupContent.Append(reclaimStatus)
-		reclaimButton := gtk.NewButtonWithLabel("Prepare free space")
+		reclaimButton := gtk.NewButtonWithLabel(uiText("settings.linux.prepare_free_space"))
 		reclaimButton.SetHAlign(gtk.AlignStart)
 		groupContent.Append(reclaimButton)
-		formHelp(reclaimHelpText)
+		formHelp(reclaimHelpText())
 		reclaimGroup.SetVisible(false)
-		beginGroup("Display and keyboard", "Advanced")
-		scaleChoices := []audioDevice{{"keep", "Keep guest choice"}, {"1", "100%"}, {"1.25", "125%"}, {"1.5", "150%"}, {"2", "200%"}, {"3", "300%"}, {"4", "400%"}}
-		scale := gtk.NewDropDownFromStrings([]string{"Follow host display"})
-		named(scale, "Guest display scale")
-		formField("Guest display scale", scale)
+		beginGroup(uiText("settings.linux.display_and_keyboard"), "Advanced")
+		scaleChoices := []audioDevice{{"keep", uiText("settings.linux.keep_guest_choice")}, {"1", "100%"}, {"1.25", "125%"}, {"1.5", "150%"}, {"2", "200%"}, {"3", "300%"}, {"4", "400%"}}
+		scale := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.follow_host_display")})
+		named(scale, uiText("settings.linux.guest_display_scale"))
+		formField(uiText("settings.linux.guest_display_scale"), scale)
 		scaleNames := []string{"auto"}
-		keyboardChoices := []audioDevice{{"keep", "Keep guest choice"}, {"us", "English (US)"}, {"us:intl", "English (US, international)"}, {"de", "German"}, {"fr", "French"}, {"es", "Spanish"}}
-		keyboard := gtk.NewDropDownFromStrings([]string{"Follow host layout"})
-		named(keyboard, "Guest keyboard layout")
-		formField("Guest keyboard layout", keyboard)
+		keyboardChoices := []audioDevice{{"keep", uiText("settings.linux.keep_guest_choice")}, {"us", uiText("settings.linux.english_us")}, {"us:intl", uiText("settings.linux.english_us_international")}, {"de", uiText("settings.linux.german")}, {"fr", uiText("settings.linux.french")}, {"es", uiText("settings.linux.spanish")}}
+		keyboard := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.follow_host_layout")})
+		named(keyboard, uiText("settings.linux.guest_keyboard_layout"))
+		formField(uiText("settings.linux.guest_keyboard_layout"), keyboard)
 		keyboardNames := []string{""}
 		keyboardHelp := formHelp(keyboardHelpText(""))
-		beginGroup("Microphone and camera", "Devices")
-		microphone := gtk.NewCheckButtonWithLabel("Allow microphone access")
+		beginGroup(uiText("settings.linux.microphone_and_camera"), "Devices")
+		microphone := gtk.NewCheckButtonWithLabel(uiText("settings.linux.allow_microphone_access"))
 		groupContent.Append(microphone)
-		camera := gtk.NewCheckButtonWithLabel("Allow camera access")
+		camera := gtk.NewCheckButtonWithLabel(uiText("settings.camera.allow"))
 		groupContent.Append(camera)
-		cameraChoice := gtk.NewDropDownFromStrings([]string{"Automatic"})
-		named(cameraChoice, "Camera")
-		formField("Camera", cameraChoice)
+		cameraChoice := gtk.NewDropDownFromStrings([]string{uiText("settings.graphics.automatic")})
+		named(cameraChoice, uiText("settings.camera.camera"))
+		formField(uiText("settings.camera.camera"), cameraChoice)
 		cameraNames := []string{""}
-		formHelp("Your desktop asks for camera permission when an app inside Omarchy first opens the camera. Capture stops when that app closes it. Access changes apply after shutting down Omarchy and launching it again.")
-		beginGroup("Audio", "Devices")
-		audioOutput := gtk.NewDropDownFromStrings([]string{"System default"})
-		named(audioOutput, "Audio output")
-		formField("Audio output", audioOutput)
-		audioInput := gtk.NewDropDownFromStrings([]string{"System default"})
-		named(audioInput, "Audio input")
-		formField("Audio input", audioInput)
+		formHelp(uiText("settings.linux.your_desktop_asks_for_camera_permission_when_an"))
+		beginGroup(uiText("settings.linux.audio"), "Devices")
+		audioOutput := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.system_default")})
+		named(audioOutput, uiText("settings.linux.audio_output"))
+		formField(uiText("settings.linux.audio_output"), audioOutput)
+		audioInput := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.system_default")})
+		named(audioInput, uiText("settings.linux.audio_input"))
+		formField(uiText("settings.linux.audio_input"), audioInput)
 		audioOutputNames, audioInputNames := []string{""}, []string{""}
-		audioRefresh := gtk.NewButtonWithLabel("Refresh devices")
+		audioRefresh := gtk.NewButtonWithLabel(uiText("settings.linux.refresh_devices"))
 		groupContent.Append(audioRefresh)
-		audioHelp := formHelp("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
-		clipboardGroup := beginGroup("Clipboard", "Devices")
-		clipboardShare := gtk.NewCheckButtonWithLabel("Share the clipboard with Omarchy")
+		audioHelp := formHelp(uiText("settings.linux.audio_device_choices_apply_when_the_vm_next"))
+		clipboardGroup := beginGroup(uiText("settings.linux.clipboard"), "Devices")
+		clipboardShare := gtk.NewCheckButtonWithLabel(uiText("settings.linux.share_the_clipboard_with_omarchy"))
 		groupContent.Append(clipboardShare)
-		clipboardHelp := formHelp("On GNOME Wayland, sharing asks for your permission the first time. A change applies the next time Omarchy starts.")
-		beginGroup("Graphics", "Advanced")
-		formField("Rendering", render)
+		clipboardHelp := formHelp(uiText("settings.linux.on_gnome_wayland_sharing_asks_for_your_permission"))
+		beginGroup(uiText("settings.section.graphics"), "Advanced")
+		formField(uiText("settings.graphics.rendering"), render)
 		groupContent.Append(defaults)
-		formHelp("Automatic tries graphics acceleration and falls back if needed. Changes take effect when the VM next starts.")
-		beginGroup("Network and SSH", "Advanced")
-		sshEnabled := gtk.NewCheckButtonWithLabel("Allow SSH from this computer")
+		formHelp(uiText("settings.linux.automatic_tries_graphics_acceleration_and_falls_back_if"))
+		beginGroup(uiText("settings.linux.network_and_ssh"), "Advanced")
+		sshEnabled := gtk.NewCheckButtonWithLabel(uiText("settings.linux.allow_ssh_from_this_computer"))
 		groupContent.Append(sshEnabled)
 		sshPort := gtk.NewSpinButtonWithRange(1024, 65535, 1)
 		sshPort.SetNumeric(true)
-		named(sshPort, "SSH port on this computer")
-		formField("SSH port", sshPort)
+		named(sshPort, uiText("settings.linux.ssh_port_on_this_computer"))
+		formField(uiText("settings.linux.ssh_port"), sshPort)
 		sshEnabled.ConnectToggled(func() { sshPort.SetSensitive(sshEnabled.Active()) })
-		formHelp("SSH starts on the next launch. Connect to 127.0.0.1 on this port with your Omarchy account. Other computers cannot connect.")
-		sshKey := entry("SSH public key")
+		formHelp(uiText("settings.linux.ssh_starts_on_the_next_launch_connect_to"))
+		sshKey := entry(uiText("settings.linux.ssh_public_key"))
 		sshKey.SetEditable(false)
-		named(sshKey, "SSH public key file")
-		formHelp("Quick start needs a public key for SSH login. Choose its .pub file unless a key is already installed in Omarchy.")
+		named(sshKey, uiText("settings.network.ssh_key"))
+		formHelp(uiText("settings.linux.quick_start_needs_a_public_key_for_ssh"))
 		sshKeyWarning := formHelp("")
 		sshKeyWarning.AddCSSClass("warning")
 		updateSSHKeyWarning := func() {
@@ -780,11 +780,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		sshEnabled.ConnectToggled(updateSSHKeyWarning)
 		sshKey.NotifyProperty("text", updateSSHKeyWarning)
 		updateSSHKeyWarning()
-		chooseSSHKey := gtk.NewButtonWithLabel("Choose a public key...")
+		chooseSSHKey := gtk.NewButtonWithLabel(uiText("settings.linux.choose_a_public_key"))
 		chooseSSHKey.ConnectClicked(func() {
 			id := current.Request
 			dialog := gtk.NewFileDialog()
-			dialog.SetTitle("Choose an SSH public key")
+			dialog.SetTitle(uiText("settings.linux.choose_an_ssh_public_key"))
 			dialog.Open(context.Background(), &window.Window, func(result gio.AsyncResulter) {
 				file, err := dialog.OpenFinish(result)
 				if answered || current.Prompt != "settings" || id != current.Request {
@@ -796,22 +796,22 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						ErrorCode() int
 					})
 					if !known || detail.Quark() != uint32(gtk.DialogErrorQuark()) || detail.ErrorCode() != int(gtk.DialogErrorDismissed) {
-						showSettingsProblem("Could not choose that public key: " + err.Error())
+						showSettingsProblem(uiTextWith("settings.linux.could_not_choose_that_public_key", map[string]string{"error": err.Error()}))
 					}
 					return
 				}
 				if file.Path() == "" {
-					showSettingsProblem("Choose a public key file on a local drive.")
+					showSettingsProblem(uiText("settings.linux.choose_a_public_key_file_on_a_local"))
 					return
 				}
 				sshKey.SetText(file.Path())
 			})
 		})
 		groupContent.Append(chooseSSHKey)
-		clearSSHKey := gtk.NewButtonWithLabel("Remove public key choice")
+		clearSSHKey := gtk.NewButtonWithLabel(uiText("settings.linux.remove_public_key_choice"))
 		clearSSHKey.ConnectClicked(func() { sshKey.SetText("") })
 		groupContent.Append(clearSSHKey)
-		formLabel("Other local port forwards (one per line, for example tcp:8080:80)")
+		formLabel(uiText("settings.linux.other_local_port_forwards_one_per_line_for"))
 		forwards := gtk.NewTextView()
 		forwards.SetWrapMode(gtk.WrapWordChar)
 		forwards.SetSizeRequest(-1, 88)
@@ -819,7 +819,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		forwards.SetRightMargin(8)
 		forwards.SetTopMargin(6)
 		forwards.SetBottomMargin(6)
-		named(forwards, "Other local port forwards, one per line")
+		named(forwards, uiText("settings.linux.other_local_port_forwards_one_per_line"))
 		groupContent.Append(forwards)
 		forwardsHelp := formHelp(forwardsHelpText(false))
 		settingsContent.Append(form)
@@ -836,22 +836,22 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			settingsScroll.VAdjustment().SetValue(0)
 			settingsScroll.HAdjustment().SetValue(0)
 		})
-		button := gtk.NewButtonWithLabel("Cancel")
+		button := gtk.NewButtonWithLabel(uiText("setup.cancel"))
 		button.SetHAlign(gtk.AlignStart)
 		button.SetVAlign(gtk.AlignEnd)
 		primary := gtk.NewButton()
 		primary.AddCSSClass("suggested-action")
 		secondary := gtk.NewButton()
-		tertiary := gtk.NewButtonWithLabel("Create diagnostics")
-		moveButton := gtk.NewButtonWithLabel("Move this VM...")
-		resetButton := gtk.NewButtonWithLabel("Reset this VM...")
+		tertiary := gtk.NewButtonWithLabel(uiText("launcher.linux.create_diagnostics"))
+		moveButton := gtk.NewButtonWithLabel(uiText("launcher.linux.move_this_vm"))
+		resetButton := gtk.NewButtonWithLabel(uiText("launcher.linux.reset_this_vm"))
 		resetButton.AddCSSClass("destructive-action")
-		cleanMoveButton := gtk.NewButtonWithLabel("Remove previous copy...")
-		cleanResetButton := gtk.NewButtonWithLabel("Remove disk kept from reset...")
-		cleanLeftoversButton := gtk.NewButtonWithLabel("Remove unfinished files...")
-		snapshotsButton := gtk.NewButtonWithLabel("Snapshots...")
-		migrationButton := gtk.NewButtonWithLabel("Move to installed Omarchy...")
-		cleanRollbackButton := gtk.NewButtonWithLabel("Remove state kept from roll back...")
+		cleanMoveButton := gtk.NewButtonWithLabel(uiText("launcher.linux.remove_previous_copy"))
+		cleanResetButton := gtk.NewButtonWithLabel(uiText("launcher.linux.remove_disk_kept_from_reset"))
+		cleanLeftoversButton := gtk.NewButtonWithLabel(uiText("launcher.linux.remove_unfinished_files"))
+		snapshotsButton := gtk.NewButtonWithLabel(uiText("settings.recovery.snapshots"))
+		migrationButton := gtk.NewButtonWithLabel(uiText("launcher.linux.move_to_installed_omarchy"))
+		cleanRollbackButton := gtk.NewButtonWithLabel(uiText("launcher.linux.remove_state_kept_from_roll_back"))
 		primary.SetHExpand(true)
 		secondary.SetHExpand(true)
 		choices := gtk.NewBox(gtk.OrientationVertical, 8)
@@ -983,9 +983,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			} else if !cancelling {
 				cancelling = true
 				if current.Booting {
-					label.SetText("Asking Omarchy to shut down...")
+					label.SetText(uiText("launcher.linux.asking_omarchy_to_shut_down"))
 				} else {
-					label.SetText("Cancelling setup...")
+					label.SetText(uiText("launcher.linux.cancelling_setup"))
 				}
 				button.SetSensitive(false)
 				emit("cancel")
@@ -1078,13 +1078,13 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 				id := current.Request
 				dialog := gtk.NewFileDialog()
 				if current.Prompt == "restore-archive" {
-					dialog.SetTitle("Choose a Try Omarchy backup")
+					dialog.SetTitle(uiText("launcher.linux.choose_a_try_omarchy_backup"))
 				} else if current.Prompt == "attach-folder" {
-					dialog.SetTitle("Choose existing Try Omarchy data folder")
+					dialog.SetTitle(uiText("launcher.linux.choose_existing_try_omarchy_data_folder"))
 				} else if current.Prompt == "move-folder" {
-					dialog.SetTitle("Choose where to move Omarchy")
+					dialog.SetTitle(uiText("launcher.linux.choose_where_to_move_omarchy"))
 				} else {
-					dialog.SetTitle("Choose a recovery folder")
+					dialog.SetTitle(uiText("launcher.linux.choose_a_recovery_folder"))
 				}
 				choices.SetSensitive(false)
 				selected := func(path string, err error) {
@@ -1093,7 +1093,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					choices.SetSensitive(true)
 					if err != nil || path == "" {
-						label.SetText("No location was chosen. Choose one or cancel.")
+						label.SetText(uiText("launcher.linux.no_location_was_chosen_choose_one_or_cancel"))
 						return
 					}
 					reply(path)
@@ -1120,8 +1120,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			case "grant-files":
 				id := current.Request
 				dialog := gtk.NewFileDialog()
-				dialog.SetTitle("Choose the dropped files")
-				dialog.SetAcceptLabel("Share with Omarchy")
+				dialog.SetTitle(uiText("launcher.linux.choose_the_dropped_files"))
+				dialog.SetAcceptLabel(uiText("launcher.linux.share_with_omarchy"))
 				choices.SetSensitive(false)
 				dialog.OpenMultiple(context.Background(), &window.Window, func(result gio.AsyncResulter) {
 					files, err := dialog.OpenMultipleFinish(result)
@@ -1130,7 +1130,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					choices.SetSensitive(true)
 					if err != nil {
-						label.SetText("File access was not granted. Choose files or cancel.")
+						label.SetText(uiText("launcher.linux.file_access_was_not_granted_choose_files_or"))
 						return
 					}
 					var paths []string
@@ -1166,11 +1166,11 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			case "location", "share", "settings":
 				id := current.Request
 				dialog := gtk.NewFileDialog()
-				dialog.SetTitle("Choose a folder for Omarchy")
+				dialog.SetTitle(uiText("launcher.linux.choose_a_folder_for_omarchy"))
 				if current.Prompt == "share" || current.Prompt == "settings" {
-					dialog.SetTitle("Choose a shared folder")
+					dialog.SetTitle(uiText("launcher.linux.choose_a_shared_folder"))
 				}
-				dialog.SetAcceptLabel("Use this folder")
+				dialog.SetAcceptLabel(uiText("launcher.linux.use_this_folder"))
 				choices.SetSensitive(false)
 				dialog.SelectFolder(context.Background(), &window.Window, func(result gio.AsyncResulter) {
 					folder, err := dialog.SelectFolderFinish(result)
@@ -1185,9 +1185,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						})
 						if !known || detail.Quark() != uint32(gtk.DialogErrorQuark()) || detail.ErrorCode() != int(gtk.DialogErrorDismissed) {
 							if current.Prompt == "settings" {
-								showSettingsProblem("Could not choose that folder: " + err.Error())
+								showSettingsProblem(uiTextWith("launcher.linux.could_not_choose_that_folder", map[string]string{"error": err.Error()}))
 							} else {
-								label.SetText("Could not choose that folder: " + err.Error())
+								label.SetText(uiTextWith("launcher.linux.could_not_choose_that_folder", map[string]string{"error": err.Error()}))
 							}
 							fmt.Fprintln(os.Stderr, "Folder selection:", err)
 						}
@@ -1195,9 +1195,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					}
 					if folder.Path() == "" {
 						if current.Prompt == "settings" {
-							showSettingsProblem("Choose a folder on a local drive.")
+							showSettingsProblem(uiText("launcher.linux.choose_a_folder_on_a_local_drive"))
 						} else {
-							label.SetText("Choose a folder on a local drive.")
+							label.SetText(uiText("launcher.linux.choose_a_folder_on_a_local_drive"))
 						}
 						return
 					}
@@ -1302,7 +1302,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					banner.SetTitle(next.Notice)
 					banner.SetButtonLabel("")
 					if next.HelpURL != "" {
-						banner.SetButtonLabel("How to fix this")
+						banner.SetButtonLabel(uiText("launcher.linux.how_to_fix_this"))
 					}
 					banner.SetRevealed(next.Notice != "" && !next.Error && next.Prompt != "error")
 					// The home and error pages get the buttons the launcher chose.
@@ -1324,17 +1324,17 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					if next.Prompt == "snapshot-name" && pageChanged {
 						nameEntry.SetText(next.Text)
 					}
-					tertiary.SetLabel("Create diagnostics")
-					button.SetLabel("Cancel")
+					tertiary.SetLabel(uiText("launcher.linux.create_diagnostics"))
+					button.SetLabel(uiText("setup.cancel"))
 					if next.Booting && next.Prompt == "" {
-						button.SetLabel("Stop Omarchy")
+						button.SetLabel(uiText("launcher.linux.stop_omarchy"))
 					}
 					pageTitle.SetText("")
 					pageIcon.SetVisible(next.Error || next.Prompt == "error")
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
-					productVersion.SetText("LINUX" + platformVersion(next.Version))
+					productVersion.SetText(uiText("brand.linux") + platformVersion(next.Version))
 					settingsTabs.SetVisible(next.Prompt == "settings")
 					settingsTiming.SetVisible(next.Prompt == "settings")
 					showSettingsFailure := next.Prompt == "settings" && next.Notice != "" && next.Status != ""
@@ -1375,32 +1375,32 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					menuButton.SetVisible(next.Prompt == "home" && len(next.Menu) > 0)
 					switch next.Prompt {
 					case "recovery":
-						pageTitle.SetText("Backup and recovery")
-						primary.SetLabel("Create backup")
-						secondary.SetLabel("Restore as a copy")
-						button.SetLabel("Back")
+						pageTitle.SetText(uiText("settings.section.recovery"))
+						primary.SetLabel(uiText("launcher.linux.create_backup"))
+						secondary.SetLabel(uiText("launcher.linux.restore_as_a_copy"))
+						button.SetLabel(uiText("launcher.linux.back"))
 					case "forget-location":
-						pageTitle.SetText("Forget saved location?")
-						primary.SetLabel("Keep saved location")
-						secondary.SetLabel("Forget saved location")
+						pageTitle.SetText(uiText("launcher.linux.forget_saved_location"))
+						primary.SetLabel(uiText("launcher.linux.keep_saved_location"))
+						secondary.SetLabel(uiText("launcher.linux.forget_saved_location_2"))
 						secondary.AddCSSClass("destructive-action")
-						button.SetLabel("Cancel")
+						button.SetLabel(uiText("setup.cancel"))
 					case "delete-default":
-						pageTitle.SetText("Delete this VM?")
-						primary.SetLabel("Keep this VM")
-						secondary.SetLabel("Delete VM and system files")
+						pageTitle.SetText(uiText("launcher.linux.delete_this_vm"))
+						primary.SetLabel(uiText("launcher.linux.keep_this_vm"))
+						secondary.SetLabel(uiText("launcher.linux.delete_vm_and_system_files"))
 						secondary.AddCSSClass("destructive-action")
-						button.SetLabel("Cancel")
+						button.SetLabel(uiText("setup.cancel"))
 					case "backup-folder", "restore-parent", "restore-archive", "attach-folder", "move-folder":
-						pageTitle.SetText("Backup and recovery")
+						pageTitle.SetText(uiText("settings.section.recovery"))
 						if next.Prompt == "attach-folder" {
-							pageTitle.SetText("Use an existing VM")
+							pageTitle.SetText(uiText("launcher.linux.use_an_existing_vm"))
 						}
 						if next.Prompt == "move-folder" {
-							pageTitle.SetText("Move this VM")
+							pageTitle.SetText(uiText("launcher.linux.move_this_vm_2"))
 						}
-						primary.SetLabel("Choose location...")
-						button.SetLabel("Cancel")
+						primary.SetLabel(uiText("launcher.linux.choose_location"))
+						button.SetLabel(uiText("setup.cancel"))
 					case "choice":
 						pageTitle.SetText(next.Title)
 						primary.SetLabel(next.Primary)
@@ -1408,33 +1408,33 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						if next.Destructive {
 							secondary.AddCSSClass("destructive-action")
 						}
-						button.SetLabel("Cancel")
+						button.SetLabel(uiText("setup.cancel"))
 					case "snapshots":
-						pageTitle.SetText("Snapshots")
+						pageTitle.SetText(uiText("launcher.linux.snapshots"))
 					case "snapshot", "migration":
 						pageTitle.SetText(next.Title)
 					case "snapshot-name":
-						pageTitle.SetText(orDefault(next.Title, "Create a snapshot"))
-						primary.SetLabel("Create snapshot")
-						button.SetLabel("Cancel")
+						pageTitle.SetText(orDefault(next.Title, uiText("launcher.linux.create_a_snapshot")))
+						primary.SetLabel(uiText("snapshots.create"))
+						button.SetLabel(uiText("setup.cancel"))
 					case "about":
-						pageTitle.SetText("About Try Omarchy")
-						primary.SetLabel(orDefault(next.Primary, "Back"))
-						button.SetLabel("Back")
+						pageTitle.SetText(uiText("about.title"))
+						primary.SetLabel(orDefault(next.Primary, uiText("launcher.linux.back")))
+						button.SetLabel(uiText("launcher.linux.back"))
 						if next.Status == "" {
-							next.Status = "Try Omarchy for Linux, version " + next.Version + "."
+							next.Status = uiTextWith("launcher.linux.try_omarchy_for_linux_version", map[string]string{"version": next.Version})
 						}
 					case "settings-saved":
-						pageTitle.SetText("Settings saved")
-						primary.SetLabel("Done")
-						button.SetLabel("Close")
+						pageTitle.SetText(uiText("launcher.linux.settings_saved"))
+						primary.SetLabel(uiText("install.button.done"))
+						button.SetLabel(uiText("launcher.close"))
 					case "message":
-						pageTitle.SetText(orDefault(next.Title, "Try Omarchy"))
-						primary.SetLabel("Done")
+						pageTitle.SetText(orDefault(next.Title, uiText("brand.name")))
+						primary.SetLabel(uiText("install.button.done"))
 					case "settings":
-						pageTitle.SetText("Settings")
-						primary.SetLabel("Save settings")
-						secondary.SetLabel("Choose a shared folder...")
+						pageTitle.SetText(uiText("launcher.linux.settings"))
+						primary.SetLabel(uiText("launcher.linux.save_settings"))
+						secondary.SetLabel(uiText("settings.linux.choose_a_shared_folder"))
 						if next.Settings != nil {
 							settingsTiming.SetText(settingsFooterText(next.Settings.Running, next.Settings.AudioLive, next.Settings.ForwardsLive))
 							memoryMiB, _ := strconv.Atoi(next.Settings.Memory)
@@ -1480,7 +1480,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							fullscreenDisplay.SetSensitive(next.Settings.Fullscreen)
 							microphone.SetActive(next.Settings.Microphone)
 							camera.SetActive(next.Settings.Camera)
-							cameraLabels, names, index := namedChoices("Automatic", "Unavailable: ", next.Settings.Cameras, next.Settings.CameraID)
+							cameraLabels, names, index := namedChoices(uiText("settings.graphics.automatic"), uiText("settings.linux.unavailable_choice"), next.Settings.Cameras, next.Settings.CameraID)
 							cameraNames = names
 							cameraChoice.SetModel(gtk.NewStringList(cameraLabels))
 							cameraChoice.SetSelected(index)
@@ -1493,12 +1493,12 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							if selectedScale == "auto" {
 								selectedScale = ""
 							}
-							scaleLabels, selectedScales, scaleIndex := namedChoices("Follow host display", "Saved scale: ", scaleChoices, selectedScale)
+							scaleLabels, selectedScales, scaleIndex := namedChoices(uiText("settings.linux.follow_host_display"), uiText("launcher.linux.saved_scale"), scaleChoices, selectedScale)
 							scaleNames = selectedScales
 							scaleNames[0] = "auto"
 							scale.SetModel(gtk.NewStringList(scaleLabels))
 							scale.SetSelected(scaleIndex)
-							keyboardLabels, selectedKeyboards, keyboardIndex := namedChoices("Follow host layout", "Saved layout: ", keyboardChoices, next.Settings.Keyboard)
+							keyboardLabels, selectedKeyboards, keyboardIndex := namedChoices(uiText("settings.linux.follow_host_layout"), uiText("launcher.linux.saved_layout"), keyboardChoices, next.Settings.Keyboard)
 							keyboardNames = selectedKeyboards
 							keyboard.SetModel(gtk.NewStringList(keyboardLabels))
 							keyboard.SetSelected(keyboardIndex)
@@ -1511,16 +1511,16 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							forwardsHelp.SetText(forwardsHelpText(next.Settings.ForwardsLive))
 							startAutomatically.SetActive(next.Settings.StartAutomatically)
 							launchAtSignIn.SetActive(next.Settings.LaunchAtSignIn)
-							outputLabels, outputNames, outputIndex := namedChoices("System default", "Unavailable: ", next.Settings.AudioOutputs, next.Settings.AudioOutput)
+							outputLabels, outputNames, outputIndex := namedChoices(uiText("settings.linux.system_default"), uiText("settings.linux.unavailable_choice"), next.Settings.AudioOutputs, next.Settings.AudioOutput)
 							if next.Settings.AudioLive {
-								audioHelp.SetText("Audio device choices apply when you save. Microphone access changes apply on the next launch. System default follows your desktop's current device.")
+								audioHelp.SetText(uiText("launcher.linux.audio_device_choices_apply_when_you_save_microphone"))
 							} else {
-								audioHelp.SetText("Audio device choices apply when the VM next starts. System default follows your desktop's current device.")
+								audioHelp.SetText(uiText("settings.linux.audio_device_choices_apply_when_the_vm_next"))
 							}
 							audioOutputNames = outputNames
 							audioOutput.SetModel(gtk.NewStringList(outputLabels))
 							audioOutput.SetSelected(outputIndex)
-							inputLabels, inputNames, inputIndex := namedChoices("System default", "Unavailable: ", next.Settings.AudioInputs, next.Settings.AudioInput)
+							inputLabels, inputNames, inputIndex := namedChoices(uiText("settings.linux.system_default"), uiText("settings.linux.unavailable_choice"), next.Settings.AudioInputs, next.Settings.AudioInput)
 							audioInputNames = inputNames
 							audioInput.SetModel(gtk.NewStringList(inputLabels))
 							audioInput.SetSelected(inputIndex)
@@ -1542,33 +1542,33 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							}
 						}
 					case "location":
-						pageTitle.SetText("Where should Omarchy live?")
-						primary.SetLabel("Use default location")
-						secondary.SetLabel("Choose another folder...")
+						pageTitle.SetText(uiText("launcher.linux.where_should_omarchy_live"))
+						primary.SetLabel(uiText("location.use_default"))
+						secondary.SetLabel(uiText("launcher.linux.choose_another_folder"))
 					case "account":
-						pageTitle.SetText("Choose your first launch")
-						primary.SetLabel("Continue")
+						pageTitle.SetText(uiText("setup.account.title"))
+						primary.SetLabel(uiText("setup.continue"))
 					case "share":
-						pageTitle.SetText("Share a folder with Omarchy?")
-						primary.SetLabel("Not now")
-						secondary.SetLabel("Choose a shared folder...")
+						pageTitle.SetText(uiText("launcher.linux.share_a_folder_with_omarchy"))
+						primary.SetLabel(uiText("setup.share.no"))
+						secondary.SetLabel(uiText("settings.linux.choose_a_shared_folder"))
 						if next.Status == "" {
-							next.Status = "Omarchy can read, change, and delete files in the folder you choose. Use a dedicated folder to exchange files."
+							next.Status = uiText("launcher.linux.omarchy_can_read_change_and_delete_files_in")
 						}
 					case "grant-files":
-						pageTitle.SetText("Share dropped files")
-						primary.SetLabel("Choose files...")
-						button.SetLabel("Cancel")
+						pageTitle.SetText(uiText("launcher.linux.share_dropped_files"))
+						primary.SetLabel(uiText("launcher.linux.choose_files"))
+						button.SetLabel(uiText("setup.cancel"))
 					case "close":
-						pageTitle.SetText("Shut down Omarchy?")
-						primary.SetLabel("Keep running")
-						secondary.SetLabel("Shut down")
+						pageTitle.SetText(uiText("launcher.linux.shut_down_omarchy"))
+						primary.SetLabel(uiText("launcher.linux.keep_running"))
+						secondary.SetLabel(uiText("launcher.linux.shut_down"))
 						secondary.AddCSSClass("destructive-action")
 						if next.Status == "" {
-							next.Status = "Save your work inside Omarchy before shutting down."
+							next.Status = uiText("launcher.linux.save_your_work_inside_omarchy_before_shutting_down")
 						}
 					case "error":
-						pageTitle.SetText(orDefault(next.ErrorTitle, "Omarchy could not start"))
+						pageTitle.SetText(orDefault(next.ErrorTitle, uiText("launcher.linux.omarchy_could_not_start")))
 					}
 					secondary.SetVisible(next.Prompt != "account" && next.Prompt != "settings" && next.Prompt != "snapshot-name" && !oneButtonPrompt(next.Prompt) && next.Prompt != "error")
 					choicesCell.SetVisible(choices.Visible())
@@ -1675,16 +1675,16 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					detail.SetVisible(next.Detail != "" && next.Prompt != "home")
 					helpLink.SetVisible((failed || next.Prompt == "error" || next.Prompt == "migration") && next.HelpURL != "")
 					if next.Prompt == "migration" {
-						helpLink.SetLabel("Full migration instructions")
+						helpLink.SetLabel(uiText("launcher.linux.full_migration_instructions"))
 					} else {
-						helpLink.SetLabel("How to fix this")
+						helpLink.SetLabel(uiText("launcher.linux.how_to_fix_this"))
 					}
 					if next.HelpURL != "" {
 						helpLink.SetURI(next.HelpURL)
 					}
 					if failed {
-						pageTitle.SetText(orDefault(next.ErrorTitle, "Omarchy could not start"))
-						button.SetLabel("Close")
+						pageTitle.SetText(orDefault(next.ErrorTitle, uiText("launcher.linux.omarchy_could_not_start")))
+						button.SetLabel(uiText("launcher.close"))
 					}
 					pageTitle.SetVisible(pageTitle.Text() != "")
 					label.SetVisible(next.Status != "")

@@ -95,7 +95,7 @@ func journalLinuxStaging(defaultDir string) (stop func()) {
 		defer linuxLeftoverMu.Unlock()
 		entries := append(loadLinuxLeftovers(defaultDir), linuxLeftover{Kind: kind, Path: path, Started: time.Now().Format(time.RFC3339)})
 		if err := saveLinuxLeftovers(defaultDir, entries); err != nil {
-			return fmt.Errorf("could not record the temporary files this needs: %w", err)
+			return uiError(uiTextWith("recovery.linux.could_not_record_the_temporary_files_this_needs", map[string]string{"error": fmt.Sprint(err)}), err)
 		}
 		return nil
 	}
@@ -216,9 +216,9 @@ func linuxFindLeftovers(defaultDir string) []linuxLeftoverFound {
 
 func linuxLeftoverTitle(l linuxLeftover) string {
 	if l.Kind == "backup" {
-		return "Unfinished backup"
+		return uiText("recovery.linux.unfinished_backup")
 	}
-	return "Unfinished restore"
+	return uiText("recovery.linux.unfinished_restore")
 }
 
 // linuxLeftoverRows describe what an interrupted run left behind and where, in
@@ -229,15 +229,15 @@ func linuxLeftoverRows(found []linuxLeftoverFound) []linuxRow {
 		where := linuxDisplayPath(filepath.Dir(f.Path))
 		switch f.Status {
 		case leftoverPresent:
-			what := "An earlier restore was interrupted. Its files are only a partial copy of a VM."
+			what := uiText("recovery.linux.an_earlier_restore_was_interrupted_its_files_are")
 			if f.Kind == "backup" {
-				what = "An earlier backup was interrupted. This is only a partial file, not a usable backup."
+				what = uiText("recovery.linux.an_earlier_backup_was_interrupted_this_is_only")
 			}
-			rows = append(rows, linuxRow{Title: linuxLeftoverTitle(f.linuxLeftover), Detail: linuxGB(f.Bytes) + " in " + where + "\n" + what})
+			rows = append(rows, linuxRow{Title: linuxLeftoverTitle(f.linuxLeftover), Detail: uiTextWith("recovery.linux.leftover_detail", map[string]string{"size": linuxGB(f.Bytes), "path": where, "detail": what})})
 		case leftoverUnreachable:
-			rows = append(rows, linuxRow{Title: linuxLeftoverTitle(f.linuxLeftover) + " (folder not reachable)", Detail: "Reconnect " + where + " to remove it."})
+			rows = append(rows, linuxRow{Title: uiTextWith("recovery.linux.folder_not_reachable", map[string]string{"value": linuxLeftoverTitle(f.linuxLeftover)}), Detail: uiTextWith("recovery.linux.reconnect_to_remove_it", map[string]string{"path": where})})
 		case leftoverUnrecognized:
-			rows = append(rows, linuxRow{Title: "Something else is at " + linuxDisplayPath(f.Path), Detail: "Try Omarchy did not create it in this form, so it will not touch it."})
+			rows = append(rows, linuxRow{Title: uiTextWith("recovery.linux.something_else_is_at", map[string]string{"path": linuxDisplayPath(f.Path)}), Detail: uiText("recovery.linux.try_omarchy_did_not_create_it_in_this")})
 		}
 	}
 	return rows
@@ -264,10 +264,10 @@ func removeLinuxLeftover(defaultDir string, l linuxLeftover) error {
 		forgetLinuxLeftover(defaultDir, l.Path)
 		return nil
 	case leftoverUnreachable:
-		return fmt.Errorf("%s cannot be reached; reconnect it and try again", linuxDisplayPath(filepath.Dir(l.Path)))
+		return uiError(uiTextWith("recovery.linux.cannot_be_reached_reconnect_it_and_try_again", map[string]string{"path": linuxDisplayPath(filepath.Dir(l.Path))}), nil)
 	case leftoverUnrecognized:
 		forgetLinuxLeftover(defaultDir, l.Path)
-		return fmt.Errorf("%s is not something Try Omarchy made in this form, so it was left alone", linuxDisplayPath(l.Path))
+		return uiError(uiTextWith("recovery.linux.is_not_something_try_omarchy_made_in_this", map[string]string{"path": linuxDisplayPath(l.Path)}), nil)
 	}
 	var err error
 	if l.Kind == "backup" {
@@ -288,17 +288,17 @@ func linuxLeftoverNotice(defaultDir string) string {
 	case 0:
 		return ""
 	case 1:
-		what := "An interrupted restore"
+		what := uiText("recovery.linux.an_interrupted_restore")
 		if items[0].Kind == "backup" {
-			what = "An interrupted backup"
+			what = uiText("recovery.linux.an_interrupted_backup")
 		}
-		return what + " left " + linuxGB(items[0].Bytes) + " in " + linuxDisplayPath(filepath.Dir(items[0].Path)) + ". Backup and recovery can remove it."
+		return uiTextWith("recovery.linux.left_in_backup_and_recovery_can_remove_it", map[string]string{"what": what, "size": linuxGB(items[0].Bytes), "path": linuxDisplayPath(filepath.Dir(items[0].Path))})
 	}
 	var total int64
 	for _, f := range items {
 		total += f.Bytes
 	}
-	return fmt.Sprintf("%d interrupted backups or restores left %s behind. Backup and recovery can remove them.", len(items), linuxGB(total))
+	return uiTextWith("recovery.linux.interrupted_backups_or_restores_left_behind_backup_and", map[string]string{"count": fmt.Sprintf("%d", len(items)), "total": linuxGB(total)})
 }
 
 func linuxLeftoverPrompt(items []linuxLeftoverFound) string {
@@ -308,6 +308,6 @@ func linuxLeftoverPrompt(items []linuxLeftoverFound) string {
 		fmt.Fprintf(&b, "%s, %s: %s\n", linuxLeftoverTitle(f.linuxLeftover), linuxGB(f.Bytes), linuxDisplayPath(f.Path))
 		total += f.Bytes
 	}
-	fmt.Fprintf(&b, "\nThis frees about %s. Only these files are removed. Your VM, your backups and everything else in those folders stay.", linuxGB(total))
+	b.WriteString(uiTextWith("recovery.linux.leftover_space", map[string]string{"size": linuxGB(total)}))
 	return b.String()
 }

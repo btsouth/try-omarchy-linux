@@ -381,7 +381,7 @@ func approvedLinuxHostApps(prefs approvedAppPreferences) []linuxHostApp {
 // approved app that has since been removed may stay until the owner drops it.
 func approveLinuxHostApps(prefs approvedAppPreferences, chosen []string, installed []linuxHostApp) (approvedAppPreferences, error) {
 	if len(chosen) > maximumApprovedApps {
-		return prefs, fmt.Errorf("you can approve up to %d apps", maximumApprovedApps)
+		return prefs, uiError(uiTextWith("settings.linux.approved_apps_limit", map[string]string{"count": fmt.Sprint(maximumApprovedApps)}), nil)
 	}
 	current := map[string]approvedWindowsApp{}
 	for _, app := range prefs.Apps {
@@ -395,7 +395,7 @@ func approveLinuxHostApps(prefs approvedAppPreferences, chosen []string, install
 	seen := map[string]bool{}
 	for _, id := range chosen {
 		if !validHostDesktopID(id) || seen[id] {
-			return prefs, fmt.Errorf("invalid app selection")
+			return prefs, uiError(uiText("settings.linux.invalid_app_selection"), nil)
 		}
 		seen[id] = true
 		if app, ok := current[id]; ok {
@@ -407,7 +407,7 @@ func approveLinuxHostApps(prefs approvedAppPreferences, chosen []string, install
 		}
 		found, ok := available[id]
 		if !ok {
-			return prefs, fmt.Errorf("that app is no longer installed on this computer")
+			return prefs, uiError(uiText("settings.linux.app_uninstalled"), nil)
 		}
 		approval, err := newApprovedAppID()
 		if err != nil {

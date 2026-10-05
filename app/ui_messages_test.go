@@ -183,8 +183,8 @@ func TestLauncherTextComesFromTheCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The Linux front end is English-only for now; its own files are
-		// not checked until their text moves to the catalog.
+		// Linux screen sinks and key coverage are checked separately, including
+		// the GTK module, by ui_labels_linux_test.go.
 		if linuxOnlySource(name, file) {
 			continue
 		}
@@ -266,11 +266,16 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gtkFiles, err := filepath.Glob("../linux-ui/*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, gtkFiles...)
 	used := map[string]bool{}
 	fset := token.NewFileSet()
 	for _, name := range files {
 		// ui_messages.go is the catalog itself.
-		if strings.HasSuffix(name, "_test.go") || name == "ui_messages.go" {
+		if strings.HasSuffix(name, "_test.go") || filepath.Base(name) == "ui_messages.go" {
 			continue
 		}
 		file, err := parser.ParseFile(fset, name, nil, 0)
@@ -283,7 +288,10 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 				return true
 			}
 			function, ok := call.Fun.(*ast.Ident)
-			if !ok || function.Name != "uiText" && function.Name != "uiTextWith" || len(call.Args) == 0 {
+			if selector, selected := call.Fun.(*ast.SelectorExpr); selected && selector.Sel.Name == "setCatalogStatus" {
+				function, ok = selector.Sel, true
+			}
+			if !ok || function.Name != "uiText" && function.Name != "uiTextWith" && function.Name != "uiTemplate" && function.Name != "setCatalogStatus" || len(call.Args) == 0 {
 				return true
 			}
 			position := fset.Position(call.Pos())
@@ -299,11 +307,17 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 				return true
 			}
 			used[key] = true
+			if function.Name == "uiTemplate" {
+				return true
+			}
 			want := sortedPlaceholders(message)
 			if function.Name == "uiText" {
 				if len(want) > 0 {
 					t.Errorf("%s: %q has placeholders %v; use uiTextWith", position, key, want)
 				}
+				return true
+			}
+			if function.Name == "setCatalogStatus" && len(want) == 0 {
 				return true
 			}
 			values, ok := call.Args[1].(*ast.CompositeLit)

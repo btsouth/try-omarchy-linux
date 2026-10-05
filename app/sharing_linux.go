@@ -2,8 +2,6 @@
 
 package main
 
-import "fmt"
-
 func configureLinuxSharing(cfg *config, saved *settings, explicit, force bool, choose func(string) (string, error)) error {
 	if explicit || choose == nil || (!force && saved.SharedFolderPrompted) {
 		return nil
@@ -18,7 +16,7 @@ func configureLinuxSharing(cfg *config, saved *settings, explicit, force bool, c
 		if answer != "skip" {
 			path, err = validateLinuxSharedFolder(answer, cfg.dir)
 			if err != nil {
-				status = fmt.Sprintf("Cannot share that folder: %v", err)
+				status = uiTextWith("share.linux.cannot_share_folder", map[string]string{"error": err.Error()})
 				continue
 			}
 		}

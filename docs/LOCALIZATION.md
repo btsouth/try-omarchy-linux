@@ -2,7 +2,7 @@
 
 [Issue #127](https://github.com/omacom/try-omarchy-windows/issues/127) tracks translation of the Windows launcher's own interface. The Linux guest already receives the Windows locale, keyboard layout, and time zone; that does not translate the launcher or Omarchy's own menus. The [Try Omarchy website](https://tryomarchy.com/) and its guides are separate translation work.
 
-The launcher ships English, Simplified Chinese (`zh-Hans`) and Korean (`ko`). `app/ui-locales/en.json` is the source catalog, and every window, dialog, menu, status line and message the launcher shows comes from it. A missing translation falls back to English, so a language can be finished over several pull requests. The launcher picks its language from Windows' preferred **UI languages**, which can differ from the regional-format setting.
+The launcher ships English, Simplified Chinese (`zh-Hans`) and Korean (`ko`). `app/ui-locales/en.json` is the source catalog, and every window, dialog, menu, status line and message the launcher shows comes from it. A missing translation falls back to English, so a language can be finished over several pull requests. On Windows, the launcher picks its language from Windows' preferred **UI languages**, which can differ from the regional-format setting. Linux uses the message locale described below.
 
 ## How the work is split
 
@@ -24,7 +24,7 @@ go run ./cmd/translate merge ko ko-todo.json
 
 `merge` checks every key and placeholder, writes `ui-locales/ko.json` in `en.json` order and prints how many messages are translated. It creates the file for a new language. Delete `ko-todo.json` afterwards; it is not part of the pull request. Without Go, editing the JSON by hand works too: add any key from `en.json` with your translation, in any order, and the pull request's checks report mistakes.
 
-Language tags follow Windows: `ko`, `de`, `pt-BR`, `zh-Hans`. Traditional Chinese (`zh-Hant`) needs its own catalog; do not use one script as a fallback for the other.
+Catalog language tags use BCP 47: `ko`, `de`, `pt-BR`, `zh-Hans`. Traditional Chinese (`zh-Hant`) needs its own catalog; do not use one script as a fallback for the other.
 
 ### Keep these as they are
 
@@ -88,3 +88,55 @@ For maintainers and code contributors:
 - When the meaning of an English message changes, give it a new key. The old translations then fall back to English instead of saying something outdated.
 - Size controls from their text, not only for English. `measureText` and `buttonWidthFor` keep the English layout as the minimum and grow for longer translations.
 - Check a screen with `TRY_OMARCHY_UI_LANGUAGE=qps-ploc`. Every catalog message then shows accented and about a third longer, so plain English text is text outside the catalog, and anything cut off has no room for a longer translation.
+
+## Linux launcher
+
+Linux uses the same `app/ui-locales/en.json` source and the same `zh-Hans` and
+`ko` catalogs as Windows. `TRY_OMARCHY_UI_LANGUAGE` overrides language selection
+on either host, including `qps-ploc` for checking text and layout.
+
+Without an override, Linux reads the effective message locale from `LC_ALL`,
+then `LC_MESSAGES`, then `LANG`. A colon-separated `LANGUAGE` list supplies
+preferred message languages ahead of that locale. The `C` and `POSIX` locales
+(including `C.UTF-8`) keep English and ignore `LANGUAGE`. Encoding suffixes and
+locale modifiers are removed before selecting a catalog. `zh_CN` and `zh_SG`
+select `zh-Hans`; `zh_TW`, `zh_HK` and `zh_MO` never fall back to Simplified
+Chinese. `ko` and `ko_KR` select Korean. Unsupported languages fall back to
+English. The guest's language and keyboard layout are separate settings.
+
+For example, launch the installed Flatpak with a language override:
+
+```
+flatpak run --env=TRY_OMARCHY_UI_LANGUAGE=ko com.tryomarchy.TryOmarchy
+```
+
+Linux dialogs, setup and recovery states, Settings, About, notifications,
+clipboard and camera notices, terminal status, command-line help and tray
+menus resolve messages through `app/ui_messages.go`. The GTK helper in
+`linux-ui/` has no separate catalog: `linuxUILabels` resolves its control
+labels and templates, and the launcher passes that dictionary in
+`TRY_OMARCHY_UI_MESSAGES` before starting the helper. Screen state and protocol
+replies retain their existing IDs. Linux-specific messages have `.linux.`
+keys; a matching English message reuses its existing key. Host variants such
+as `about.body@linux` replace Windows-specific wording without changing Windows.
+
+Shared download code sends catalog keys and placeholder values to
+`setCatalogStatus`, and `setArtifactStatus` carries the downloaded filename.
+Linux chooses preparation, download, verification, unpacking and disk stages
+from those identities, so translated wording cannot break progress bars.
+Windows resolves the same text and retains its existing progress behavior.
+
+New Linux-only messages currently fall back to English until contributors
+translate them; this change adds no Chinese or Korean translations. Product
+names, commands, filenames, units, device names and protocol IDs remain as
+written. Technical error details from the OS, QEMU, portals or internal
+operations may remain English inside a catalog message. Snapshot timestamps
+retain their existing formatting. Linux screens still need fluent-speaker
+review; catalog and headless tests do not establish visual acceptance.
+
+From `app/`, `go test ./...` checks catalog keys, placeholders, GTK label
+forwarding, Linux message-locale selection, sample English screen text and
+Chinese progress staging. `go run ./cmd/translate missing ko` lists Linux
+messages alongside Windows messages. From `linux-ui/`, run `go vet ./...` and
+`go test ./...` in the GNOME 50 SDK. Native GTK tests require an isolated
+desktop and `TRYOMARCHY_UI_TEST=1`; ordinary headless tests do not open windows.

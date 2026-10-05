@@ -4,7 +4,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -20,7 +19,7 @@ func parseLinuxScale(value string) (string, error) {
 	}
 	scale, err := strconv.ParseFloat(value, 64)
 	if err != nil || !(scale >= 1 && scale <= 4) {
-		return "", fmt.Errorf("-scale must be auto, keep, or a number from 1 to 4")
+		return "", uiError(uiText("error.linux.scale_must_be_auto_keep_or_a_number"), nil)
 	}
 	return strconv.FormatFloat(scale, 'f', -1, 64), nil
 }
@@ -49,7 +48,7 @@ func linuxVenusPolicy(mode, release string) (bool, bool, error) {
 	case "off":
 		return false, false, nil
 	default:
-		return false, false, fmt.Errorf("-venus must be auto, on, or off")
+		return false, false, uiError(uiText("error.linux.venus_must_be_auto_on_or_off"), nil)
 	}
 }
 

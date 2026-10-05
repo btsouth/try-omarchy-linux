@@ -85,7 +85,7 @@ func reportLinuxFileDropError(err error) {
 		return
 	}
 	logf("file drop: %v", err)
-	showLinuxRuntimeError("File transfer failed", fmt.Sprintf("Omarchy could not receive the dropped files: %v\n\nCheck that Try Omarchy can access the files, then drop them again.", err))
+	showLinuxRuntimeError(uiText("error.linux.file_transfer_failed"), uiTextWith("error.linux.omarchy_could_not_receive_the_dropped_files_check", map[string]string{"error": fmt.Sprintf("%v", err)}))
 }
 
 // The setup window has closed by desktop readiness. Show the failure in a
@@ -94,6 +94,6 @@ func reportLinuxQEMUFailure(err error) {
 	logf("QEMU runtime failure: %v", err)
 	fmt.Fprintf(os.Stderr, "%s: %v\n", appTitle, err)
 	if linuxGUIEnabled {
-		showLinuxRuntimeErrorWindow("Omarchy stopped unexpectedly", err.Error())
+		showLinuxRuntimeErrorWindow(uiText("error.linux.omarchy_stopped_unexpectedly"), err.Error())
 	}
 }

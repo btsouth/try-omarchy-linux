@@ -780,7 +780,7 @@ func TestNativeSettingsHostApps(t *testing.T) {
 						}
 					}
 				case *gtk.DropDown:
-					if model, ok := control.Model().Cast().(*gtk.StringList); ok && (model.String(0) == "Calculator" || model.String(0) == "Zed" || model.String(0) == noHostAppsLabel) {
+					if model, ok := control.Model().Cast().(*gtk.StringList); ok && (model.String(0) == "Calculator" || model.String(0) == "Zed" || model.String(0) == noHostAppsLabel()) {
 						choice = control
 					}
 				case *gtk.Label:
@@ -817,7 +817,7 @@ func TestNativeSettingsHostApps(t *testing.T) {
 			case 3:
 				allow.Emit("clicked")
 			case 4:
-				if len(removes) != 3 || offered.String(0) != noHostAppsLabel || allow.Sensitive() || choice.Sensitive() {
+				if len(removes) != 3 || offered.String(0) != noHostAppsLabel() || allow.Sensitive() || choice.Sensitive() {
 					t.Errorf("with every app allowed: %d removes, first offer %q", len(removes), offered.String(0))
 				}
 				removes[1].Emit("clicked")

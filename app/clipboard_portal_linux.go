@@ -275,7 +275,7 @@ func (p *linuxPortalClipboard) run(c *linuxClipboard) {
 					return
 				default:
 				}
-				setLinuxClipboardStatus("GNOME clipboard access ended. Restart Omarchy to request access again. File drops remain available.", true)
+				setLinuxClipboardStatus(uiText("settings.clipboard.linux.gnome_ended"), true)
 				c.mu.Lock()
 				c.item, c.paths, c.key = clipItem{}, nil, [32]byte{}
 				c.serial++
@@ -302,7 +302,7 @@ func (p *linuxPortalClipboard) run(c *linuxClipboard) {
 					data, err = p.read(mime)
 					if err != nil {
 						logf("portal clipboard read: %v", err)
-						setLinuxClipboardStatus("Could not read the desktop clipboard: "+err.Error(), true)
+						setLinuxClipboardStatus(uiTextWith("settings.clipboard.linux.read_error", map[string]string{"error": err.Error()}), true)
 						mime = ""
 					}
 				}
@@ -311,7 +311,7 @@ func (p *linuxPortalClipboard) run(c *linuxClipboard) {
 					var grantErr error
 					files, grantErr = linuxPortalClipboardFiles(string(data))
 					if grantErr != nil {
-						setLinuxClipboardStatus("Could not access files copied from the desktop: "+grantErr.Error(), true)
+						setLinuxClipboardStatus(uiTextWith("settings.clipboard.linux.access_files_error", map[string]string{"error": grantErr.Error()}), true)
 					}
 				}
 				c.mu.Lock()

@@ -165,12 +165,12 @@ func checkKVM() error {
 		return f.Close()
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return &kvmError{Short: "This computer does not offer KVM.", msg: "this computer does not offer KVM, which Omarchy needs to run. Turn on virtualization (Intel VT-x or AMD-V, sometimes called SVM) in the firmware settings. Inside a virtual machine, turn on nested virtualization for it"}
+		return &kvmError{Short: uiText("error.linux.this_computer_does_not_offer_kvm"), msg: uiText("error.linux.this_computer_does_not_offer_kvm_which_omarchy")}
 	}
 	if errors.Is(err, fs.ErrPermission) {
-		return &kvmError{Short: "This account cannot use KVM.", msg: "this account is not allowed to use KVM. Add it to the kvm group with: sudo usermod -aG kvm $USER. Then sign out and back in"}
+		return &kvmError{Short: uiText("error.linux.this_account_cannot_use_kvm"), msg: uiText("error.linux.this_account_is_not_allowed_to_use_kvm")}
 	}
-	return &kvmError{Short: "KVM could not be opened.", msg: fmt.Sprintf("cannot open /dev/kvm: %v", err)}
+	return &kvmError{Short: uiText("error.linux.kvm_could_not_be_opened"), msg: uiTextWith("error.linux.cannot_open_dev_kvm", map[string]string{"error": fmt.Sprintf("%v", err)})}
 }
 
 // renderNodeVendors lists the PCI vendor of each DRM render node.

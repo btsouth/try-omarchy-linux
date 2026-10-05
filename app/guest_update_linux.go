@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // A newer app can pin a newer guest image. The image is Omarchy's system files
@@ -54,7 +53,7 @@ func ensureLinuxGuest(cfg *config, release, sumsSHA256 string) error {
 func stageLinuxGuestUpdate(cfg *config, release, sumsSHA256 string) error {
 	ui := getUI()
 	ui.setUpdating(true)
-	ui.setStatus("Preparing an Omarchy image update...")
+	ui.setCatalogStatus("status.preparing_image_update", nil)
 	staged := filepath.Join(cfg.dir, "guest.next")
 	marker := filepath.Join(staged, linuxUpdateTargetFile)
 	target := normalizedRelease(release) + "\n" + normalizedSHA256(sumsSHA256) + "\n"
@@ -93,15 +92,15 @@ func stageLinuxGuestUpdate(cfg *config, release, sumsSHA256 string) error {
 // installed Omarchy is starting instead.
 func postponeLinuxGuestUpdate(err error, dir string) {
 	var space *insufficientSpaceError
-	reason := "The newer Omarchy system files could not be prepared."
+	reason := uiText("update.linux.prepare_failed")
 	switch f := classifyLinuxSetupFailure(err, dir); {
 	case errors.As(err, &space):
-		reason = "There is not enough free space for the newer Omarchy system files, which need " + linuxGB(space.need) + "."
+		reason = uiTextWith("update.linux.space_needed", map[string]string{"size": linuxGB(space.need)})
 	case f.Help == "space":
-		reason = "There is not enough free space for the newer Omarchy system files."
-	case f.Help == "downloads" && strings.HasPrefix(f.Title, "Could not download"):
-		reason = "Try Omarchy could not download the newer Omarchy system files."
+		reason = uiText("update.linux.no_space")
+	case f.Help == "downloads" && f.Title == uiText("error.linux.could_not_download_omarchy"):
+		reason = uiText("update.linux.download_failed")
 	}
 	logf("guest update postponed: %v", err)
-	tellLinuxUser("guest-update", "Omarchy update postponed", reason+" Your current Omarchy is starting instead and nothing you saved changed. Try Omarchy will try again next time.")
+	tellLinuxUser("guest-update", uiText("update.linux.postponed"), uiTextWith("update.linux.postponed_detail", map[string]string{"reason": reason}))
 }

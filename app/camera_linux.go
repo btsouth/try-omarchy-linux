@@ -89,11 +89,11 @@ func cameraChardev(dir string) string {
 // requests start capture through the desktop camera portal.
 func runCameraBridge(preferences desktopPreferences) {
 	if preferences.CameraDisabled {
-		cameraState.Store("Camera access is off. Enable it in Settings and launch Omarchy again.")
+		cameraState.Store(uiText("camera.linux.camera_access_is_off_enable_it_in_settings"))
 	}
 	listener, err := listenLinuxCamera()
 	if err != nil {
-		fatalf("Could not prepare the private camera connection: %v", err)
+		fatal(uiTextWith("camera.linux.could_not_prepare_the_private_camera_connection_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	logf("camera: bridge listening on its private connection")
 	go func() {

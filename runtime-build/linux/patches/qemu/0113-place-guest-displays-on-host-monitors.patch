@@ -1,0 +1,453 @@
+--- a/include/ui/sdl2.h
++++ b/include/ui/sdl2.h
+@@ -36,6 +36,11 @@
+     SDL_Window *real_window;
+     SDL_Renderer *real_renderer;
+     int idx;
++    char *target_monitor;
++    bool placement_initialized;
++    bool fullscreen_requested;
++    bool fullscreen;
++    int saved_grab;
+     int last_vm_running; /* per console for caption reasons */
+     int x, y, w, h;
+     int hidden;
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -34,6 +34,7 @@
+ #include "system/runstate-action.h"
+ #include "system/system.h"
+ #include "qemu/log.h"
++#include "qemu/error-report.h"
+ #include "qemu-main.h"
+ #include "qapi/qapi-events-ui.h"
+ 
+@@ -49,8 +50,7 @@
+ static bool alt_grab;
+ static bool ctrl_grab;
+ 
+-static int gui_saved_grab;
+-static int gui_fullscreen;
++static bool initial_fullscreen;
+ static int gui_grab_code = KMOD_LALT | KMOD_LCTRL;
+ static SDL_Cursor *sdl_cursor_normal;
+ static SDL_Cursor *sdl_cursor_hidden;
+@@ -74,28 +74,126 @@
+ static struct sdl2_console *get_scon_from_window(uint32_t window_id)
+ {
+     int i;
++    SDL_Window *window = SDL_GetWindowFromID(window_id);
++
++    /* Queued input can outlive a disabled secondary output. */
++    if (!window) {
++        return NULL;
++    }
+     for (i = 0; i < sdl2_num_outputs; i++) {
+-        if (sdl2_console[i].real_window == SDL_GetWindowFromID(window_id)) {
++        if (sdl2_console[i].real_window == window) {
+             return &sdl2_console[i];
+         }
+     }
+     return NULL;
+ }
+ 
++/* Connector names, not SDL indices, survive host display reordering. */
++static int sdl_target_display(struct sdl2_console *scon)
++{
++    int count = SDL_GetNumVideoDisplays();
++    int i;
++
++    if (!scon->target_monitor) {
++        return count > 0 ? scon->idx % count : -1;
++    }
++    for (i = 0; i < count; i++) {
++        if (g_strcmp0(SDL_GetDisplayName(i), scon->target_monitor) == 0) {
++            return i;
++        }
++    }
++    return -1;
++}
++
++static bool sdl_display_available(struct sdl2_console *scon, int display)
++{
++    int i;
++
++    if (display < 0) {
++        return false;
++    }
++    for (i = 0; i < sdl2_num_outputs; i++) {
++        struct sdl2_console *other = &sdl2_console[i];
++        if (other != scon && other->real_window && other->fullscreen &&
++            sdl_target_display(other) == display) {
++            return false;
++        }
++    }
++    return true;
++}
++
++/* Set pending display position before fullscreen: SDL3 also uses it for
++ * xdg_toplevel.set_fullscreen(output) on Wayland, where windowed placement
++ * belongs to the compositor. Use CENTERED: SDL3 discards UNDEFINED display
++ * bits in SetWindowPosition, but CENTERED sets pending_displayID.
++ * X11 uses the target display's bounds.
++ */
++static bool sdl_set_fullscreen(struct sdl2_console *scon, bool fullscreen)
++{
++    int display = sdl_target_display(scon);
++
++    if (!scon->real_window ||
++        (fullscreen && !sdl_display_available(scon, display))) {
++        return false;
++    }
++    if (fullscreen) {
++        SDL_SetWindowPosition(scon->real_window,
++                             SDL_WINDOWPOS_CENTERED_DISPLAY(display),
++                             SDL_WINDOWPOS_CENTERED_DISPLAY(display));
++    }
++    if (SDL_SetWindowFullscreen(scon->real_window,
++            fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) < 0) {
++        return false;
++    }
++    scon->fullscreen = fullscreen;
++    return true;
++}
++
++static void sdl_configure_output(struct sdl2_console *scon)
++{
++    g_autofree char *key = g_strdup_printf("QEMU_SDL_OUTPUT_%d", scon->idx);
++    const char *name = g_getenv(key);
++    g_autofree char *fskey = g_strdup_printf("QEMU_SDL_OUTPUT_FULLSCREEN_%d",
++                                            scon->idx);
++    const char *fullscreen = g_getenv(fskey);
++
++    /* Reject malformed launch environments rather than silently misroute. */
++    if (name && (strlen(name) > 64 || strpbrk(name, ",\r\n"))) {
++        error_report("Invalid SDL output monitor for console %d", scon->idx);
++        exit(1);
++    }
++    if (fullscreen && strcmp(fullscreen, "true") && strcmp(fullscreen, "false")) {
++        error_report("Invalid SDL output fullscreen for console %d", scon->idx);
++        exit(1);
++    }
++    scon->target_monitor = name && *name ? g_strdup(name) : NULL;
++    scon->fullscreen_requested = fullscreen ? !strcmp(fullscreen, "true") :
++                                              initial_fullscreen;
++}
++
+ void sdl2_window_create(struct sdl2_console *scon)
+ {
+-    int flags = SDL_WINDOW_ALLOW_HIGHDPI;
++    int flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
++    int display;
++    bool fullscreen;
+ 
+     if (!scon->surface) {
+         return;
+     }
+     assert(!scon->real_window);
+ 
+-    if (gui_fullscreen) {
+-        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+-    } else {
+-        flags |= SDL_WINDOW_RESIZABLE;
+-    }
++    display = sdl_target_display(scon);
++    /* Pin Automatic to a connector, so removing/reordering displays cannot
++     * turn its fullscreen window into a second window on another monitor. */
++    if (!scon->target_monitor && display >= 0) {
++        scon->target_monitor = g_strdup(SDL_GetDisplayName(display));
++    }
++    if (!scon->placement_initialized) {
++        scon->placement_initialized = true;
++        scon->fullscreen = scon->fullscreen_requested;
++    }
++    fullscreen = scon->fullscreen;
++    scon->fullscreen = false;
+     if (scon->hidden) {
+         flags |= SDL_WINDOW_HIDDEN;
+     }
+@@ -105,11 +203,19 @@
+     }
+ #endif
+ 
+-    scon->real_window = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED,
+-                                         SDL_WINDOWPOS_UNDEFINED,
++    scon->real_window = SDL_CreateWindow("",
++                                         SDL_WINDOWPOS_UNDEFINED_DISPLAY(MAX(display, 0)),
++                                         SDL_WINDOWPOS_UNDEFINED_DISPLAY(MAX(display, 0)),
+                                          surface_width(scon->surface),
+                                          surface_height(scon->surface),
+                                          flags);
++    if (!scon->real_window) {
++        error_report("SDL window creation failed: %s", SDL_GetError());
++        exit(1);
++    }
++    if (fullscreen) {
++        sdl_set_fullscreen(scon, true);
++    }
+     if (scon->opengl) {
+         const char *driver = "opengl";
+ 
+@@ -122,6 +228,13 @@
+         SDL_SetHint(SDL_HINT_RENDER_DRIVER, driver);
+         SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");
+ 
++        /* Virgl textures belong to the primary console's share group,
++         * including after a secondary output is disabled and recreated. */
++        struct sdl2_console *primary = &sdl2_console[0];
++        if (scon != primary && primary->real_window && primary->winctx) {
++            SDL_GL_MakeCurrent(primary->real_window, primary->winctx);
++            SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
++        }
+         scon->winctx = SDL_GL_CreateContext(scon->real_window);
+         SDL_GL_SetSwapInterval(0);
+ 
+@@ -274,7 +387,7 @@
+     if (qemu_name && g_strcmp0(g_getenv("QEMU_SDL_TITLE_FROM_NAME"), "1") == 0) {
+         /* An application running the VM names its windows after itself. */
+         if (scon->idx) {
+-            snprintf(win_title, sizeof(win_title), "%s (%d)%s", qemu_name,
++            snprintf(win_title, sizeof(win_title), "%s display %d%s", qemu_name,
+                      scon->idx + 1, status);
+         } else {
+             snprintf(win_title, sizeof(win_title), "%s%s", qemu_name, status);
+@@ -367,7 +480,7 @@
+     } else {
+         sdl_hide_cursor(scon);
+     }
+-    if (focus_keyboard_grab && !gui_fullscreen &&
++    if (focus_keyboard_grab && !scon->fullscreen &&
+         (qemu_input_is_absolute(con) || absolute_enabled)) {
+         /* An absolute tablet needs keyboard capture, not pointer confinement. */
+         sdl_focus_keyboard_grab(scon, true);
+@@ -405,6 +518,9 @@
+     }
+     SDL_GetMouseState(&mouse_x, &mouse_y);
+     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
++    if (scr_w <= 0 || scr_h <= 0) {
++        return;
++    }
+     if (mouse_x > 0 && mouse_x < scr_w - 1 &&
+         mouse_y > 0 && mouse_y < scr_h - 1) {
+         sdl_grab_start(scon);
+@@ -439,7 +555,7 @@
+             absolute_mouse_grab(&sdl2_console[0]);
+         }
+     } else if (absolute_enabled) {
+-        if (!gui_fullscreen) {
++        if (!sdl2_console[0].fullscreen) {
+             sdl_grab_end(&sdl2_console[0]);
+         }
+         absolute_enabled = 0;
+@@ -485,24 +601,53 @@
+ 
+ static void toggle_full_screen(struct sdl2_console *scon)
+ {
+-    gui_fullscreen = !gui_fullscreen;
+-    if (gui_fullscreen) {
+-        SDL_SetWindowFullscreen(scon->real_window,
+-                                SDL_WINDOW_FULLSCREEN_DESKTOP);
+-        gui_saved_grab = gui_grab;
++    bool fullscreen = !scon->fullscreen;
++
++    if (!sdl_set_fullscreen(scon, fullscreen)) {
++        return;
++    }
++    if (fullscreen) {
++        scon->saved_grab = gui_grab;
+         sdl_grab_start(scon);
+     } else {
+-        if (!gui_saved_grab) {
++        if (!scon->saved_grab) {
+             sdl_grab_end(scon);
+         }
+-        SDL_SetWindowFullscreen(scon->real_window, 0);
+         if (focus_keyboard_grab &&
+             (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled)) {
+-            /* Restore the windowed tablet's free host pointer. */
+             SDL_SetWindowMouseGrab(scon->real_window, SDL_FALSE);
+         }
+     }
+     sdl2_redraw(scon);
++}
++
++/* SDL reports host hotplug independently of guest scanouts. Keep the VM and
++ * every window alive, exit fullscreen on a missing monitor, and retain the
++ * connector for replug. Re-enter fullscreen only when the user asks. */
++static void sdl_host_displays_changed(void)
++{
++    int i;
++    for (i = 0; i < sdl2_num_outputs; i++) {
++        struct sdl2_console *scon = &sdl2_console[i];
++        int display = sdl_target_display(scon);
++        if (!scon->real_window) {
++            continue;
++        }
++        if (display < 0) {
++            if (scon->fullscreen && sdl_set_fullscreen(scon, false)) {
++                if (SDL_GetWindowFlags(scon->real_window) & SDL_WINDOW_INPUT_FOCUS) {
++                    sdl_grab_end(scon);
++                    SDL_SetWindowMouseGrab(scon->real_window, SDL_FALSE);
++                }
++            }
++            SDL_SetWindowPosition(scon->real_window,
++                                 SDL_WINDOWPOS_CENTERED_DISPLAY(0),
++                                 SDL_WINDOWPOS_CENTERED_DISPLAY(0));
++        } else if (scon->fullscreen) {
++            /* Reordered SDL indices still refer to the saved connector. */
++            sdl_set_fullscreen(scon, true);
++        }
++    }
+ }
+ 
+ static int get_mod_state(void)
+@@ -569,7 +714,7 @@
+                 sdl_release_keyboard(scon, !keyboard_released);
+             } else if (!gui_grab) {
+                 sdl_grab_start(scon);
+-            } else if (!gui_fullscreen) {
++            } else if (!scon->fullscreen) {
+                 sdl_grab_end(scon);
+             }
+             break;
+@@ -584,10 +729,13 @@
+ #if 0
+         case SDL_SCANCODE_KP_PLUS:
+         case SDL_SCANCODE_KP_MINUS:
+-            if (!gui_fullscreen) {
++            if (!scon->fullscreen) {
+                 int scr_w, scr_h;
+                 int width, height;
+                 SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
++    if (scr_w <= 0 || scr_h <= 0) {
++        return;
++    }
+ 
+                 width = MAX(scr_w + (ev->key.keysym.scancode ==
+                                      SDL_SCANCODE_KP_PLUS ? 50 : -50),
+@@ -764,15 +912,19 @@
+     int scr_w, scr_h, surf_w, surf_h, x, y, dx, dy;
+ 
+     sdl_drop_motion(&ev->motion);
+-    if (!scon || !qemu_console_is_graphic(scon->dcl.con)) {
++    if (!scon || !scon->real_window || !scon->surface ||
++        !qemu_console_is_graphic(scon->dcl.con)) {
+         return;
+     }
+ 
+     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
++    if (scr_w <= 0 || scr_h <= 0) {
++        return;
++    }
+     if (qemu_input_is_absolute(scon->dcl.con) || absolute_enabled) {
+         max_x = scr_w - 1;
+         max_y = scr_h - 1;
+-        if (gui_grab && !gui_fullscreen
++        if (gui_grab && !scon->fullscreen
+             && (ev->motion.x == 0 || ev->motion.y == 0 ||
+                 ev->motion.x == max_x || ev->motion.y == max_y)) {
+             sdl_grab_end(scon);
+@@ -801,7 +953,8 @@
+     struct sdl2_console *scon = get_scon_from_window(ev->button.windowID);
+     int scr_w, scr_h, x, y;
+ 
+-    if (!scon || !qemu_console_is_graphic(scon->dcl.con)) {
++    if (!scon || !scon->real_window || !scon->surface ||
++        !qemu_console_is_graphic(scon->dcl.con)) {
+         return;
+     }
+ 
+@@ -810,6 +963,9 @@
+         sdl_release_keyboard(scon, false);
+     }
+     SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
++    if (scr_w <= 0 || scr_h <= 0) {
++        return;
++    }
+     x = (int64_t)bev->x * surface_width(scon->surface) / scr_w;
+     y = (int64_t)bev->y * surface_height(scon->surface) / scr_h;
+ 
+@@ -954,7 +1110,7 @@
+         sdl_drop_pointer_left(ev->window.windowID);
+         /* Host panels need their shortcuts back on both X11 and Wayland. */
+         if (sdl_pointer_outside(scon)) {
+-            if (gui_grab && !gui_fullscreen) {
++            if (gui_grab && !scon->fullscreen) {
+                 sdl_grab_end(scon);
+             }
+             sdl_focus_keyboard_grab(scon, false);
+@@ -963,7 +1119,7 @@
+         break;
+     case SDL_WINDOWEVENT_FOCUS_LOST:
+         scon->scroll = (SDLScroll) {0};
+-        if (gui_grab && !gui_fullscreen) {
++        if (gui_grab && !scon->fullscreen) {
+             sdl_grab_end(scon);
+         }
+         sdl_focus_keyboard_grab(scon, false);
+@@ -1115,6 +1271,9 @@
+             idle = 0;
+             handle_mousewheel(ev);
+             break;
++        case SDL_DISPLAYEVENT:
++            sdl_host_displays_changed();
++            break;
+         case SDL_WINDOWEVENT:
+             handle_windowevent(ev);
+             break;
+@@ -1228,6 +1387,7 @@
+         qemu_console_unregister_listener(&sdl2_console[i].dcl);
+         qkbd_state_free(sdl2_console[i].kbd);
+         sdl2_window_destroy(&sdl2_console[i]);
++        g_free(sdl2_console[i].target_monitor);
+     }
+     g_clear_pointer(&sdl2_console, g_free);
+     sdl2_num_outputs = 0;
+@@ -1358,7 +1518,7 @@
+     memset(&info, 0, sizeof(info));
+     SDL_VERSION(&info.version);
+ 
+-    gui_fullscreen = o->has_full_screen && o->full_screen;
++    initial_fullscreen = o->has_full_screen && o->full_screen;
+ 
+     if (o->u.sdl.has_grab_mod) {
+         if (o->u.sdl.grab_mod == HOT_KEY_MOD_LSHIFT_LCTRL_LALT) {
+@@ -1389,6 +1549,7 @@
+         }
+         sdl2_console[i].idx = i;
+         sdl2_console[i].opts = o;
++        sdl_configure_output(&sdl2_console[i]);
+ #ifdef CONFIG_OPENGL
+         sdl2_console[i].opengl = display_opengl;
+         sdl2_console[i].dgc.ops = display_opengl ? &gl_ctx_ops : NULL;
+@@ -1405,7 +1566,8 @@
+ #endif
+         qemu_console_register_listener(con, &sdl2_console[i].dcl, ops);
+ #if defined(SDL_VIDEO_DRIVER_WINDOWS) || defined(SDL_VIDEO_DRIVER_X11)
+-        if (SDL_GetWindowWMInfo(sdl2_console[i].real_window, &info)) {
++        if (sdl2_console[i].real_window &&
++            SDL_GetWindowWMInfo(sdl2_console[i].real_window, &info)) {
+ #if defined(SDL_VIDEO_DRIVER_WINDOWS)
+             qemu_console_set_window_id(con, (uintptr_t)info.info.win.window);
+ #elif defined(SDL_VIDEO_DRIVER_X11)
+@@ -1438,7 +1600,7 @@
+     sdl_cursor_hidden = SDL_CreateCursor(&data, &data, 8, 1, 0, 0);
+     sdl_cursor_normal = SDL_GetCursor();
+ 
+-    if (gui_fullscreen) {
++    if (sdl2_console[0].fullscreen) {
+         sdl_grab_start(&sdl2_console[0]);
+     }
+ 
+--- a/ui/sdl2-gl.c
++++ b/ui/sdl2-gl.c
+@@ -91,6 +91,9 @@
+     scon->surface = new_surface;
+ 
+     if (surface_is_placeholder(new_surface) && qemu_console_get_index(dcl->con)) {
++        /* Destroy scanout resources before destroying their GL context. */
++        egl_fb_destroy(&scon->guest_fb);
++        scon->scanout_mode = false;
+         qemu_gl_fini_shader(scon->gls);
+         scon->gls = NULL;
+         sdl2_window_destroy(scon);

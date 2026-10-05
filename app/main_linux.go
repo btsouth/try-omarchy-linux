@@ -85,6 +85,7 @@ func defaultLinuxDataDirectory() string {
 // guest and runs it until it shuts down.
 func main() {
 	cfg := &config{}
+	registerLinuxDisplayFlags(flag.CommandLine, cfg)
 	flag.StringVar(&cfg.dir, "dir", defaultLinuxDataDirectory(), uiText("launcher.linux.flag.dir"))
 	flag.StringVar(&cfg.qemu, "qemu", "qemu-system-x86_64", uiText("launcher.linux.flag.qemu"))
 	flag.StringVar(&cfg.share, "share", "", uiText("launcher.linux.flag.share"))
@@ -255,6 +256,11 @@ func main() {
 	if err := applySettings(cfg, userSettings, explicitFlags, &forwards, sshKeyPath); err != nil {
 		fatal(uiTextWith("fatal.linux.cannot_use_its_settings_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
+	displayPrefs, err := loadLinuxDisplays(cfg.dir, userSettings)
+	if err != nil {
+		fatalf("%v", err)
+	}
+	applyLinuxDisplays(cfg, displayPrefs, explicitFlags)
 	resourcePrefs, err := loadResourcePreferences(cfg.dir)
 	if err != nil {
 		fatal(uiTextWith("fatal.preferences.resources", map[string]string{"error": fmt.Sprintf("%v", err)}))
@@ -406,7 +412,12 @@ func main() {
 		profile, cfg.cpus, host.LogicalCPUs, cfg.memMiB, host.AvailableMiB, host.CPUKnown, host.CPUBusy*100)
 
 	cfg.displayWidth, cfg.displayHeight = *width, *height
-	cmdline += fmt.Sprintf(" video=%dx%d", cfg.displayWidth, cfg.displayHeight)
+	// One display keeps the existing device string and video= mode. Typed
+	// per-output sizes only go into the JSON device built for several outputs.
+	if guestDisplayCount(cfg.displays) > 1 {
+		setLinuxDisplaySizes(cfg, probeLinuxMonitors(), explicitFlags)
+	}
+	cmdline += linuxDisplayKernelOption(cfg)
 	if err := checkSetupCancelled(); err != nil {
 		fatalf("%v", err)
 	}

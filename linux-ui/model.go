@@ -244,3 +244,14 @@ func fullscreenDisplayChoices(displays []displayChoice) []audioDevice {
 	}
 	return choices
 }
+
+// Legacy protocol snapshots still describe output 1 with the old fields.
+func settingsDisplayOutputs(form *settingsForm) []guestOutput {
+	count := min(16, max(1, form.Displays))
+	outputs := make([]guestOutput, count)
+	copy(outputs, form.DisplayOutputs)
+	if len(form.DisplayOutputs) == 0 {
+		outputs[0] = guestOutput{form.FullscreenDisplay, form.Fullscreen}
+	}
+	return outputs
+}

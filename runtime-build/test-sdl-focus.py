@@ -36,7 +36,7 @@ typedef struct {struct {uint32_t windowID;int event;} window;} SDL_Event;
 struct options {bool has_window_close,window_close;};
 typedef struct {double x,y;int64_t legacy_x,legacy_y;} SDLScroll;
 struct sdl2_console {SDL_Window *real_window;struct {QemuConsole *con;} dcl;
-    struct options *opts;bool hidden,ignore_hotkeys;SDLScroll scroll;};
+    struct options *opts;bool hidden,ignore_hotkeys;SDLScroll scroll;bool fullscreen;int saved_grab;};
 static SDL_Window window={1,100,100,640,480}, other;
 static struct options opts;
 static QemuConsole con;
@@ -70,7 +70,7 @@ static int SDL_GetMouseState(int *x,int *y) {*x=local_x;*y=local_y;return 0;}
 static void SDL_SetWindowKeyboardGrab(SDL_Window *w,int v) {keyboard=v;}
 static void SDL_SetWindowGrab(SDL_Window *w,int v) {pointer=keyboard=v;}
 static void SDL_SetWindowMouseGrab(SDL_Window *w,int v) {pointer=v;}
-static void SDL_SetWindowFullscreen(SDL_Window *w,int v) {}
+static bool sdl_set_fullscreen(struct sdl2_console *s,bool v) {s->fullscreen=v;return true;}
 static void SDL_SetCursor(int c) {}
 static void SDL_WarpMouseInWindow(SDL_Window *w,int x,int y) {}
 static void SDL_HideWindow(SDL_Window *w) {}
@@ -119,14 +119,14 @@ int main(void) {
     /* Relative and fullscreen input still need a pointer grab. */
     absolute=false;sdl_grab_start(&console);assert(pointer && keyboard);
     sdl_release_keyboard(&console,true);assert(!pointer && !keyboard);
-    keyboard_released=false;absolute=true;gui_fullscreen=true;
+    keyboard_released=false;absolute=true;console.fullscreen=true;
     sdl_grab_start(&console);assert(pointer && keyboard);
     sdl_release_keyboard(&console,true);assert(!pointer && !keyboard);
-    gui_fullscreen=false;keyboard_released=false;sdl_grab_start(&console);
-    toggle_full_screen(&console);assert(gui_fullscreen && pointer && keyboard);
-    toggle_full_screen(&console);assert(!gui_fullscreen && !pointer && keyboard);
+    console.fullscreen=false;keyboard_released=false;sdl_grab_start(&console);
+    toggle_full_screen(&console);assert(console.fullscreen && pointer && keyboard);
+    toggle_full_screen(&console);assert(!console.fullscreen && !pointer && keyboard);
     /* Do not alter runtimes which did not opt into focus keyboard capture. */
-    focus_keyboard_grab=false;keyboard_released=false;gui_fullscreen=false;
+    focus_keyboard_grab=false;keyboard_released=false;console.fullscreen=false;
     mouse_focus=&other;sdl_grab_start(&console);assert(pointer && keyboard);
     return 0;
 }

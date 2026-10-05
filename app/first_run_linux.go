@@ -157,6 +157,21 @@ func resolveLinuxDataDirectory(defaultDir, requested string, explicit bool, choo
 				} else if !os.IsNotExist(err) {
 					return "", false, err
 				}
+				if _, err := os.Stat(filepath.Join(defaultDir, linuxDisplaysFilename)); err == nil {
+					if _, err := os.Stat(filepath.Join(selected, linuxDisplaysFilename)); os.IsNotExist(err) {
+						prefs, err := loadLinuxDisplays(defaultDir, settings{})
+						if err != nil {
+							return "", false, err
+						}
+						if err := saveLinuxDisplays(selected, prefs); err != nil {
+							return "", false, err
+						}
+					} else if err != nil {
+						return "", false, err
+					}
+				} else if !os.IsNotExist(err) {
+					return "", false, err
+				}
 				if _, err := os.Stat(filepath.Join(defaultDir, launchPreferencesFilename)); err == nil {
 					if _, err := os.Stat(filepath.Join(selected, launchPreferencesFilename)); os.IsNotExist(err) {
 						prefs, err := loadLaunchPreferences(defaultDir)
@@ -222,7 +237,7 @@ func linuxPrebootSettingsOnly(dir string) bool {
 		switch entry.Name() {
 		case settingsFileName, approvedAppsFilename:
 			found = true
-		case resourcePreferencesFilename, desktopPreferencesFilename, audioPreferencesFilename, storageSettingsFilename, linuxExperiencePreferencesFilename, launchPreferencesFilename, "diagnostics", "portable-host":
+		case resourcePreferencesFilename, desktopPreferencesFilename, audioPreferencesFilename, storageSettingsFilename, linuxExperiencePreferencesFilename, linuxDisplaysFilename, launchPreferencesFilename, "diagnostics", "portable-host":
 		default:
 			return false
 		}

@@ -368,3 +368,28 @@ never your VM's disk. Look through it before sharing, since logs can mention
 local details, then attach it to an issue at
 [github.com/btsouth/try-omarchy-linux/issues](https://github.com/btsouth/try-omarchy-linux/issues),
 with your distro, desktop and whether you use Wayland or X11.
+
+## Multiple displays
+
+In **Settings**, choose **Guest displays** (normally up to four), then a monitor
+and fullscreen choice for each output. Existing advanced configurations keep
+their saved display count. Automatic assigns outputs across connected
+monitors. Only one guest window can be fullscreen on each host monitor; extra
+outputs remain windowed. Existing setups keep their fullscreen monitor on
+output 1. These settings apply at the next VM launch. Advanced command-line
+launches can use `--displays=2` (up to 16); `--fullscreen` applies to every output,
+and `--fullscreen-display=DP-1` overrides the monitor for output 1.
+
+Each output starts at its target monitor's pixel dimensions when available.
+`--width` and `--height` override that initial size. Ctrl-Alt-F toggles fullscreen
+for the focused guest window independently. If its chosen monitor is unplugged,
+the window leaves fullscreen and falls back to the primary monitor without
+restarting the VM. The choice is retained: reconnect the monitor and press
+Ctrl-Alt-F to return there.
+
+On Wayland, windowed windows open where the compositor puts them. Move them
+with your desktop's window controls; fullscreen goes to the chosen output.
+X11 can also place windowed outputs on their target monitor.
+
+Per-output guest scale policy requires a later guest-image change. Remembering
+window sizes and mirroring the host monitor arrangement are not implemented.

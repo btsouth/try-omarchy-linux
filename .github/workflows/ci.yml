@@ -50,7 +50,10 @@ jobs:
         run: python3 runtime-build/test-sdl-drop-position.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
 
       - name: Test Linux SDL display placement
-        run: python3 runtime-build/linux/test-sdl-displays.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libglib2.0-dev
+          python3 runtime-build/linux/test-sdl-displays.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
 
       - name: Test Linux camera frame packing
         run: |

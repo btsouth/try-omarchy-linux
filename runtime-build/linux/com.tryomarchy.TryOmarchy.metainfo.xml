@@ -50,6 +50,19 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.0" date="2026-10-05" type="stable">
+      <description>
+        <p>Open Omarchy on multiple displays and keep using your guest while its next image downloads.</p>
+        <ul>
+          <li>Open on two or more displays, with a separate size and scale for each output</li>
+          <li>Boot the working guest first, download image updates in the background, and apply them on the next launch</li>
+          <li>Use USB devices in the guest and follow this computer's keyboard layout</li>
+          <li>Keep audio output when the microphone is off, and pause the VM before this computer sleeps</li>
+          <li>Get night light, notifications, compositor recovery and safer guest package updates</li>
+          <li>The app now requests USB access, sleep coordination through login1, keyboard layout through locale1, and read access to KDE's kxkbrc file</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-10-04" type="stable">
       <description>
         <p>Snapshots, disk space reclaim, a path to installed Omarchy, and a newer Omarchy guest.</p>

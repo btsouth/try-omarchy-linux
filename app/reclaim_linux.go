@@ -76,7 +76,7 @@ func linuxReclaimInfoFor(dir string) *linuxReclaimInfo {
 func linuxReclaimPrompt(budgetMiB int64) string {
 	amount := uiText("reclaim.linux.some_of_its_free_space")
 	if budgetMiB > 0 {
-		amount = uiTextWith("reclaim.linux.up_to_of_its_free_space", map[string]string{"budget_mi_b_20": linuxGB(budgetMiB << 20)})
+		amount = uiTextWith("reclaim.linux.up_to_of_its_free_space", map[string]string{"budget": linuxGB(budgetMiB << 20)})
 	}
 	return uiTextWith("reclaim.linux.omarchy_prepares_in_this_pass_while_it_does", map[string]string{"amount": amount})
 }
@@ -220,7 +220,7 @@ func compactLinuxDisk(cfg *config) {
 		tellLinuxUser("reclaim", uiText("reclaim.linux.space_given_back"), uiText("reclaim.linux.omarchy_shut_down_and_its_unused_space_was"))
 		return
 	}
-	tellLinuxUser("reclaim", uiText("reclaim.linux.space_given_back"), uiTextWith("reclaim.linux.omarchy_s_disk_now_uses_on_this_drive", map[string]string{"after": linuxGB(after), "max_before_after_0": linuxGB(max(before-after, 0))}))
+	tellLinuxUser("reclaim", uiText("reclaim.linux.space_given_back"), uiTextWith("reclaim.linux.omarchy_s_disk_now_uses_on_this_drive", map[string]string{"after": linuxGB(after), "saved": linuxGB(max(before-after, 0))}))
 }
 
 // sendLinuxReclaim asks a running launcher to start a pass. It is the

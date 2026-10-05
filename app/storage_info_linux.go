@@ -218,7 +218,7 @@ func linuxStorageRows(dir, defaultDir string, full bool) []linuxRow {
 	if err == nil && disk.Mode().IsRegular() {
 		used := linuxAllocatedBytes(filepath.Join(dir, "vm", "disk.raw"))
 		rows = append(rows, linuxRow{Title: uiText("location.linux.omarchy_disk"),
-			Detail: uiTextWith("location.linux.used_of_omarchy_sees_the_full_only_what", map[string]string{"used": linuxGB(used), "disk_size": linuxGB(disk.Size()), "disk_size_2": linuxGB(disk.Size())})})
+			Detail: uiTextWith("location.linux.used_of_omarchy_sees_the_full_only_what", map[string]string{"used": linuxGB(used), "disk_size": linuxGB(disk.Size())})})
 	}
 	kept := linuxKeptCopies(dir, defaultDir)
 	if !full {

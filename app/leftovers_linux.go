@@ -292,7 +292,7 @@ func linuxLeftoverNotice(defaultDir string) string {
 		if items[0].Kind == "backup" {
 			what = uiText("recovery.linux.an_interrupted_backup")
 		}
-		return uiTextWith("recovery.linux.left_in_backup_and_recovery_can_remove_it", map[string]string{"what": what, "items_0_bytes": linuxGB(items[0].Bytes), "path": linuxDisplayPath(filepath.Dir(items[0].Path))})
+		return uiTextWith("recovery.linux.left_in_backup_and_recovery_can_remove_it", map[string]string{"what": what, "size": linuxGB(items[0].Bytes), "path": linuxDisplayPath(filepath.Dir(items[0].Path))})
 	}
 	var total int64
 	for _, f := range items {

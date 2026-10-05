@@ -127,7 +127,7 @@ func (p *linuxPowerMonitor) handle(ctx context.Context, signal *dbus.Signal) {
 
 // Start once controls answer, before waiting for the desktop. Stop before a
 // replacement VM can start; the event loop is the sole owner of its QMP state.
-func startLinuxPower(vmDone <-chan struct{}) func() {
+func startLinuxPower(dir string, vmDone <-chan struct{}) func() {
 	ctx, cancel := context.WithCancel(context.Background())
 	source, err := connectLogindSleep(ctx)
 	if err != nil {
@@ -137,7 +137,13 @@ func startLinuxPower(vmDone <-chan struct{}) func() {
 	}
 	p := &linuxPowerMonitor{
 		source: source, resumed: notifyHostResumed,
-		guest: &guestPowerState{dial: func(ctx context.Context) (*qmpClient, error) {
+		guest: &guestPowerState{ctx: ctx, identity: guestRuntimeGeneration.Load, changed: func(phase string) {
+			setHostPowerTransition(phase)
+			guestCompositorHealth.power(time.Now(), phase != "running")
+		}, onRecovery: func(err error) {
+			go createLinuxDiagnostics(dir)
+			showLinuxRuntimeError(uiText("tray.power.paused_title"), uiText("tray.power.paused"))
+		}, dial: func(ctx context.Context) (*qmpClient, error) {
 			select {
 			case <-vmDone:
 				return nil, fmt.Errorf("guest runtime has exited")
@@ -184,6 +190,8 @@ func (p *linuxPowerMonitor) start(parent context.Context, vmDone <-chan struct{}
 			case <-p.source.done():
 				logf("power: logind connection lost; continuing without host sleep handling")
 				return
+			case <-linuxResumeRequests:
+				p.guest.manualResume()
 			case signal, ok := <-p.source.signals():
 				if !ok {
 					return

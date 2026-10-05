@@ -44,6 +44,21 @@ existing disks. Catch-up retires 1.0.0 while preserving the launcher-delivered
 module, registers the new source, and rebuilds when matching headers exist.
 The force-install entry from patch 0118 remains in place for later header updates.
 
+Patch 0130 restores notification popups using a read-only lock-state boolean
+from the shell's private authentication store. Lock services remain private;
+popups and their timers stay hidden and paused during startup, lock and
+screensaver activity. Compatibility revision 52 delivers the matching shell
+files to existing disks, preserving custom and linked files. Runtime `4.0.4-5`
+includes the fix for the next **Update > Omarchy**.
+
+Patch 0132 pauses Hyprland config autoreload while pacman replaces Omarchy
+files, preventing a temporary missing-bootstrap error banner during live updates.
+Compatibility revision 54 delivers the hooks and transaction guardian to existing
+disks before login. The guardian restores each session's previous setting after
+one explicit reload, including failed or interrupted transactions. It does not
+change user config files or enable a service on the next boot. Hook failures
+print a diagnostic and let the package update continue.
+
 Patch 0091 adds a Windows audio endpoint mirror to the guest PipeWire picker.
 The bridge talks over a dedicated virtio serial port, and compatibility
 revision 33 delivers its user service to existing persistent disks. It needs
@@ -375,3 +390,24 @@ and symlinked files. The Windows patch and quality-of-life assets stay intact.
 The release helper applies all patches in filename order, builds the shared
 importer, and supplies the patch series path to the guest contract tests.
 Refresh the lock later through the existing lock workflow.
+
+## Windows v0.10.0 guest fixes
+
+Linux 0001-0135 remain byte-identical to the released Linux series. The Windows
+v0.10.0 additions are appended with Linux revision numbers:
+
+| Windows patch | Linux patch | Compatibility revision | Behavior |
+| --- | --- | --- | --- |
+| 0127 | Already covered by 0134 | unchanged | The same package-lock refresh is already present. |
+| 0128 | Omitted | none | Synchronizes the Windows playback endpoint, which the Linux launcher does not expose. |
+| 0129 | 0136 | 57 | Guest night light through the virtio screen shader. |
+| 0130 | 0137 | 58 | Notification popups follow private lock state. |
+| 0131 | 0138 | 59 | Compositor heartbeat consumed by the Linux launcher; preserves Linux host-window leases and agent labels. |
+| 0132 | 0139 | 60 | Pause config autoreload during live package transactions. |
+| 0133 | 0140 | 61 | Adopt only the two unowned night-light backend paths, restoring them if the package retry fails. |
+
+Night light, notifications, health and package update fixes work inside either
+VM host. Existing host-specific Linux flags and legacy lineage detection stay
+in place. New catch-up gates use revisions 58 and 61, so disks released at
+Linux revision 55 receive these fixes even though Windows used the same old
+revision numbers for unrelated payloads.

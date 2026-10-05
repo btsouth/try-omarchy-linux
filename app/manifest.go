@@ -7,7 +7,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -17,13 +16,13 @@ const maxSumsBytes = 1 << 20
 // Variables so the signed test-launcher workflow can pin an isolated release
 // with -ldflags -X. Normal builds retain these production defaults.
 var (
-	defaultReleaseURL        = "https://github.com/omacom/try-omarchy-windows/releases/download/v0.8.0"
-	defaultSumsSHA256        = "62e53809e9ff9f486a42d581f8b1909dba3a55e5885ac50b14ba2f55ddeff896"
+	defaultReleaseURL        = "https://github.com/omacom/try-omarchy-windows/releases/download/v0.9.0"
+	defaultSumsSHA256        = "a1942e2e9cd718c68b70c1d98cd95651d3991bf142f52a003f8bedc126d9fa58"
 	defaultRuntimeReleaseURL = ""
 	defaultRuntimeSumsSHA256 = ""
 )
 
-//go:embed testdata/SHA256SUMS.v0.8.0
+//go:embed testdata/SHA256SUMS.v0.9.0
 var defaultSums []byte
 
 // releaseSums returns the embedded, authenticated manifest for the default
@@ -47,20 +46,9 @@ func fetchSums(client *http.Client, release, expectedSHA256 string) (map[string]
 	if !validSHA256(normalizedSHA256(expectedSHA256)) {
 		return nil, fmt.Errorf("trusted SHA256SUMS digest is not a valid SHA256")
 	}
-	resp, err := getWithSetupRetry(client, release+"/SHA256SUMS", 5)
+	data, err := fetchSmallFile(client, release+"/SHA256SUMS", maxSumsBytes)
 	if err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSumsBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > maxSumsBytes {
-		return nil, fmt.Errorf("SHA256SUMS exceeds %d bytes", maxSumsBytes)
 	}
 	return parseVerifiedSums(data, expectedSHA256)
 }

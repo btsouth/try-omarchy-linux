@@ -26,8 +26,50 @@ post-transaction pacman hook to existing disks. After installing or upgrading
 wording without waiting for a reboot. Customized and symlinked files retain the
 existing preservation rules.
 
+Revisions 57 through 61 add the VM night-light shader, notification popup
+privacy, compositor heartbeats, live-update hooks, and night-light package
+conflict adoption. They apply inside the guest on both VM hosts. Windows
+playback-endpoint volume synchronization is omitted from this Linux series.
+The Linux patches through 0135 and their revisions remain unchanged, including
+the legacy `guest-series-origin` detection and exact Linux host gates.
+
+Installed Linux guests boot before downloading a changed launcher guest pin.
+After userspace is ready, the image is staged and verified in the background.
+Shut down and start again to apply it. The previous image is retained until
+the updated guest reports ready; a failed boot restores it on the next launch.
+Flatpak supplies launcher and QEMU updates. Explicit guest pins and checkpoint
+recovery keep their existing meanings.
+
 Personal files stay on the existing disk. The launcher continues to supply the
 external kernel and matching modules; the guest's linux package stays held.
+
+Compatibility revision 60 installs pacman hooks before the desktop starts on
+existing disks. When a transaction replaces Omarchy files, the pre-transaction
+hook pauses config autoreload in every running Hyprland instance. A temporary
+systemd service records each instance's previous value and watches pacman's
+process identity. The post-transaction hook asks it to reload the completed
+config once, then restore the recorded values. If pacman fails or is killed,
+the service restores them when the process exits, even though pacman skips
+post-transaction hooks on failure. State lives only under `/run`, and no service
+is enabled for the next boot. Headless transactions need no running compositor.
+Both hooks are best-effort: setup or cleanup failures are printed to pacman
+and do not cancel the package update. Failed setup asks the guardian to restore
+any partially paused sessions; setup waits at most five seconds for readiness.
+
+The hooks protect **Update > Omarchy**, its conflict retries, and direct pacman
+transactions. They prevent the config watcher from loading a temporarily absent
+`bootstrap.lua` while pacman replaces the runtime. An instance that already had
+autoreload disabled keeps that setting after the explicit reload.
+
+Compatibility revision 61 repairs the default package-conflict handler before
+login so **Update > Omarchy** can adopt the night-light helper and shader that
+compatibility catch-up delivered before the runtime package owned them. It
+accepts only those two unowned paths, rechecks pacman ownership, and keeps their
+previous contents under `/var/lib/omarchy/replaced`. If the retry fails before
+installing either file, the handler restores its previous copy. Unrelated
+conflicts and files owned by another package still stop the update. Customized
+or linked conflict handlers are preserved. Runtime `4.0.4-6` carries the same
+repair for fresh installations and subsequent updates.
 
 If repository publication fails, inspect:
 

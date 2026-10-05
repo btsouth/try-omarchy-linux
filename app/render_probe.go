@@ -148,7 +148,7 @@ func runtimeIdentity(gpuRoot string) string {
 // (settings say CPU) must not later be mistaken for a probe failure, so only
 // automatic and forced-GPU launches record CPU.
 func recordRenderResult(cfg *config) {
-	if cfg.runtimeID == "" || (cfg.renderMode == renderCPU && !cfg.useGpu) {
+	if !shouldRecordRenderResult(cfg.runtimeID, cfg.renderMode, cfg.useGpu, cfg.temporaryCPU) {
 		return
 	}
 	result := renderCPU

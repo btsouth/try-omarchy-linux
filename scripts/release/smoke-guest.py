@@ -53,6 +53,16 @@ def linux_guest_payload_checks(revision: int) -> dict[str, str]:
         checks["linux-notices-payload"] = "test -x /usr/local/lib/try-omarchy/apply-host-names && test -d /usr/share/try-omarchy/host-applications/linux && test -d /usr/share/try-omarchy/host-applications/windows && test -x /usr/local/lib/try-omarchy/repair-clock-timezone && test -f /usr/share/try-omarchy/clock-timezone-refresh.qml && grep -qx 'ConditionKernelCommandLine=tryomarchy.host=linux' /etc/systemd/system/try-omarchy-linux-clock.service"
     if revision >= 56:
         checks["linux-labels-hook-payload"] = "grep -qx 'Target = try-omarchy-runtime' /etc/pacman.d/hooks/95-try-omarchy-host-names.hook && grep -Fq 'omarchy-shell shell ping' /usr/local/lib/try-omarchy/desktop-ready"
+    if revision >= 57:
+        checks["linux-nightlight-payload"] = "test -x /usr/local/bin/omarchy-native-nightlight && test -f /usr/local/share/try-omarchy/nightlight.frag && test -x /usr/local/lib/try-omarchy/install-nightlight"
+    if revision >= 58:
+        checks["linux-notifications-payload"] = "test -x /usr/local/lib/try-omarchy/install-notifications && test -f /usr/share/try-omarchy/notifications/manifest.json"
+    if revision >= 59:
+        checks["linux-health-payload"] = "test -x /usr/local/lib/try-omarchy/compositor-health && grep -Fq 'health_pid=$!' /usr/local/lib/try-omarchy/agent"
+    if revision >= 60:
+        checks["linux-live-update-payload"] = "test -x /usr/local/lib/try-omarchy/live-update && test -f /etc/pacman.d/hooks/00-try-omarchy-live-update.hook && test -f /etc/pacman.d/hooks/zz-try-omarchy-live-update.hook"
+    if revision >= 61:
+        checks["linux-nightlight-adoption-payload"] = "grep -Fq 'previous_revision < 61' /usr/local/lib/try-omarchy/catch-up && test -f /usr/share/try-omarchy/nightlight/bin_omarchy-update-system-pkgs-when-conflicted"
     return {name: command + " && echo yes || echo no" for name, command in checks.items()}
 
 

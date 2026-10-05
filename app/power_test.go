@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 )
 
 type powerPeer struct {
@@ -19,6 +20,8 @@ type powerPeer struct {
 	fail     string
 	lost     bool
 	events   []string
+	stallAt  int
+	delay    time.Duration
 }
 
 func (s *powerPeer) client(t *testing.T) *qmpClient {
@@ -34,6 +37,7 @@ func (s *powerPeer) client(t *testing.T) *qmpClient {
 			}
 			s.mu.Lock()
 			s.commands = append(s.commands, request.Execute)
+			stall := len(s.commands) == s.stallAt
 			events := s.events
 			s.events = nil
 			fail := s.fail == request.Execute
@@ -53,6 +57,13 @@ func (s *powerPeer) client(t *testing.T) *qmpClient {
 			}
 			state := s.state
 			s.mu.Unlock()
+			if stall {
+				reader.ReadByte() // the command deadline closes the connection
+				return
+			}
+			if s.delay > 0 {
+				time.Sleep(s.delay)
+			}
 			if lost {
 				return
 			}
@@ -94,15 +105,15 @@ func powerFixture(t *testing.T, peer *powerPeer) *guestPowerState {
 func TestPowerRepeatedTransitions(t *testing.T) {
 	peer := &powerPeer{state: "running"}
 	p := powerFixture(t, peer)
-	p.prepareForSleep(false)
-	p.prepareForSleep(false)
+	p.handle(pbtApmResumeAutomatic)
+	p.handle(pbtApmResumeSuspend)
 	peer.assert(t, "running")
 	for i := 0; i < 3; i++ {
-		p.prepareForSleep(true)
-		p.prepareForSleep(true)
+		p.handle(pbtApmSuspend)
+		p.handle(pbtApmSuspend)
 		peer.assert(t, "paused", repeatPowerOps(i, true)...)
-		p.prepareForSleep(false)
-		p.prepareForSleep(false)
+		p.handle(pbtApmResumeAutomatic)
+		p.handle(pbtApmResumeSuspend)
 		peer.assert(t, "running", repeatPowerOps(i+1, false)...)
 	}
 }
@@ -123,9 +134,9 @@ func TestPowerPreservesNonRunningGuests(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			peer := &powerPeer{state: state}
 			p := powerFixture(t, peer)
-			p.prepareForSleep(true)
-			p.prepareForSleep(false)
-			p.prepareForSleep(false)
+			p.handle(pbtApmSuspend)
+			p.handle(pbtApmResumeAutomatic)
+			p.handle(pbtApmResumeSuspend)
 			peer.assert(t, state)
 		})
 	}
@@ -136,7 +147,7 @@ func TestPowerManualChangesWhileAsleep(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			peer := &powerPeer{state: "running"}
 			p := powerFixture(t, peer)
-			p.prepareForSleep(true)
+			p.handle(pbtApmSuspend)
 			peer.mu.Lock()
 			peer.state = state
 			peer.events = []string{"RESUME"}
@@ -144,8 +155,8 @@ func TestPowerManualChangesWhileAsleep(t *testing.T) {
 				peer.events = append(peer.events, "STOP")
 			}
 			peer.mu.Unlock()
-			p.prepareForSleep(false)
-			p.prepareForSleep(false)
+			p.handle(pbtApmResumeAutomatic)
+			p.handle(pbtApmResumeSuspend)
 			peer.assert(t, state, "stop")
 		})
 	}
@@ -162,9 +173,9 @@ func TestPowerCommandFailures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			peer := &powerPeer{state: "running", fail: tc.command, lost: tc.lost}
 			p := powerFixture(t, peer)
-			p.prepareForSleep(true)
-			p.prepareForSleep(false)
-			p.prepareForSleep(false)
+			p.handle(pbtApmSuspend)
+			p.handle(pbtApmResumeAutomatic)
+			p.handle(pbtApmResumeSuspend)
 			state := "running"
 			if tc.command == "stop" && tc.lost {
 				state = "paused"
@@ -186,22 +197,23 @@ func TestPowerResumeFailureAndRetry(t *testing.T) {
 		t.Run(fmt.Sprint(lost), func(t *testing.T) {
 			peer := &powerPeer{state: "running"}
 			p := powerFixture(t, peer)
-			p.prepareForSleep(true)
+			p.handle(pbtApmSuspend)
 			peer.mu.Lock()
 			peer.fail = "cont"
 			peer.lost = lost
 			peer.mu.Unlock()
-			p.prepareForSleep(false)
+			p.handle(pbtApmResumeAutomatic)
 			peer.assert(t, "paused", "stop", "cont")
 			peer.mu.Lock()
 			peer.fail = ""
 			peer.mu.Unlock()
-			p.prepareForSleep(false)
-			if lost {
-				peer.assert(t, "paused", "stop", "cont")
-			} else {
-				peer.assert(t, "running", "stop", "cont", "cont")
+			p.handle(pbtApmResumeSuspend)
+			peer.assert(t, "paused", "stop", "cont")
+			if !p.recoveryNeeded {
+				t.Fatal("missing explicit recovery state")
 			}
+			p.manualResume()
+			peer.assert(t, "running", "stop", "cont", "cont")
 		})
 	}
 }
@@ -209,23 +221,115 @@ func TestPowerResumeFailureAndRetry(t *testing.T) {
 func TestPowerRuntimeExitAndReplacement(t *testing.T) {
 	peer := &powerPeer{state: "running"}
 	p := powerFixture(t, peer)
-	p.prepareForSleep(true)
+	p.handle(pbtApmSuspend)
 	p.client.Close()
 	replacement := &powerPeer{state: "paused"}
 	p.dial = func(context.Context) (*qmpClient, error) { return replacement.client(t), nil }
-	p.prepareForSleep(false)
-	p.prepareForSleep(false)
+	p.handle(pbtApmResumeAutomatic)
+	p.handle(pbtApmResumeSuspend)
 	replacement.assert(t, "paused")
-	p.prepareForSleep(true)
-	p.prepareForSleep(false)
+	p.handle(pbtApmSuspend)
+	p.handle(pbtApmResumeAutomatic)
 	replacement.assert(t, "paused")
 }
 
-func TestPowerUnavailableControls(t *testing.T) {
-	p := &guestPowerState{dial: func(context.Context) (*qmpClient, error) { return nil, errors.New("unavailable") }}
-	p.prepareForSleep(true)
-	p.prepareForSleep(false)
-	if p.owned || p.client != nil {
-		t.Fatal("claimed unavailable guest")
+func TestPowerMissedSuspendAndPairedResume(t *testing.T) {
+	now := time.Now()
+	notices := 0
+	p := &guestPowerState{now: func() time.Time { return now }, notifyResume: func() { notices++ }, dial: func(context.Context) (*qmpClient, error) { return nil, errors.New("not ready") }}
+	p.handle(pbtApmResumeAutomatic)
+	p.handle(pbtApmResumeSuspend)
+	if notices != 1 {
+		t.Fatalf("resume notifications=%d", notices)
+	}
+	now = now.Add(time.Minute)
+	p.handle(pbtApmResumeAutomatic)
+	if notices != 2 {
+		t.Fatal("missed next suspend prevented time correction")
+	}
+	p.handle(pbtApmSuspend)
+	p.handle(pbtApmResumeAutomatic)
+	if notices != 3 {
+		t.Fatal("new suspend cycle was deduplicated")
+	}
+}
+
+func TestPowerTimeoutAtEveryCommand(t *testing.T) {
+	for step := 1; step <= 6; step++ {
+		t.Run(fmt.Sprint(step), func(t *testing.T) {
+			peer := &powerPeer{state: "running", stallAt: step}
+			p := powerFixture(t, peer)
+			p.stepBudget = 20 * time.Millisecond
+			notified := 0
+			phase := ""
+			p.onRecovery = func(error) { notified++ }
+			p.changed = func(s string) { phase = s }
+			p.handle(pbtApmSuspend)
+			if phase != "suspended" {
+				t.Fatalf("phase during sleep=%s", phase)
+			}
+			p.handle(pbtApmResumeAutomatic)
+			p.handle(pbtApmResumeSuspend)
+			if step == 1 {
+				if p.recoveryNeeded {
+					t.Fatal("claimed pause before sending stop")
+				}
+			} else {
+				if !p.recoveryNeeded || phase != "recovery" || notified != 1 {
+					t.Fatalf("recovery=%t phase=%s snapshots=%d", p.recoveryNeeded, phase, notified)
+				}
+				p.manualResume()
+				peer.mu.Lock()
+				state := peer.state
+				peer.mu.Unlock()
+				if state != "running" || p.recoveryNeeded {
+					t.Fatalf("manual recovery state=%s pending=%t", state, p.recoveryNeeded)
+				}
+			}
+		})
+	}
+}
+
+func TestPowerEachStepGetsFreshBudget(t *testing.T) {
+	peer := &powerPeer{state: "running", delay: 20 * time.Millisecond}
+	p := powerFixture(t, peer)
+	p.stepBudget = 100 * time.Millisecond
+	p.handle(pbtApmSuspend)
+	p.handle(pbtApmResumeAutomatic)
+	peer.assert(t, "running", "stop", "cont")
+	if p.recoveryNeeded {
+		t.Fatal("shared deadline exhausted")
+	}
+}
+
+func TestPowerRecoveryDoesNotResumeReplacement(t *testing.T) {
+	peer := &powerPeer{state: "running", fail: "stop", lost: true}
+	p := powerFixture(t, peer)
+	id := uint64(1)
+	p.identity = func() uint64 { return id }
+	p.handle(pbtApmSuspend)
+	p.handle(pbtApmResumeAutomatic)
+	replacement := &powerPeer{state: "paused"}
+	p.dial = func(context.Context) (*qmpClient, error) { return replacement.client(t), nil }
+	id++
+	p.manualResume()
+	replacement.assert(t, "paused")
+	if p.recoveryNeeded {
+		t.Fatal("old recovery state retained")
+	}
+}
+
+func TestPowerDialTimeout(t *testing.T) {
+	p := &guestPowerState{stepBudget: time.Millisecond, dial: func(ctx context.Context) (*qmpClient, error) { <-ctx.Done(); return nil, ctx.Err() }}
+	p.handle(pbtApmSuspend)
+	p.handle(pbtApmResumeAutomatic)
+	if p.recoveryNeeded || p.client != nil {
+		t.Fatal("dial failure claimed pause")
+	}
+	p.recoveryNeeded = true
+	p.dial = func(context.Context) (*qmpClient, error) { return nil, errors.New("offline") }
+	p.manualResume()
+	if !p.recoveryNeeded {
+		t.Fatal("manual retry hid a failure")
 	}
 }

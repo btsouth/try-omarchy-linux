@@ -70,6 +70,7 @@ const (
 	settingsAppListID            = 2125
 	settingsAltTabID             = 2126
 	settingsUSBSelectionID       = 2127
+	settingsVolumeSyncID         = 2128
 	settingsInstallOmarchyID     = 2130
 	settingsSaveID               = 2001
 	settingsCancelID             = 2002
@@ -253,7 +254,7 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 	fullscreenChoices := []string{""}
 	var hRenderAuto, hRenderGPU, hRenderCPU, hDisplays, hLANPublic uintptr
 	var hCameraOn, hMicrophoneOn, hCamera, hUpdateOn uintptr
-	var hAudioOutput, hAudioInput uintptr
+	var hAudioOutput, hAudioInput, hVolumeSync uintptr
 	var hResourceProfile, hResourceHelp uintptr
 	var hApprovedApps uintptr
 	var updateResourceControls func()
@@ -407,6 +408,10 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 					approvedApps.Apps = append(approvedApps.Apps[:index], approvedApps.Apps[index+1:]...)
 					refreshApprovedApps()
 				}
+			case settingsRenderAutoID, settingsRenderGPUID, settingsRenderCPUID:
+				if wParam>>16 == 0 && updateResourceControls != nil { // BN_CLICKED
+					updateResourceControls()
+				}
 			case settingsResourceProfileID:
 				if wParam>>16 == 1 && updateResourceControls != nil { // CBN_SELCHANGE
 					updateResourceControls()
@@ -490,6 +495,8 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 					updated.CameraDisabled = v != bstChecked
 					v, _, _ = procSendMessageW.Call(hMicrophoneOn, bmGetcheck, 0, 0)
 					updated.MicrophoneDisabled = v != bstChecked
+					v, _, _ = procSendMessageW.Call(hVolumeSync, bmGetcheck, 0, 0)
+					updated.VolumeSyncDisabled = v != bstChecked
 					v, _, _ = procSendMessageW.Call(hUpdateOn, bmGetcheck, 0, 0)
 					updated.AutomaticUpdatesDisabled = v != bstChecked
 					index, _, _ := procSendMessageW.Call(hCamera, 0x147, 0, 0)
@@ -756,6 +763,7 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 		h, _, _ := procCreateWindowExW.Call(0, uintptr(unsafe.Pointer(c)), uintptr(unsafe.Pointer(t)),
 			wsChild|wsVisible|style, uintptr(x), uintptr(positionY), uintptr(cx), uintptr(cy), parent, id, hInst, 0)
 		brand.control(h, class, style)
+		guardWheel(h, class, style)
 		if bodyControls {
 			brand.panelControls[h] = true
 		}
@@ -955,7 +963,9 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 		gib := func(mib int) string { return strconv.FormatFloat(float64(mib)/1024, 'f', 1, 64) }
 		help := uiText("settings.resources.manual_help")
 		if profile != resourceManual {
-			plan, err := planGuestResources(profile, hostSnapshot, current.Render != renderCPU, 0, 0, false, false)
+			checked, _, _ := procSendMessageW.Call(hRenderCPU, bmGetcheck, 0, 0)
+			gpu := settingsEstimateGPU(current.Render, hRenderCPU, checked)
+			plan, err := planGuestResources(profile, hostSnapshot, gpu, 0, 0, false, false)
 			estimate := map[string]string{"cpus": strconv.Itoa(plan.CPUs), "memory": gib(plan.MemoryMiB)}
 			switch {
 			case err != nil:
@@ -1083,6 +1093,11 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 	section(uiText("settings.section.sound"))
 	hAudioOutput = addAudioCombo(uiText("settings.sound.output"), settingsAudioOutputID, audioDevices.Output, audioPrefs.Output)
 	hAudioInput = addAudioCombo(uiText("settings.sound.microphone"), settingsAudioInputID, audioDevices.Input, audioPrefs.Input)
+	hVolumeSync, grow = check(uiText("settings.sound.sync_volume"), left, y, 24, settingsVolumeSyncID)
+	if !prefs.VolumeSyncDisabled {
+		procSendMessageW.Call(hVolumeSync, bmSetcheck, bstChecked, 0)
+	}
+	y += 28 + grow
 	audioHelp := uiText("settings.sound.help")
 	if !audioSupported {
 		audioHelp = uiText("settings.sound.unsupported")
@@ -1141,6 +1156,7 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 	default:
 		procSendMessageW.Call(hRenderAuto, bmSetcheck, bstChecked, 0)
 	}
+	updateResourceControls()
 	y += 24 + grow
 	y = note(uiText("settings.graphics.rendering_help"), left, y, clientW-2*left, 36, 44)
 	graphics := uiText("settings.graphics.gpu_note")
@@ -1393,4 +1409,11 @@ func runLauncherSettings(path, dataDir string, portable, launcher bool, beforeRe
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
 	}
 	return saved
+}
+
+func settingsEstimateGPU(saved string, cpuControl, checked uintptr) bool {
+	if cpuControl == 0 {
+		return saved != renderCPU
+	}
+	return checked != bstChecked
 }

@@ -59,7 +59,7 @@ func TestLinuxConfirmedGuestUpdateDropsPreviousImage(t *testing.T) {
 	if err := recordPayloadUpdate(root, "v0.1.0", true, false); err != nil {
 		t.Fatal(err)
 	}
-	commitGuestPayloadUpdate(root)
+	commitLinuxGuestPayloadUpdate(root)
 	if _, err := os.Stat(filepath.Join(root, "guest.previous")); !os.IsNotExist(err) {
 		t.Fatalf("previous image kept after confirmation: %v", err)
 	}

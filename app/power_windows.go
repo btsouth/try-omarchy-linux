@@ -6,9 +6,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
-
-const pbtApmSuspend = 0x0004
 
 var (
 	procRegisterSuspendResumeNotification   = user32.NewProc("RegisterSuspendResumeNotification")
@@ -50,23 +49,21 @@ func subscribePowerNotifications(hwnd uintptr, register func(uintptr) (uintptr, 
 }
 
 func newGuestPowerState() *guestPowerState {
-	return &guestPowerState{dial: func(ctx context.Context) (*qmpClient, error) {
+	return &guestPowerState{identity: func() uint64 { return guestRuntimeGeneration.Load()<<32 | uint64(qemuPid.Load()) }, changed: func(phase string) {
+		setHostPowerTransition(phase)
+		if phase == "suspended" || phase == "resuming" {
+			guestCompositorHealth.power(time.Now(), phase == "suspended")
+		}
+	}, notifyResume: func() {
+		select {
+		case hostResumed <- struct{}{}:
+		default:
+		}
+	}, dial: func(ctx context.Context) (*qmpClient, error) {
 		// Preserve the supervisor's early-boot QMP quiet period.
 		if !guestUp.Load() || qemuPid.Load() == 0 {
 			return nil, fmt.Errorf("guest controls are not ready")
 		}
 		return dialQMPControl(ctx, qmpPowerRole)
 	}}
-}
-
-func (p *guestPowerState) handle(event uintptr) {
-	switch event {
-	case pbtApmSuspend:
-		p.prepareForSleep(true)
-	case pbtApmResumeAutomatic, pbtApmResumeSuspend:
-		if p.prepareForSleep(false) {
-			logf("windows resumed from sleep")
-			notifyHostResumed()
-		}
-	}
 }

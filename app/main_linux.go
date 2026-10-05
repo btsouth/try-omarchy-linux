@@ -213,6 +213,7 @@ func main() {
 	if err := configureLinuxGraphics(*venusFlag); err != nil {
 		fatalf("%v", err)
 	}
+	cfg.venus = linuxVenusEnabled
 	if cfg.audio, err = linuxAudioMode(*audioFlag); err != nil {
 		fatalf("%v", err)
 	}
@@ -349,9 +350,16 @@ func main() {
 	} else if pinned {
 		logf("snapshots: first boot after roll back uses its saved system files (%s)", releaseVersion(selectedRelease))
 	}
-	if err := ensureLinuxGuest(cfg, selectedRelease, selectedSumsSHA256); err != nil {
+	stopGuestUpdate := func() {}
+	if explicitFlags["release"] || explicitFlags["sums-sha256"] {
+		err = ensureLinuxGuest(cfg, selectedRelease, selectedSumsSHA256)
+	} else {
+		stopGuestUpdate, err = configureLinuxGuestBootFirst(cfg, selectedRelease, selectedSumsSHA256)
+	}
+	if err != nil {
 		failLinuxSetup(err, cfg.dir)
 	}
+	defer stopGuestUpdate()
 	specData, err := os.ReadFile(filepath.Join(cfg.guestDir, "build-spec.json"))
 	if err != nil {
 		fatal(uiTextWith("fatal.build_spec.read", map[string]string{"error": fmt.Sprintf("%v", err)}))
@@ -538,6 +546,8 @@ func runLinuxGuestAgent(dir string) {
 	}
 	logf("agent: listening on %d", agentPort)
 	a := newGuestAgent()
+	a.peerAllowed = lifecycleConnectionFromQEMU
+	a.health = &guestCompositorHealth
 	a.appsDir = dir
 	a.appsMinVersion = linuxHostAppsAgentVersion
 	a.launchApp = func(id string) error {

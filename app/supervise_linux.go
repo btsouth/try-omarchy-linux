@@ -40,6 +40,8 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 		cfg.qmpDir = controlDir
 		// A startup fallback relaunch keeps forwards Settings changed live.
 		cfg.forwards = forwardsForBoot(cfg.launchForwards)
+		guestRuntimeGeneration.Add(1)
+		guestCompositorHealth.boot(time.Now())
 		guestReady.Store(false)
 		desktopReady.Store(false)
 		args := linuxQemuArgs(cfg, buildQemuArgs(cfg, cmdline))
@@ -54,10 +56,12 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 		if err := proc.Start(); err != nil {
 			fatal(uiTextWith("fatal.qemu.start", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
+		qemuPid.Store(uint32(proc.Process.Pid))
 		exited := make(chan error, 1)
 		vmDone := make(chan struct{})
 		go func() {
 			err := proc.Wait()
+			qemuPid.CompareAndSwap(uint32(proc.Process.Pid), 0)
 			close(vmDone)
 			if err != nil {
 				logf("QEMU process exited with error: %v", err)
@@ -69,7 +73,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 		if qmp != nil {
 			// Once per QEMU launch, independent of guest readiness and resets.
 			go startLinuxBootUSB(setupContext(), cfg.dir, vmDone)
-			stopPower := startLinuxPower(vmDone)
+			stopPower := startLinuxPower(cfg.dir, vmDone)
 			defer stopPower()
 			lines := qmp.readLines()
 			visibility := &linuxVisibility{}
@@ -206,6 +210,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		if interrupts == 0 {
 			confirmation.shutdownAt = time.Now()
 		}
+		guestCompositorHealth.stop()
 		requestLinuxShutdown(qmp, proc, &interrupts)
 	}
 	if getUI().window == nil && interrupts == 0 {
@@ -224,16 +229,27 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 	if desktopTimedOut {
 		startupStop = setupCancelWake
 	}
+	healthTicker := time.NewTicker(time.Second)
+	defer healthTicker.Stop()
+	qmpRunning := true
+	lastTick, lastReply := time.Now(), time.Now()
+	silence := qmpSilence{}
+	healthTicks := 0
+	qmpWarningShown := false
 	graphicsWarningShown := false
 	imageConfirmed := false
 	defer func() { visibility.visible = false; sendLinuxVisibility(visibility) }()
 	for {
 		if !imageConfirmed && guestReady.Load() {
+			guestCompositorHealth.userspaceReady()
 			recordRenderResult(cfg)
-			commitGuestPayloadUpdate(cfg.dir)
+			commitLinuxGuestPayloadUpdate(cfg.dir)
 			commitCheckpointBoot(cfg.dir)
 			markLinuxMovedGuestReady(defaultLinuxDataDirectory(), cfg.dir)
 			imageConfirmed = true
+			if cfg.startGuestUpdate != nil {
+				cfg.startGuestUpdate()
+			}
 		}
 		if desktopTimedOut && desktopReady.Load() {
 			logf("guest desktop appeared after startup timeout")
@@ -268,8 +284,23 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				lines = nil
 				continue
 			}
+			silence.answered()
+			qmpWarningShown = false
+			lastReply = time.Now()
+			var reply struct {
+				Return *vmRuntimeStatus `json:"return"`
+			}
+			if json.Unmarshal([]byte(line), &reply) == nil && reply.Return != nil && reply.Return.Status != "" {
+				qmpRunning = reply.Return.Running
+			}
 			if visibility.receive(line, time.Now()) {
 				sendLinuxVisibility(visibility)
+			}
+			if linuxGuestReset(line) {
+				guestReady.Store(false)
+				desktopReady.Store(false)
+				pendingReboot.Store(false)
+				guestCompositorHealth.boot(time.Now())
 			}
 			if r := shutdownReason(line); r != "" {
 				reason = r
@@ -312,6 +343,28 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 					}
 					reportLinuxFileDropError(err)
 				}()
+			}
+		case <-healthTicker.C:
+			now := time.Now()
+			if now.Sub(lastTick) > 5*time.Second || HostPowerState().Phase != "running" {
+				silence.answered()
+				lastReply = now
+			}
+			lastTick = now
+			healthTicks++
+			if healthTicks%5 == 0 {
+				writeErr := qmp.writeLine(`{"execute":"query-status"}`)
+				if (silence.probe() || writeErr != nil) && imageConfirmed && interrupts == 0 && !qmpWarningShown && !guestCompositorHealth.suppressRecovery() {
+					qmpWarningShown = true
+					logf("display health: QMP stopped responding; preserving the Linux session")
+					go createLinuxDiagnostics(cfg.dir)
+					showLinuxRuntimeError(uiText("recovery.gpu.title"), uiText("recovery.display.body"))
+				}
+			}
+			if interrupts == 0 && guestCompositorHealth.stalled(now, qmpRunning && now.Sub(lastReply) < 15*time.Second) {
+				logf("display health: compositor stopped responding; preserving the Linux session")
+				go createLinuxDiagnostics(cfg.dir)
+				showLinuxRuntimeError(uiText("recovery.gpu.title"), uiText("recovery.compositor.body"))
 			}
 		case <-leaseTicker.C:
 			sendLinuxVisibility(visibility)
@@ -487,4 +540,11 @@ func confirmLinuxForceStop(parent context.Context) <-chan bool {
 func linuxForceStopState() linuxSetupState {
 	return linuxSetupState{Prompt: "choice", Title: uiText("shutdown.linux.force_stop_omarchy"), Primary: uiText("shutdown.linux.keep_waiting"), Secondary: uiText("shutdown.linux.force_stop"), Destructive: true,
 		Status: uiText("shutdown.linux.omarchy_has_not_shut_down_yet_force_stopping")}
+}
+
+func linuxGuestReset(line string) bool {
+	var event struct {
+		Event string `json:"event"`
+	}
+	return json.Unmarshal([]byte(line), &event) == nil && event.Event == "RESET"
 }

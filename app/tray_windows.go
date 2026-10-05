@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"runtime"
@@ -46,28 +47,29 @@ const (
 	trayCommandClipboardFiles = 3009
 	trayCommandDevices        = 3010
 	trayCommandTransfers      = 3011
+	trayCommandResume         = 3012
+	trayPowerStateMessage     = 0x8005
+	trayCommandRestartUpdate  = 3022
 
-	nimAdd                = 0
-	nimDelete             = 2
-	nimSetVersion         = 4
-	nifMessage            = 0x1
-	nifIcon               = 0x2
-	nifTip                = 0x4
-	nifShowTip            = 0x80
-	notifyVersion         = 4
-	mfString              = 0
-	mfGray                = 0x1
-	mfSeparator           = 0x800
-	tpmRightButton        = 0x2
-	tpmReturnCmd          = 0x100
-	wmContextMenu         = 0x007B
-	wmPowerbroadcast      = 0x0218
-	pbtApmResumeSuspend   = 0x0007
-	pbtApmResumeAutomatic = 0x0012
-	wmNull                = 0x0000
-	wmLButtonDblClk       = 0x0203
-	wmRButtonUp           = 0x0205
-	swRestore             = 9
+	nimAdd           = 0
+	nimDelete        = 2
+	nimSetVersion    = 4
+	nifMessage       = 0x1
+	nifIcon          = 0x2
+	nifTip           = 0x4
+	nifShowTip       = 0x80
+	notifyVersion    = 4
+	mfString         = 0
+	mfGray           = 0x1
+	mfSeparator      = 0x800
+	tpmRightButton   = 0x2
+	tpmReturnCmd     = 0x100
+	wmContextMenu    = 0x007B
+	wmPowerbroadcast = 0x0218
+	wmNull           = 0x0000
+	wmLButtonDblClk  = 0x0203
+	wmRButtonUp      = 0x0205
+	swRestore        = 9
 )
 
 type trayGUID struct {
@@ -98,7 +100,6 @@ type notifyIconData struct {
 type trayLaunchConfig struct {
 	dataDir  string
 	portable bool
-	share    string
 	winqEmu  string
 }
 
@@ -116,7 +117,29 @@ func trayControlArguments(cfg trayLaunchConfig, control string) []string {
 }
 
 var trayWindow atomic.Uintptr
-var pendingTrayNotice atomic.Pointer[string]
+
+type trayNotice struct{ title, message string }
+
+var trayNotices struct {
+	sync.Mutex
+	pending []trayNotice
+}
+
+func showTrayNotice(title, message string) bool {
+	hwnd := trayWindow.Load()
+	if hwnd == 0 {
+		return false
+	}
+	trayNotices.Lock()
+	defer trayNotices.Unlock()
+	trayNotices.pending = append(trayNotices.pending, trayNotice{title, message})
+	if posted, _, _ := procPostMessageW.Call(hwnd, trayNoticeMessage, 0, 0); posted != 0 {
+		return true
+	}
+	trayNotices.pending = trayNotices.pending[:len(trayNotices.pending)-1]
+	return false
+}
+
 var transferErrorDialog atomic.Bool
 
 func requestTraySettings() bool {
@@ -135,11 +158,8 @@ func requestTraySettings() bool {
 func reportTransferError(err error) {
 	logf("file transfer: %v", err)
 	message := uiTextWith("tray.transfer.failed", map[string]string{"error": err.Error()})
-	if hwnd := trayWindow.Load(); hwnd != 0 {
-		pendingTrayNotice.Store(&message)
-		if posted, _, _ := procPostMessageW.Call(hwnd, trayNoticeMessage, 0, 0); posted != 0 {
-			return
-		}
+	if showTrayNotice(uiText("tray.transfer.title"), message) {
+		return
 	}
 	if transferErrorDialog.CompareAndSwap(false, true) {
 		go func() { defer transferErrorDialog.Store(false); infoBox(message) }()
@@ -163,7 +183,7 @@ func notificationText(dst []uint16, text string) {
 func startTray(cfg *config) func() {
 	ready := make(chan uintptr, 1)
 	done := make(chan struct{})
-	trayCfg := trayLaunchConfig{dataDir: cfg.dir, portable: cfg.portable, share: cfg.share, winqEmu: cfg.winqEmu}
+	trayCfg := trayLaunchConfig{dataDir: cfg.dir, portable: cfg.portable, winqEmu: cfg.winqEmu}
 	go runTray(trayCfg, ready, done)
 	hwnd := <-ready
 	if hwnd == 0 {
@@ -189,7 +209,11 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 	runtime.LockOSThread()
 	defer close(done)
 	power := newGuestPowerState()
-	defer power.close()
+	powerCtx, cancelPower := context.WithCancel(context.Background())
+	defer cancelPower()
+	power.ctx = powerCtx
+	powerEvents := make(chan uintptr, 8)
+	const manualPowerResume = 0xffff
 
 	hInst, _, _ := procGetModuleHandleW.Call(0)
 	className, _ := syscall.UTF16PtrFromString("TryOmarchyTray")
@@ -201,6 +225,9 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 	var nid notifyIconData
 	var aboutOpen atomic.Bool
 	var settingsOpen, diagnosticsOpen, devicesOpen atomic.Bool
+	var noticeDetails string
+	const retryTimer = 1
+	retry := trayAddRetry{}
 
 	addIcon := func() bool {
 		if hwnd == 0 {
@@ -214,6 +241,15 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		nid.version = notifyVersion
 		procShellNotifyIconW.Call(nimSetVersion, uintptr(unsafe.Pointer(&nid)))
 		return true
+	}
+
+	retryAdd := func() {
+		user32.NewProc("KillTimer").Call(hwnd, retryTimer)
+		if retry.afterAdd(addIcon()) {
+			if timer, _, err := user32.NewProc("SetTimer").Call(hwnd, retryTimer, 2000, 0); timer == 0 {
+				logf("tray: retry timer failed: %v", err)
+			}
+		}
 	}
 
 	launchControl := func(flag string, running *atomic.Bool) {
@@ -248,11 +284,13 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		}()
 	}
 
+	// A guest reboot can change the shared folder (boot_settings_windows.go).
 	openSharedFolder := func() {
-		if cfg.share == "" {
+		share := currentShare()
+		if share == "" {
 			return
 		}
-		cmd := exec.Command("explorer.exe", cfg.share)
+		cmd := exec.Command("explorer.exe", share)
 		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 		if err := cmd.Start(); err != nil {
 			errorBox(uiTextWith("tray.error.open_share", map[string]string{"error": err.Error()}))
@@ -273,7 +311,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		}
 		appendItem(mfString, trayCommandShow, uiText("tray.menu.open"))
 		shareFlags := uintptr(mfString)
-		if cfg.share == "" {
+		if currentShare() == "" {
 			shareFlags |= mfGray
 		}
 		appendItem(shareFlags, trayCommandShare, uiText("tray.menu.share"))
@@ -291,8 +329,14 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		appendItem(reclaimFlags, trayCommandReclaimStatus, uiText("tray.menu.reclaim_status"))
 		appendItem(mfString, trayCommandClipboardFiles, uiText("tray.menu.received_files"))
 		appendItem(mfString, trayCommandAbout, uiText("tray.menu.about"))
+		if updateAvailable.Load() {
+			appendItem(mfString, trayCommandRestartUpdate, uiText("tray.menu.restart_update"))
+		}
 		appendItem(mfString, trayCommandHelp, uiText("tray.menu.help"))
 		appendItem(mfSeparator, 0, "")
+		if HostPowerState().Phase == "recovery" {
+			appendItem(mfString, trayCommandResume, uiText("tray.menu.resume"))
+		}
 		appendItem(mfString, trayCommandShutdown, uiText("tray.menu.shutdown"))
 
 		var point struct{ x, y int32 }
@@ -313,7 +357,7 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		case trayCommandShare:
 			openSharedFolder()
 		case trayCommandTransfers:
-			go showFileDropWindow(nil)
+			showTrayTransfers()
 		case trayCommandDevices:
 			launchControl("-devices", &devicesOpen)
 		case trayCommandSettings:
@@ -349,6 +393,18 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 					}
 				}
 			}
+		case trayCommandResume:
+			select {
+			case powerEvents <- manualPowerResume:
+			default:
+			}
+		case trayCommandRestartUpdate:
+			if msgBox(uiText("update.restart.confirm"), mbYesNo|mbIconQuestion|mbDefbutton2) == idYes {
+				restartForUpdate.Store(true)
+				intentionalUpdateQuit.Store(true)
+				cancelBackgroundUpdate()
+				requestSetupCancel()
+			}
 		case trayCommandShutdown:
 			if qemuHwnd.Load() == 0 {
 				infoBox(uiText("tray.shutdown.starting"))
@@ -359,29 +415,47 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 	}
 
 	wndProc := syscall.NewCallback(func(window, message, wParam, lParam uintptr) uintptr {
-		if message == uintptr(taskbarCreated) {
-			addIcon()
+		if taskbarCreated != 0 && message == uintptr(taskbarCreated) {
+			retry = trayAddRetry{}
+			retryAdd()
 			return 0
 		}
 		switch message {
+		case 0x113: // WM_TIMER
+			if wParam == retryTimer {
+				retryAdd()
+			}
+			return 0
 		case traySettingsMessage:
 			launchControl("-settings", &settingsOpen)
 			return 0
 		case trayNoticeMessage:
-			if text := pendingTrayNotice.Swap(nil); text != nil {
+			trayNotices.Lock()
+			var text *trayNotice
+			if len(trayNotices.pending) > 0 {
+				text = &trayNotices.pending[0]
+				trayNotices.pending = trayNotices.pending[1:]
+			}
+			trayNotices.Unlock()
+			if text != nil {
+				noticeDetails = text.message
 				notice := nid
 				notice.flags = 0x10  // NIF_INFO
 				notice.infoFlags = 2 // NIIF_WARNING
-				notificationText(notice.info[:], *text)
-				notificationText(notice.infoTitle[:], uiText("tray.transfer.title"))
+				notificationText(notice.info[:], text.message)
+				notificationText(notice.infoTitle[:], text.title)
 				if ok, _, err := procShellNotifyIconW.Call(1, uintptr(unsafe.Pointer(&notice))); ok == 0 {
-					logf("tray: file-transfer notification failed: %v", err)
+					logf("tray: notification failed: %v", err)
 				}
 			}
 			return 0
 		case trayCallbackMessage:
 			event := uint32(lParam & 0xffff)
 			switch event {
+			case 0x405: // NIN_BALLOONUSERCLICK: the full rule list may exceed the balloon.
+				if noticeDetails != "" {
+					go infoBox(noticeDetails)
+				}
 			case wmLButtonDblClk:
 				if qemuWindow := qemuHwnd.Load(); qemuWindow != 0 {
 					liftCurtain("asked for from the tray")
@@ -392,13 +466,38 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 				showMenu()
 			}
 			return 0
+		case trayPowerStateMessage:
+			nid.tip = [128]uint16{}
+			tip := appTitle
+			if HostPowerState().Phase == "recovery" {
+				tip = uiText("tray.power.paused_title")
+			}
+			notificationText(nid.tip[:], tip)
+			notice := nid
+			notice.flags = nifTip
+			procShellNotifyIconW.Call(1, uintptr(unsafe.Pointer(&notice)))
+			return 0
+		case 0x0011: // WM_QUERYENDSESSION
+			queryEndSession(window)
+			return 1
+		case 0x0016: // WM_ENDSESSION
+			if wParam != 0 {
+				cancelPower()
+			}
+			finishEndSession(window, wParam != 0)
+			return 0
 		case wmPowerbroadcast:
-			power.handle(wParam)
+			select {
+			case powerEvents <- wParam:
+			default:
+				logf("power: notification queue full")
+			}
 			return 1
 		case trayStopMessage:
 			procDestroyWindow.Call(window)
 			return 0
 		case wmDestroy:
+			user32.NewProc("KillTimer").Call(window, retryTimer)
 			unregisterPower()
 			trayWindow.CompareAndSwap(window, 0)
 			procShellNotifyIconW.Call(nimDelete, uintptr(unsafe.Pointer(&nid)))
@@ -440,14 +539,60 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 	nid.id = trayIconID
 	nid.flags = nifMessage | nifIcon | nifTip | nifShowTip
 	nid.callbackMessage = trayCallbackMessage
-	nid.icon, _, _ = procLoadIconW.Call(hInst, 1)
-	copy(nid.tip[:], syscall.StringToUTF16(appTitle))
-	if !addIcon() {
-		procDestroyWindow.Call(hwnd)
-		ready <- 0
-		return
+	var ownedIcon bool
+	nid.icon, ownedIcon = selectTrayIcon(func() (uintptr, bool) {
+		metric := comctl32.NewProc("LoadIconMetric")
+		if metric.Find() != nil {
+			return 0, false
+		}
+		var icon uintptr
+		hr, _, _ := metric.Call(hInst, 1, 0, uintptr(unsafe.Pointer(&icon))) // LIM_SMALL
+		return icon, int32(hr) >= 0
+	}, func() uintptr { icon, _, _ := procLoadIconW.Call(hInst, 1); return icon })
+	if ownedIcon {
+		defer user32.NewProc("DestroyIcon").Call(nid.icon)
 	}
+
+	copy(nid.tip[:], syscall.StringToUTF16(appTitle))
+	retryAdd()
 	trayWindow.Store(hwnd)
+	powerChanged := power.changed
+	power.changed = func(phase string) {
+		powerChanged(phase)
+		procPostMessageW.Call(hwnd, trayPowerStateMessage, 0, 0)
+	}
+	power.onRecovery = func(err error) {
+		if powerCtx.Err() != nil {
+			return
+		}
+		showTrayNotice(uiText("tray.power.paused_title"), uiText("tray.power.paused"))
+		go func() {
+			bundle, snapshotErr := writeDiagnostics(cfg.dataDir, map[string]string{"event": "host-resume-failed", "power-error": err.Error(), "power-state": HostPowerState().Phase})
+			if snapshotErr != nil {
+				logf("power: automatic diagnostics failed: %v", snapshotErr)
+				showTrayNotice(uiText("tray.power.paused_title"), uiTextWith("tray.power.snapshot_failed", map[string]string{"error": snapshotErr.Error()}))
+			} else {
+				logf("power: automatic diagnostics: %s", bundle)
+				showTrayNotice(uiText("tray.power.paused_title"), uiTextWith("tray.power.snapshot", map[string]string{"path": bundle}))
+			}
+		}()
+	}
+	go func() {
+		defer power.close()
+		for {
+			select {
+			case <-powerCtx.Done():
+				return
+			case event := <-powerEvents:
+				if event == manualPowerResume {
+					power.manualResume()
+				} else {
+					power.handle(event)
+				}
+			}
+		}
+	}()
+
 	logf("tray: ready")
 	ready <- hwnd
 
@@ -461,4 +606,22 @@ func runTray(cfg trayLaunchConfig, ready chan<- uintptr, done chan<- struct{}) {
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&message)))
 	}
 	logf("tray: stopped")
+}
+
+// The initial add plus ten timer retries leave TaskbarCreated available afterward.
+type trayAddRetry struct{ retries int }
+
+func (r *trayAddRetry) afterAdd(added bool) bool {
+	if added || r.retries >= 10 {
+		return false
+	}
+	r.retries++
+	return true
+}
+
+func selectTrayIcon(metric func() (uintptr, bool), fallback func() uintptr) (uintptr, bool) {
+	if icon, ok := metric(); ok && icon != 0 {
+		return icon, true
+	}
+	return fallback(), false // LoadIconW returns a shared icon.
 }

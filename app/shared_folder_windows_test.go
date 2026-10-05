@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"unsafe"
@@ -67,4 +68,103 @@ func TestNotifyIconDataUsesCurrentWindowsLayout(t *testing.T) {
 	if size := unsafe.Sizeof(notifyIconData{}); size != 976 {
 		t.Fatalf("NOTIFYICONDATAW size = %d, want 976", size)
 	}
+}
+
+func TestSharedFolderLinksFindsJunctions(t *testing.T) {
+	share := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Mkdir(filepath.Join(share, "folder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(share, "file.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	links, err := sharedFolderLinks(share, 5)
+	if err != nil || len(links) != 0 {
+		t.Fatalf("plain share links = %v, %v", links, err)
+	}
+	junction := filepath.Join(share, "escape")
+	if out, err := exec.Command(system32("cmd.exe"), "/c", "mklink", "/J", junction, outside).CombinedOutput(); err != nil {
+		t.Skipf("cannot create a junction: %v: %s", err, out)
+	}
+	links, err = sharedFolderLinks(share, 5)
+	if err != nil || len(links) != 1 || links[0] != "escape" {
+		t.Fatalf("share links = %v, %v", links, err)
+	}
+	// A junction is a warning, not a refusal.
+	t.Setenv("LOCALAPPDATA", "")
+	if _, err := validateWindowsSharedFolder(share, "", filepath.Join(outside, "home")); err != nil {
+		t.Fatalf("a share with a junction inside was refused: %v", err)
+	}
+}
+
+func TestIsLinkReparsePoint(t *testing.T) {
+	for _, c := range []struct {
+		attributes, tag uint32
+		want            bool
+	}{
+		{fileAttributeReparsePoint, ioReparseTagSymlink, true},
+		{fileAttributeReparsePoint | 0x10, ioReparseTagMountPoint, true},
+		{fileAttributeReparsePoint, 0x9000001A, false}, // OneDrive placeholder
+		{fileAttributeReparsePoint, 0x80000013, false}, // deduplicated file
+		{0x10, ioReparseTagMountPoint, false},          // tag is meaningless without the attribute
+	} {
+		if got := isLinkReparsePoint(c.attributes, c.tag); got != c.want {
+			t.Errorf("isLinkReparsePoint(%#x, %#x) = %v", c.attributes, c.tag, got)
+		}
+	}
+}
+
+func TestSharedFolderFailsClosedWithoutAbsoluteHome(t *testing.T) {
+	share := t.TempDir()
+	for _, home := range []string{"", " ", "relative", `C:relative`} {
+		if _, err := validateWindowsSharedFolder(share, "", home); err == nil {
+			t.Errorf("accepted home %q", home)
+		}
+		if _, ok := canonicalWindowsComparisonPath(home); ok {
+			t.Errorf("canonicalized invalid path %q", home)
+		}
+	}
+	if pathWithinWindows("", share) || pathWithinWindows(share, "") {
+		t.Fatal("empty path participated in containment")
+	}
+}
+
+func TestSharedFolderRejectsMappedNetworkSubdirectory(t *testing.T) {
+	share := t.TempDir()
+	home := filepath.Join(t.TempDir(), "home")
+	original := sharedFolderIsLocal
+	t.Cleanup(func() { sharedFolderIsLocal = original })
+	calls := 0
+	sharedFolderIsLocal = func(path string) bool { calls++; return false }
+	if _, err := validateWindowsSharedFolder(share, "", home); err == nil || calls != 1 {
+		t.Fatalf("remote volume accepted: calls=%d err=%v", calls, err)
+	}
+}
+
+func TestSharedFolderAcceptsLocalSubstSubdirectory(t *testing.T) {
+	root := t.TempDir()
+	share := filepath.Join(root, "shared")
+	if err := os.Mkdir(share, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Choose an unused letter without disturbing an existing mapping.
+	for letter := 'Z'; letter >= 'D'; letter-- {
+		drive := string(letter) + ":"
+		if _, err := os.Stat(drive + `\`); !os.IsNotExist(err) {
+			continue
+		}
+		if out, err := exec.Command(system32("subst.exe"), drive, root).CombinedOutput(); err != nil {
+			t.Skipf("SUBST unavailable: %v %s", err, out)
+		}
+		defer exec.Command(system32("subst.exe"), drive, "/D").Run()
+		for _, key := range []string{"LOCALAPPDATA", "APPDATA", "ProgramData", "PUBLIC"} {
+			t.Setenv(key, "")
+		}
+		if _, err := validateWindowsSharedFolder(drive+`\shared`, "", filepath.Join(t.TempDir(), "home")); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	t.Skip("no unused drive letter")
 }

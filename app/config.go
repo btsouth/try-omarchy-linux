@@ -6,6 +6,7 @@ package main
 const appTitle = "Try Omarchy"
 
 type config struct {
+	startGuestUpdate            func()
 	desktop                     desktopPreferences
 	audioDevices                audioPreferences
 	audioRates                  audioSampleRates
@@ -19,6 +20,9 @@ type config struct {
 	followHostTimeZone          bool
 	lanPublic                   bool
 	instant, portable           bool
+	localPayload                bool
+	localPayloadSHA256          string
+	localRuntimePayloadSHA256   string
 	guestDir, vmDir, disk       string
 	qmpDir                      string
 	diskFormat                  string
@@ -46,7 +50,10 @@ type config struct {
 	cpus         int
 	hostTotalMiB int
 	// Rendering decision inputs, see render_probe.go.
-	renderMode    string
-	runtimeID     string
-	displayDriver string
+	renderMode     string
+	runtimeID      string
+	displayDriver  string
+	temporaryCPU   bool
+	recoveryChoice *gpuRecoveryDecision
+	venus          bool
 }

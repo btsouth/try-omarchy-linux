@@ -176,3 +176,17 @@ func TestSSHKeyWarning(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsDisplayOutputsMigration(t *testing.T) {
+	got := settingsDisplayOutputs(&settingsForm{Fullscreen: true, FullscreenDisplay: "DP-1"})
+	if len(got) != 1 || got[0] != (guestOutput{"DP-1", true}) {
+		t.Fatalf("legacy outputs: %+v", got)
+	}
+	got = settingsDisplayOutputs(&settingsForm{Displays: 3, DisplayOutputs: []guestOutput{{"DP-2", true}, {"HDMI-A-1", false}}})
+	if len(got) != 3 || got[1].Monitor != "HDMI-A-1" || got[2].Fullscreen {
+		t.Fatalf("outputs: %+v", got)
+	}
+	if len(settingsDisplayOutputs(&settingsForm{Displays: 16})) != 16 {
+		t.Fatal("legacy advanced count lost")
+	}
+}

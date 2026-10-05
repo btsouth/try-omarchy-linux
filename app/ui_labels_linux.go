@@ -5,6 +5,12 @@ package main
 // linuxUILabels resolves GTK labels from the one launcher catalog.
 func linuxUILabels() map[string]string {
 	return map[string]string{
+		"settings.linux.automatic_lets_your_desktop_choose_a_change_applies": uiTemplate("settings.linux.automatic_lets_your_desktop_choose_a_change_applies"),
+		"settings.linux.display_count":                                       uiTemplate("settings.linux.display_count"),
+		"settings.linux.output_monitor":                                      uiTemplate("settings.linux.output_monitor"),
+		"settings.linux.output_fullscreen":                                   uiTemplate("settings.linux.output_fullscreen"),
+		"settings.linux.multiple_display_note":                               uiTemplate("settings.linux.multiple_display_note"),
+
 		"settings.section.usb": uiTemplate("settings.section.usb"),
 		"settings.usb.choose":  uiTemplate("settings.usb.choose"),
 		"usb.linux.next_start": uiTemplate("usb.linux.next_start"),
@@ -84,7 +90,6 @@ func linuxUILabels() map[string]string {
 		"location.use_default":                                                   uiTemplate("location.use_default"),
 		"settings.camera.allow":                                                  uiTemplate("settings.camera.allow"),
 		"settings.camera.camera":                                                 uiTemplate("settings.camera.camera"),
-		"settings.display.fullscreen_display":                                    uiTemplate("settings.display.fullscreen_display"),
 		"settings.graphics.automatic":                                            uiTemplate("settings.graphics.automatic"),
 		"settings.graphics.rendering":                                            uiTemplate("settings.graphics.rendering"),
 		"settings.linux.add_an_app":                                              uiTemplate("settings.linux.add_an_app"),
@@ -100,7 +105,6 @@ func linuxUILabels() map[string]string {
 		"settings.linux.audio_devices_and_port_forwards_apply_when_saved":        uiTemplate("settings.linux.audio_devices_and_port_forwards_apply_when_saved"),
 		"settings.linux.audio_input":                                             uiTemplate("settings.linux.audio_input"),
 		"settings.linux.audio_output":                                            uiTemplate("settings.linux.audio_output"),
-		"settings.linux.automatic_lets_your_desktop_choose_a_change_applies":     uiTemplate("settings.linux.automatic_lets_your_desktop_choose_a_change_applies"),
 		"settings.linux.automatic_recommended":                                   uiTemplate("settings.linux.automatic_recommended"),
 		"settings.linux.automatic_start_waits_10_seconds_settings_or_close":      uiTemplate("settings.linux.automatic_start_waits_10_seconds_settings_or_close"),
 		"settings.linux.automatic_tries_graphics_acceleration_and_falls_back_if": uiTemplate("settings.linux.automatic_tries_graphics_acceleration_and_falls_back_if"),

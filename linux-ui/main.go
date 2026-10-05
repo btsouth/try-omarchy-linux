@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -73,7 +74,14 @@ func acceptStateAfterCancel(cancelling bool, next state) bool {
 	return !cancelling || next.Prompt == "home" || next.Prompt == "snapshots" || next.NonCancellable
 }
 
+type guestOutput struct {
+	Monitor    string `json:"monitor"`
+	Fullscreen bool   `json:"fullscreen"`
+}
+
 type settingsForm struct {
+	Displays           int           `json:"displays"`
+	DisplayOutputs     []guestOutput `json:"displayOutputs"`
 	OpenUSB            bool          `json:"openUSB,omitempty"`
 	Memory             string        `json:"memory"`
 	CPUs               string        `json:"cpus"`
@@ -268,6 +276,30 @@ func fillSections(box *gtk.Box, sections []section, choose func(string)) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--list-monitors" {
+		runtime.LockOSThread()
+		if !gtk.InitCheck() {
+			os.Exit(1)
+		}
+		type monitorInfo struct {
+			Connector string `json:"connector"`
+			Width     int    `json:"width"`
+			Height    int    `json:"height"`
+		}
+		result := []monitorInfo{}
+		if display := gdk.DisplayGetDefault(); display != nil {
+			monitors := display.Monitors()
+			for i := uint(0); i < monitors.NItems(); i++ {
+				if object := monitors.Item(i); object != nil {
+					monitor := &gdk.Monitor{Object: object}
+					geometry := monitor.Geometry()
+					result = append(result, monitorInfo{monitor.Connector(), int(math.Round(float64(geometry.Width()) * monitor.Scale())), int(math.Round(float64(geometry.Height()) * monitor.Scale()))})
+				}
+			}
+		}
+		json.NewEncoder(os.Stdout).Encode(result)
+		return
+	}
 	os.Exit(runUI(os.Stdin, os.Stdout, nil))
 }
 
@@ -550,23 +582,51 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			return input
 		}
 		beginGroup(uiText("settings.section.display"), "General")
-		fullscreen := gtk.NewCheckButtonWithLabel(uiText("settings.linux.open_fullscreen"))
-		groupContent.Append(fullscreen)
-		fullscreenDisplay := gtk.NewDropDownFromStrings([]string{uiText("settings.graphics.automatic")})
-		named(fullscreenDisplay, uiText("settings.display.fullscreen_display"))
-		formField(uiText("settings.display.fullscreen_display"), fullscreenDisplay)
-		fullscreenDisplayNames := []string{""}
+
+		displayCount := gtk.NewSpinButtonWithRange(1, 4, 1)
+		named(displayCount, uiText("settings.linux.display_count"))
+		formField(uiText("settings.linux.display_count"), displayCount)
 		formHelp(uiText("settings.linux.automatic_lets_your_desktop_choose_a_change_applies"))
-		fullscreen.ConnectToggled(func() { fullscreenDisplay.SetSensitive(fullscreen.Active()) })
-		showDisplays := func(selected string) {
-			labels, names, index := namedChoices(uiText("settings.graphics.automatic"), uiText("settings.linux.not_connected"), connectedDisplays(), selected)
-			fullscreenDisplayNames = names
-			fullscreenDisplay.SetModel(gtk.NewStringList(labels))
-			fullscreenDisplay.SetSelected(index)
+		outputChecks := make([]*gtk.CheckButton, 16)
+		outputChoices := make([]*gtk.DropDown, 16)
+		outputRows := make([]*gtk.Box, 16)
+		outputNames := make([][]string, 16)
+		for i := range outputChecks {
+			number := map[string]string{"number": strconv.Itoa(i + 1)}
+			row := gtk.NewBox(gtk.OrientationVertical, 8)
+			outputRows[i] = row
+			label := uiTextWith("settings.linux.output_fullscreen", number)
+			if i == 0 {
+				label = uiText("settings.linux.open_fullscreen")
+			}
+			check := gtk.NewCheckButtonWithLabel(label)
+			choice := gtk.NewDropDownFromStrings([]string{uiText("settings.graphics.automatic")})
+			named(choice, uiTextWith("settings.linux.output_monitor", number))
+			row.Append(gtk.NewLabel(uiTextWith("settings.linux.output_monitor", number)))
+			row.Append(choice)
+			row.Append(check)
+			groupContent.Append(row)
+			outputChecks[i], outputChoices[i], outputNames[i] = check, choice, []string{""}
+			check.SetTooltipText(uiText("settings.linux.ctrl_alt_f_toggles_fullscreen_ctrl_alt_g"))
 		}
+		// Retain output 1's legacy fields in the protocol for older callers.
+		fullscreen, fullscreenDisplay := outputChecks[0], outputChoices[0]
+		showOutput := func(i int, selected string) {
+			labels, names, index := namedChoices(uiText("settings.graphics.automatic"), uiText("settings.linux.not_connected"), connectedDisplays(), selected)
+			outputNames[i] = names
+			outputChoices[i].SetModel(gtk.NewStringList(labels))
+			outputChoices[i].SetSelected(index)
+		}
+		displayCount.ConnectValueChanged(func() {
+			for i, row := range outputRows {
+				row.SetVisible(i < displayCount.ValueAsInt())
+			}
+		})
 		if display := gdk.DisplayGetDefault(); display != nil {
 			display.Monitors().ConnectItemsChanged(func(position, removed, added uint) {
-				showDisplays(fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)])
+				for i, choice := range outputChoices {
+					showOutput(i, outputNames[i][min(int(choice.Selected()), len(outputNames[i])-1)])
+				}
 			})
 		}
 		startAutomatically := gtk.NewCheckButtonWithLabel(uiText("settings.linux.start_omarchy_when_i_open_try_omarchy"))
@@ -575,7 +635,9 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		groupContent.Append(launchAtSignIn)
 		formHelp(uiText("settings.linux.open_this_launcher_when_you_log_in_omarchy"))
 		formHelp(uiText("settings.linux.automatic_start_waits_10_seconds_settings_or_close"))
-		fullscreen.SetTooltipText(uiText("settings.linux.ctrl_alt_f_toggles_fullscreen_ctrl_alt_g"))
+		note := gtk.NewLabel(uiText("settings.linux.multiple_display_note"))
+		note.SetWrap(true)
+		groupContent.Append(note)
 		beginGroup(uiText("settings.section.resources"), "General")
 		resourceProfile := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.balanced_recommended"), uiText("settings.resources.maximum"), uiText("settings.resources.manual")})
 		named(resourceProfile, uiText("settings.resources.profile"))
@@ -1038,7 +1100,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			}
 			forwardStart, forwardEnd := forwards.Buffer().Bounds()
 			forwardText := forwards.Buffer().Text(forwardStart, forwardEnd, false)
-			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), FullscreenDisplay: fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)], Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), LaunchAtSignIn: launchAtSignIn.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
+			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), Displays: displayCount.ValueAsInt(), DisplayOutputs: outputValues(displayCount.ValueAsInt(), outputNames, outputChoices, outputChecks), FullscreenDisplay: outputNames[0][min(int(fullscreenDisplay.Selected()), len(outputNames[0])-1)], Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), LaunchAtSignIn: launchAtSignIn.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
 			return string(data)
 		}
 		usbChoice.ConnectClicked(func() {
@@ -1492,8 +1554,18 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 								render.SetSelected(0)
 							}
 							fullscreen.SetActive(next.Settings.Fullscreen)
-							showDisplays(next.Settings.FullscreenDisplay)
-							fullscreenDisplay.SetSensitive(next.Settings.Fullscreen)
+							displayCount.SetRange(1, float64(max(4, next.Settings.Displays)))
+							displayCount.SetValue(float64(max(1, next.Settings.Displays)))
+							displayOutputs := settingsDisplayOutputs(next.Settings)
+							for i := range outputChoices {
+								output := guestOutput{}
+								if i < len(displayOutputs) {
+									output = displayOutputs[i]
+								}
+								showOutput(i, output.Monitor)
+								outputChecks[i].SetActive(output.Fullscreen)
+								outputRows[i].SetVisible(i < displayCount.ValueAsInt())
+							}
 							microphone.SetActive(next.Settings.Microphone)
 							camera.SetActive(next.Settings.Camera)
 							cameraLabels, names, index := namedChoices(uiText("settings.graphics.automatic"), uiText("settings.linux.unavailable_choice"), next.Settings.Cameras, next.Settings.CameraID)
@@ -1748,4 +1820,12 @@ func oneButtonPrompt(prompt string) bool {
 		return true
 	}
 	return false
+}
+
+func outputValues(count int, names [][]string, choices []*gtk.DropDown, checks []*gtk.CheckButton) []guestOutput {
+	outputs := make([]guestOutput, count)
+	for i := range outputs {
+		outputs[i] = guestOutput{names[i][min(int(choices[i].Selected()), len(names[i])-1)], checks[i].Active()}
+	}
+	return outputs
 }

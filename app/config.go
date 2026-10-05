@@ -29,6 +29,10 @@ type config struct {
 	memMiB                      int
 	displays                    int
 	displayWidth, displayHeight int
+	// Linux per-output placement and initial EDID sizes.
+	displayTargets    []string
+	displayFullscreen []bool
+	displaySizes      [][2]int
 	// kernel-irqchip=off keeps WHPX from requesting nested virtualization,
 	// which some hosts advertise and then refuse (issue #19). Set by the
 	// startup retry, never by a flag.

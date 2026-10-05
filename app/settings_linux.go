@@ -19,6 +19,8 @@ import (
 // linuxSettingsForm is one Settings snapshot. Reclaim is nil before launch;
 // StartReclaim asks for a reclaim pass without saving the form.
 type linuxSettingsForm struct {
+	Displays           int                `json:"displays"`
+	DisplayOutputs     []linuxGuestOutput `json:"displayOutputs"`
 	OpenUSB            bool               `json:"openUSB,omitempty"`
 	Memory             string             `json:"memory"`
 	CPUs               string             `json:"cpus"`
@@ -109,6 +111,10 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	if err != nil {
 		return uiTextWith("settings.linux.could_not_read_display_and_keyboard_preferences", map[string]string{"error": err.Error()})
 	}
+	displays, err := loadLinuxDisplays(dir, saved)
+	if err != nil {
+		return err.Error()
+	}
 	launch, err := loadLaunchPreferences(dir)
 	if err != nil {
 		return uiTextWith("settings.linux.could_not_read_startup_preferences", map[string]string{"error": err.Error()})
@@ -128,7 +134,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 	outputs, inputs, audioListErr := listLinuxAudioDevices()
 	cameras, cameraListErr := listLinuxCameraDevices()
 	sshEnabled, sshPort, additionalForwards := linuxNetworkForm(saved.Forwards)
-	form := &linuxSettingsForm{Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, FullscreenDisplay: saved.FullscreenDisplay, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, LaunchAtSignIn: launch.LaunchAtSignIn, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != "", ClipboardShare: !linuxClipboardSharingOff()}
+	form := &linuxSettingsForm{Displays: guestDisplayCount(saved.Displays), DisplayOutputs: displays.Outputs, Memory: strconv.Itoa(saved.MemoryMiB), CPUs: strconv.Itoa(saved.CPUs), Render: saved.Render, Fullscreen: saved.Fullscreen, FullscreenDisplay: saved.FullscreenDisplay, Microphone: !desktop.MicrophoneDisabled, Camera: !desktop.CameraDisabled, CameraID: desktop.CameraID, Cameras: cameras, AudioOutput: audio.Output, AudioInput: audio.Input, AudioOutputs: outputs, AudioInputs: inputs, DiskGiB: strconv.Itoa(storage.DiskGiB), Scale: experience.Scale, Keyboard: experience.Keyboard, SSHEnabled: sshEnabled, SSHPort: sshPort, SSHKey: saved.SSHKey, Forwards: additionalForwards, StartAutomatically: launch.StartAutomatically, LaunchAtSignIn: launch.LaunchAtSignIn, Share: saved.Share, ShareEnabled: saved.Share != "" && !saved.ShareDisabled, CPUMax: min(maximumGuestCPUs, max(1, measureHostResources(false).LogicalCPUs)), ClipboardAvailable: os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != "", ClipboardShare: !linuxClipboardSharingOff()}
 	layout, variant := linuxHostKeyboard()
 	form.HostKeyboard = layout
 	if variant != "" {
@@ -279,6 +285,10 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err == nil {
 			err = validateResourceProfile(form.ResourceProfile)
 		}
+		var nextDisplays linuxDisplayPreferences
+		if err == nil {
+			nextDisplays, err = linuxDisplaysFromForm(form, displays, saved)
+		}
 		nextAudio := audio
 		nextAudio.Output, nextAudio.Input = form.AudioOutput, form.AudioInput
 		if err == nil {
@@ -318,7 +328,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			// copy only after the atomic write succeeds.
 			nextSaved := saved
 			nextSaved.MemoryMiB, nextSaved.CPUs, nextSaved.Render, nextSaved.Fullscreen = next.MemoryMiB, next.CPUs, next.Render, next.Fullscreen
-			nextSaved.FullscreenDisplay = next.FullscreenDisplay
+			nextSaved.Displays = form.Displays
+			nextSaved.FullscreenDisplay = nextDisplays.Outputs[0].Monitor
+			nextSaved.Fullscreen = nextDisplays.Outputs[0].Fullscreen
 			if form.Share != saved.Share || form.ShareEnabled != (saved.Share != "" && !saved.ShareDisabled) {
 				nextSaved.Share, nextSaved.ShareDisabled, nextSaved.SharedFolderPrompted = next.Share, next.ShareDisabled, true
 			}
@@ -326,6 +338,12 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 			err = savePart(uiText("settings.linux.vm_configuration"), func() error { return saveSettings(settingsPath(dir), nextSaved) })
 			if err == nil {
 				saved = nextSaved
+			}
+			if err == nil {
+				err = savePart(uiText("settings.section.display"), func() error { return saveLinuxDisplays(dir, nextDisplays) })
+				if err == nil {
+					displays = nextDisplays
+				}
 			}
 			if err == nil && form.ResourceProfile != resources.Profile {
 				err = savePart(uiText("settings.linux.resource_profile"), func() error { return saveResourcePreferences(dir, form.ResourceProfile) })

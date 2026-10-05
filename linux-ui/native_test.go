@@ -575,8 +575,8 @@ func TestNativeSettingsPagesAndAccountChoices(t *testing.T) {
 				}
 				memory.SetValue(8)
 				cpus.SetValue(5)
-				if fullscreenDisplay == nil || fullscreenDisplay.Sensitive() {
-					t.Error("a saved fullscreen display was not kept, or was offered while fullscreen was off")
+				if fullscreenDisplay == nil || !fullscreenDisplay.Sensitive() {
+					t.Error("a saved fullscreen display was not kept, or was unavailable while fullscreen was off")
 				}
 				if fullscreenDisplay != nil {
 					// Automatic, the box's own monitor, then the saved one.

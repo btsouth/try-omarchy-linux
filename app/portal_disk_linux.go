@@ -13,6 +13,7 @@ import (
 // The lifecycle listener has already claimed the single-instance port before
 // any data-folder or disk operation. Disable QEMU locking only on this mount.
 func linuxQemuArgs(cfg *config, args []string) []string {
+	args = linuxDisplayArgs(cfg, args)
 	args = linuxGraphicsArgs(args, linuxVenusEnabled, linuxHonorGuestPAT)
 	args = linuxAudioArgs(cfg, args)
 	args = linuxWithoutWindowsHello(args)

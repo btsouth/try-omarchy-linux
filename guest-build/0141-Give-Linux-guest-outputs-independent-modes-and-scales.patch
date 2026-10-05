@@ -1,0 +1,736 @@
+From c95c7f6610be1426f52b62646b9250cfea153579 Mon Sep 17 00:00:00 2001
+From: Try Omarchy Release <actions@users.noreply.github.com>
+Date: Mon, 5 Oct 2026 09:08:52 -0400
+Subject: [PATCH] Give Linux guest outputs independent modes and scales
+
+---
+ .../usr/local/lib/try-omarchy/catch-up        |   3 +
+ .../hypr-monitors-qemu.append.lua             |  70 ++++++
+ guest/fragments/hypr-monitors-qemu.append.lua |  70 ++++++
+ .../usr/local/bin/omarchy-native-display-sync | 124 +++++++++-
+ guest/scripts/finalize-rootfs.sh              |   3 +-
+ guest/tests/test_battery_details.py           |   2 +-
+ guest/tests/test_compositor_health.py         |   2 +-
+ guest/tests/test_display_output_scale.py      | 221 ++++++++++++++++++
+ guest/tests/test_guest_qol.py                 |   2 +-
+ guest/tests/test_live_update.py               |   2 +-
+ guest/tests/test_native_nightlight.py         |   2 +-
+ guest/tests/test_notification_privacy.py      |   2 +-
+ guest/tests/test_overlay_scripts.py           |  11 +
+ guest/tests/verify.py                         |   2 +-
+ 14 files changed, 497 insertions(+), 19 deletions(-)
+ create mode 100644 guest/tests/test_display_output_scale.py
+
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up b/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up
+index f5562e5..949d29e 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/catch-up
+@@ -80,6 +80,9 @@ strip_profile_block() {
+   sed '/^-- BEGIN OMARCHY QEMU PROFILE$/,/^-- END OMARCHY QEMU PROFILE$/d' "$1" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
+ }
+ 
++# Revision 62 refreshes this stock fragment for Linux per-output replay.
++# Customized monitor files keep their content; the sync watcher still applies
++# connector modes after config reloads.
+ refresh_monitors() {
+   local home=$1 file=$1/.config/hypr/monitors.lua
+   [[ -f $file && -f $omarchy_default && -f $fragment ]] || return 0
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua b/guest/factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua
+index 0727813..1239e6d 100644
+--- a/guest/factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua
++++ b/guest/factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua
+@@ -89,8 +89,78 @@ local function omarchy_clean_scale(mode, requested)
+   return scale
+ end
+ 
++-- Linux multi-output replay is separate from the original single-mode file.
++-- Validate DRM status at load time: a reload can precede the udev watcher.
++local function omarchy_synced_display_outputs()
++  if not omarchy_kernel_option_enabled("tryomarchy.host=linux") then
++    return {}
++  end
++  local runtime_dir = os.getenv("XDG_RUNTIME_DIR")
++  if not runtime_dir or runtime_dir == "" then
++    return {}
++  end
++  local file = io.open(runtime_dir .. "/try-omarchy/display-mode.outputs", "r")
++  if not file then
++    return {}
++  end
++  local outputs = {}
++  for line in file:lines() do
++    local output, mode, scale, connector = line:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)$")
++    if output and output:match("^Virtual%-%d+$") and connector:match("^card%d+%-Virtual%-%d+$") and connector:match("%-(Virtual%-%d+)$") == output
++        and mode:match("^modeline [%d ]+ [+-]hsync [+-]vsync$")
++        and (scale == "auto" or scale == "keep" or scale:match("^%d+%.?%d*$")) then
++      local status = io.open((os.getenv("OMARCHY_DISPLAY_SYNC_DRM_ROOT") or "/sys/class/drm") .. "/" .. connector .. "/status", "r")
++      if status then
++        local connected = status:read("*l") == "connected"
++        status:close()
++        if connected then
++          outputs[#outputs + 1] = { output = output, mode = mode, scale = scale }
++        end
++      end
++    end
++  end
++  file:close()
++  return #outputs > 1 and outputs or {}
++end
++
++-- A connector's own rule already ran above this fragment. Keep its scale on
++-- reload, including computed Lua expressions; display sync then rounds known
++-- numeric overrides against the fresh EDID mode just like the single path.
++local function omarchy_connector_scale(output)
++  local config_dir = os.getenv("XDG_CONFIG_HOME") or ((os.getenv("HOME") or "") .. "/.config")
++  local file = io.open(config_dir .. "/hypr/monitors.lua", "r")
++  if not file then
++    return nil
++  end
++  local text = file:read("*a")
++  file:close()
++  text = text:gsub("%-%- BEGIN OMARCHY QEMU PROFILE.-%-%- END OMARCHY QEMU PROFILE", "")
++  text = text:gsub("%-%-%[%[.-%]%]", ""):gsub("%-%-[^\n]*", "")
++  for rule in text:gmatch("hl%.monitor%s*(%b())") do
++    local name = rule:match('output%s*=%s*"([^"\n]*)"') or rule:match("output%s*=%s*'([^'\n]*)'")
++    local scale = rule:match("scale%s*=%s*([^,}]+)")
++    if name == output and scale then
++      return scale:match("^%s*[\"']auto[\"']%s*$") and "auto" or "keep"
++    end
++  end
++  return nil
++end
++
+ if omarchy_kernel_option_enabled("omarchy.qemu=1") then
+   hl.config({ cursor = { invisible = false } })
++  local synced_outputs = omarchy_synced_display_outputs()
++  for _, rule in ipairs(synced_outputs) do
++    local connector_scale = omarchy_connector_scale(rule.output)
++    if rule.scale == "keep" or connector_scale == "keep" then
++      rule.scale = nil
++    else
++      local user_scale = tonumber(omarchy_monitor_scale)
++      if not connector_scale and user_scale and user_scale > 0 then
++        rule.scale = omarchy_clean_scale(rule.mode, user_scale) or rule.scale
++      end
++    end
++    hl.monitor(rule)
++  end
+   local synced_mode, synced_scale = omarchy_synced_display_mode()
+   if synced_mode then
+     -- A number the user set in this file is explicit intent and outranks
+diff --git a/guest/fragments/hypr-monitors-qemu.append.lua b/guest/fragments/hypr-monitors-qemu.append.lua
+index 0727813..1239e6d 100644
+--- a/guest/fragments/hypr-monitors-qemu.append.lua
++++ b/guest/fragments/hypr-monitors-qemu.append.lua
+@@ -89,8 +89,78 @@ local function omarchy_clean_scale(mode, requested)
+   return scale
+ end
+ 
++-- Linux multi-output replay is separate from the original single-mode file.
++-- Validate DRM status at load time: a reload can precede the udev watcher.
++local function omarchy_synced_display_outputs()
++  if not omarchy_kernel_option_enabled("tryomarchy.host=linux") then
++    return {}
++  end
++  local runtime_dir = os.getenv("XDG_RUNTIME_DIR")
++  if not runtime_dir or runtime_dir == "" then
++    return {}
++  end
++  local file = io.open(runtime_dir .. "/try-omarchy/display-mode.outputs", "r")
++  if not file then
++    return {}
++  end
++  local outputs = {}
++  for line in file:lines() do
++    local output, mode, scale, connector = line:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t([^\t]+)$")
++    if output and output:match("^Virtual%-%d+$") and connector:match("^card%d+%-Virtual%-%d+$") and connector:match("%-(Virtual%-%d+)$") == output
++        and mode:match("^modeline [%d ]+ [+-]hsync [+-]vsync$")
++        and (scale == "auto" or scale == "keep" or scale:match("^%d+%.?%d*$")) then
++      local status = io.open((os.getenv("OMARCHY_DISPLAY_SYNC_DRM_ROOT") or "/sys/class/drm") .. "/" .. connector .. "/status", "r")
++      if status then
++        local connected = status:read("*l") == "connected"
++        status:close()
++        if connected then
++          outputs[#outputs + 1] = { output = output, mode = mode, scale = scale }
++        end
++      end
++    end
++  end
++  file:close()
++  return #outputs > 1 and outputs or {}
++end
++
++-- A connector's own rule already ran above this fragment. Keep its scale on
++-- reload, including computed Lua expressions; display sync then rounds known
++-- numeric overrides against the fresh EDID mode just like the single path.
++local function omarchy_connector_scale(output)
++  local config_dir = os.getenv("XDG_CONFIG_HOME") or ((os.getenv("HOME") or "") .. "/.config")
++  local file = io.open(config_dir .. "/hypr/monitors.lua", "r")
++  if not file then
++    return nil
++  end
++  local text = file:read("*a")
++  file:close()
++  text = text:gsub("%-%- BEGIN OMARCHY QEMU PROFILE.-%-%- END OMARCHY QEMU PROFILE", "")
++  text = text:gsub("%-%-%[%[.-%]%]", ""):gsub("%-%-[^\n]*", "")
++  for rule in text:gmatch("hl%.monitor%s*(%b())") do
++    local name = rule:match('output%s*=%s*"([^"\n]*)"') or rule:match("output%s*=%s*'([^'\n]*)'")
++    local scale = rule:match("scale%s*=%s*([^,}]+)")
++    if name == output and scale then
++      return scale:match("^%s*[\"']auto[\"']%s*$") and "auto" or "keep"
++    end
++  end
++  return nil
++end
++
+ if omarchy_kernel_option_enabled("omarchy.qemu=1") then
+   hl.config({ cursor = { invisible = false } })
++  local synced_outputs = omarchy_synced_display_outputs()
++  for _, rule in ipairs(synced_outputs) do
++    local connector_scale = omarchy_connector_scale(rule.output)
++    if rule.scale == "keep" or connector_scale == "keep" then
++      rule.scale = nil
++    else
++      local user_scale = tonumber(omarchy_monitor_scale)
++      if not connector_scale and user_scale and user_scale > 0 then
++        rule.scale = omarchy_clean_scale(rule.mode, user_scale) or rule.scale
++      end
++    end
++    hl.monitor(rule)
++  end
+   local synced_mode, synced_scale = omarchy_synced_display_mode()
+   if synced_mode then
+     -- A number the user set in this file is explicit intent and outranks
+diff --git a/guest/native-overlay/usr/local/bin/omarchy-native-display-sync b/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
+index 35d13b5..91a37f7 100755
+--- a/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
++++ b/guest/native-overlay/usr/local/bin/omarchy-native-display-sync
+@@ -10,6 +10,12 @@ case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
+   *" tryomarchy.host-scale=1 "*) export OMARCHY_DISPLAY_SYNC_HOST_SCALE=1 ;;
+ esac
+ 
++linux_host=0
++case " $(cat "${TRY_OMARCHY_CMDLINE:-/proc/cmdline}" 2>/dev/null) " in
++  *" tryomarchy.host=linux "*) linux_host=1 ;;
++esac
++output_state=$state_file.outputs
++
+ # Omarchy's monitors.lua keeps the user's catch-all scale in a Lua variable.
+ # A number there is explicit intent and outranks the scale guessed from the
+ # EDID; "auto", a missing file, and an unreadable file keep the guessed scale.
+@@ -262,7 +268,51 @@ raise SystemExit(1)
+ PY
+ }
+ 
++# A literal connector scale takes precedence over the catch-all variable.
++# Unknown Lua expressions are left to Hyprland: update only the mode in that
++# case, rather than replacing a user's computed scale with an EDID guess.
++configured_output_scale() {
++  local config=${OMARCHY_DISPLAY_SYNC_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/monitors.lua}
++  python3 - "$config" "$1" "$2" <<'PYTHON'
++from pathlib import Path
++import re
++import sys
++try:
++    text = Path(sys.argv[1]).read_text()
++except OSError:
++    print(sys.argv[3])
++    raise SystemExit
++# Do not scan our replay code as if it were a user rule.
++text = re.sub(r"-- BEGIN OMARCHY QEMU PROFILE.*?-- END OMARCHY QEMU PROFILE", "", text, flags=re.S)
++text = re.sub(r"--\[(=*)\[.*?\]\1\]", "", text, flags=re.S)
++text = re.sub(r"--[^\n]*", "", text)
++values = dict(re.findall(r'(?:local\s+)?(\w+)\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*(?=--|[,;\n]|$)', text))
++result = sys.argv[3]
++for rule in re.findall(r'hl\.monitor\s*\(\s*\{(.*?)\}\s*\)', text, re.S):
++    output = re.search(r"\boutput\s*=\s*([\"'])(.*?)\1", rule)
++    scale = re.search(r'\bscale\s*=\s*([^,}]+)', rule)
++    if not output or output[2] != sys.argv[2] or not scale:
++        continue
++    value = scale[1].strip().strip('"\'')
++    value = values.get(value, value)
++    result = (value if re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', value) and float(value) > 0
++              else '' if value == 'auto' else 'keep')
++print(result)
++PYTHON
++}
++
+ apply_preferred_modes() {
++  # The udev and config-reload watchers share state. Serialize them, including
++  # the reload that removes obsolete connector rules after a topology change.
++  if (( linux_host )); then
++    mkdir -p "${state_file%/*}"
++    ( flock -x 9; apply_modes_locked ) 9>"$state_file.lock"
++  else
++    apply_modes_locked
++  fi
++}
++
++apply_modes_locked() {
+   local connector
+   local connector_name
+   local mode
+@@ -275,17 +325,55 @@ apply_preferred_modes() {
+   local applied=0
+   local last_mode=""
+   local last_scale=""
++  local per_output=0 tmp="" old_output old_mode old_scale
++  local -a connectors=()
+ 
+-  # Several displays share the single catch-all rule, so read the file once.
+-  user_scale=$(configured_scale)
+   shopt -s nullglob
+   for connector in "$drm_root"/card*-Virtual-*; do
+     [[ -d $connector && -r $connector/status && -r $connector/edid ]] || continue
+     [[ $(<"$connector/status") == connected ]] || continue
++    connectors+=("$connector")
++  done
++  if (( linux_host )); then
++    (( ${#connectors[@]} <= 1 )) || per_output=1
++    # Reload is the Lua API's way to discard rules. Clear replay before the
++    # reload so disconnected outputs cannot put obsolete rules back.
++    if [[ -f $output_state ]]; then
++      while IFS=$'\t' read -r old_output old_mode old_scale; do
++        local found=0
++        for connector in "${connectors[@]}"; do
++          [[ ${connector##*/} == card*-"$old_output" ]] && found=1
++        done
++        if (( ! found || ! per_output )); then
++          rm -f "$output_state" "$state_file"
++          hyprctl reload >/dev/null
++          break
++        fi
++      done <"$output_state"
++    fi
++    if (( per_output )); then
++      rm -f "$state_file"
++      tmp=$(mktemp "$output_state.XXXXXX")
++    fi
++  fi
+ 
++  # Keep the established catch-all scale lookup on the single-output path.
++  user_scale=$(configured_scale)
++  shopt -s nullglob
++  for connector in "${connectors[@]}"; do
+     connector_name=${connector##*/}
+     output=${connector_name#*-}
+-    if ! preferred=$(preferred_mode_from_edid "$connector/edid" "$user_scale"); then
++    local requested=$user_scale rule_output=""
++    if (( per_output )); then
++      rule_output=$output
++      requested=$(configured_output_scale "$output" "$user_scale")
++    fi
++    if ! preferred=$(preferred_mode_from_edid "$connector/edid" "${requested/keep/}"); then
++      # Track ownership even if EDID is temporarily unreadable. Otherwise a
++      # previously applied rule could be forgotten and survive later removal.
++      if (( per_output )); then
++        printf '%s\t-\t-\t%s\n' "$output" "$connector_name" >>"$tmp"
++      fi
+       continue
+     fi
+     IFS=$'\t' read -r mode scale <<<"$preferred"
+@@ -296,11 +384,16 @@ apply_preferred_modes() {
+     # the stale mode cache; an explicit scale calculated from the fresh EDID
+     # avoids using the stale fullscreen dimensions for Hyprland's auto scale,
+     # unless the user set a number, which comes first. Hyprland's Lua config
+-    # parser requires eval instead of the legacy keyword command. Update
+-    # Omarchy's single-output catch-all mode and scale; its placement, color,
+-    # and other policy remain intact, while an explicit per-output user rule
+-    # still wins.
+-    rule="hl.monitor({ output = \"\", mode = \"$mode\", scale = \"$scale\" })"
++    # parser requires eval instead of the legacy keyword command.
++    # The single-output path retains its catch-all rule. Linux multi-output
++    # rules target each connector; Hyprland merges fields into existing rules,
++    # keeping the user's placement, transform, color and other policy.
++    rule="hl.monitor({ output = \"$rule_output\", mode = \"$mode\", scale = \"$scale\" })"
++    if [[ $requested == keep ]]; then
++      rule="hl.monitor({ output = \"$rule_output\", mode = \"$mode\" })"
++      scale=keep
++    fi
++    local succeeded=0
+     if ! response=$(hyprctl eval "$rule" 2>&1); then
+       printf 'omarchy-native-display-sync: failed to apply %s to %s: %s\n' \
+         "$mode" "$output" "$response" >&2
+@@ -308,15 +401,24 @@ apply_preferred_modes() {
+       printf 'omarchy-native-display-sync: Hyprland rejected %s for %s: %s\n' \
+         "$mode" "$output" "$response" >&2
+     else
++      succeeded=1
+       applied=$((applied + 1))
+       last_mode=$mode
+       last_scale=$scale
++      if (( per_output )); then
++        printf '%s\t%s\t%s\t%s\n' "$output" "$mode" "$scale" "$connector_name" >>"$tmp"
++      fi
++    fi
++    if (( per_output && ! succeeded )); then
++      printf '%s\t-\t-\t%s\n' "$output" "$connector_name" >>"$tmp"
+     fi
+   done
+   shopt -u nullglob
+-  # The rule is a catch-all, so one recorded mode only fits a single display.
+-  # With several, drop the record and let reloads use Omarchy's own rule.
+-  if (( applied == 1 )); then
++  # Linux records each successful connector rule atomically; other hosts keep
++  # the original single-display record and multi-display replay behavior.
++  if (( per_output )); then
++    mv -f "$tmp" "$output_state"
++  elif (( applied == 1 )); then
+     record_mode "$last_mode" "$last_scale"
+   else
+     rm -f "$state_file"
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 90d249a..dcb2089 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -265,7 +265,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 59 delivers bounded compositor health probes through the agent.
+ # Revision 60 pauses config autoreload during live package updates.
+ # Revision 61 lets pacman adopt the catch-up night-light backend on update.
+-compat_revision=61
++# Revision 62 gives Linux outputs independent EDID modes and scales.
++compat_revision=62
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/tests/test_battery_details.py b/guest/tests/test_battery_details.py
+index 1b51e57..15084d5 100644
+--- a/guest/tests/test_battery_details.py
++++ b/guest/tests/test_battery_details.py
+@@ -204,7 +204,7 @@ class BatteryDetailsFlowTests(unittest.TestCase):
+     def test_compatibility_delivery_and_dkms_version(self):
+         overlay = GUEST / "factory-overlay"
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+-        self.assertIn("compat_revision=61", finalize)
++        self.assertIn("compat_revision=62", finalize)
+         self.assertIn("usr/src/try-omarchy-battery-1.1.0", finalize)
+         self.assertIn("usr/local/lib/try-omarchy/update-battery-dkms", finalize)
+         self.assertIn('PACKAGE_VERSION="1.1.0"', (MODULE_SOURCE.parent / "dkms.conf").read_text())
+diff --git a/guest/tests/test_compositor_health.py b/guest/tests/test_compositor_health.py
+index 642a3c4..4715b0e 100644
+--- a/guest/tests/test_compositor_health.py
++++ b/guest/tests/test_compositor_health.py
+@@ -34,7 +34,7 @@ class CompositorHealthTests(unittest.TestCase):
+ 
+     def test_existing_disks_receive_health_files(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+-        self.assertIn('compat_revision=61', finalizer)
++        self.assertIn('compat_revision=62', finalizer)
+         for name in ['agent', 'compositor-health']:
+             self.assertIn('  usr/local/lib/try-omarchy/' + name, finalizer)
+         self.assertTrue(HELPER.stat().st_mode & 0o111)
+diff --git a/guest/tests/test_display_output_scale.py b/guest/tests/test_display_output_scale.py
+new file mode 100644
+index 0000000..9bb3ec4
+--- /dev/null
++++ b/guest/tests/test_display_output_scale.py
+@@ -0,0 +1,221 @@
++"""Linux connector rules use the shared EDID decoder and preserve user intent."""
++import json
++import os
++from pathlib import Path
++import subprocess
++import shutil
++import tempfile
++import unittest
++
++GUEST = Path(__file__).resolve().parents[1]
++SYNC = GUEST / 'native-overlay/usr/local/bin/omarchy-native-display-sync'
++HIGH = 'modeline 594 3840 3928 3972 4120 2160 2164 2169 2205 -hsync -vsync'
++LOW = 'modeline 149 1920 2008 2052 2200 1080 1084 1089 1125 -hsync -vsync'
++
++
++def edid(width, height, width_cm, height_cm):
++    data = bytearray(256)
++    data[:8] = b'\x00\xff\xff\xff\xff\xff\xff\x00'
++    data[21:23] = bytes([width_cm, height_cm])
++    data[126] = 1
++    block = bytearray(128)
++    block[:8] = bytes([0x70, 0x13, 0x17, 0x03, 0, 0x03, 0, 0x14])
++    block[8:11] = ((594_000_000 if width == 3840 else 148_500_000) // 10_000 - 1).to_bytes(3, 'little')
++    block[11] = 0x80
++    for offset, value in [(12, width), (14, 280), (16, 88), (18, 44),
++                          (20, height), (22, 45), (24, 4), (26, 5)]:
++        block[offset:offset+2] = (value - 1).to_bytes(2, 'little')
++    block[28] = -sum(block[1:28]) & 255
++    block[127] = -sum(block[:127]) & 255
++    data[128:] = block
++    data[127] = -sum(data[:127]) & 255
++    return data
++
++
++class OutputScaleTests(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name)
++        self.drm = self.root / 'drm'
++        self.bin = self.root / 'bin'
++        self.bin.mkdir()
++        self.log = self.root / 'log'
++        self.rules = self.root / 'rules.json'
++        fake = self.bin / 'hyprctl'
++        fake.write_text('''#!/usr/bin/env python3
++import json, os, re, sys
++from pathlib import Path
++log = Path(os.environ['HYPRCTL_LOG'])
++with log.open('a') as f: f.write(' '.join(sys.argv[1:]) + '\\n')
++p = Path(os.environ['HYPRCTL_RULES'])
++rules = json.loads(p.read_text()) if p.exists() else {}
++if sys.argv[1] == 'reload':
++    rules = {}
++else:
++    rule = dict(re.findall(r'(output|mode|scale) = "([^"]*)"', sys.argv[2]))
++    rules.setdefault(rule['output'], {}).update(rule)
++p.write_text(json.dumps(rules))
++print('ok')
++''')
++        fake.chmod(0o755)
++        self.config = self.root / 'monitors.lua'
++        self.cmdline = self.root / 'cmdline'
++        self.cmdline.write_text('tryomarchy.host=linux tryomarchy.host-scale=1\n')
++        self.state = self.root / 'runtime/display-mode'
++        self.env = dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}',
++                        HYPRCTL_LOG=str(self.log), HYPRCTL_RULES=str(self.rules),
++                        TRY_OMARCHY_CMDLINE=str(self.cmdline),
++                        OMARCHY_DISPLAY_SYNC_DRM_ROOT=str(self.drm),
++                        OMARCHY_DISPLAY_SYNC_STATE=str(self.state),
++                        OMARCHY_DISPLAY_SYNC_CONFIG=str(self.config))
++        self.connector(1, edid(3840, 2160, 51, 29))
++
++    def connector(self, number, data):
++        connector = self.drm / f'card0-Virtual-{number}'
++        connector.mkdir(parents=True, exist_ok=True)
++        (connector / 'status').write_text('connected\n')
++        (connector / 'edid').write_bytes(data)
++        return connector
++
++    def run_sync(self, reload=False):
++        result = subprocess.run([str(SYNC), '--config-reloads-from-stdin' if reload else '--from-stdin'],
++                                input='configreloaded>>\n' if reload else 'ACTION=change\nHOTPLUG=1\n',
++                                text=True, env=self.env, capture_output=True)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        return json.loads(self.rules.read_text())
++
++    def test_single_output_retains_exact_rule_and_record(self):
++        self.run_sync()
++        self.assertEqual(self.log.read_text(), f'eval hl.monitor({{ output = "", mode = "{HIGH}", scale = "2" }})\n')
++        self.assertEqual(self.state.read_text(), HIGH + '\n2\n')
++        self.assertFalse(Path(str(self.state) + '.outputs').exists())
++        self.config.write_text('local omarchy_monitor_scale = 1.3 -- explicit\n')
++        self.assertEqual(self.run_sync()['']['scale'], '1.333333')
++
++    def test_two_outputs_have_independent_modes_and_scales_and_reload(self):
++        self.connector(2, edid(1920, 1080, 51, 29))
++        rules = self.run_sync()
++        self.assertEqual(set(rules), {'Virtual-1', 'Virtual-2'})
++        self.assertEqual(rules['Virtual-1'], dict(output='Virtual-1', mode=HIGH, scale='2'))
++        self.assertEqual(rules['Virtual-2'], dict(output='Virtual-2', mode=LOW, scale='1'))
++        self.assertFalse(self.state.exists())
++        saved = Path(str(self.state) + '.outputs').read_text()
++        self.assertEqual(saved, f'Virtual-1\t{HIGH}\t2\tcard0-Virtual-1\nVirtual-2\t{LOW}\t1\tcard0-Virtual-2\n')
++        self.assertEqual(self.run_sync(reload=True), rules)
++
++    def test_connector_override_wins_over_global_scale_and_other_edid(self):
++        self.connector(2, edid(1920, 1080, 51, 29))
++        self.config.write_text('''local omarchy_monitor_scale = 2
++-- hl.monitor({ output = "Virtual-1", scale = 4 })
++hl.monitor({
++  output = "Virtual-1", position = "auto", scale = 1.3
++})
++hl.monitor({ output = 'Virtual-2', scale = 'auto' })
++''')
++        rules = self.run_sync()
++        self.assertEqual(rules['Virtual-1']['scale'], '1.333333')
++        self.assertEqual(rules['Virtual-2']['scale'], '1')
++        self.config.write_text('local laptop_scale = 1.5\nhl.monitor({ output = "Virtual-1", scale = laptop_scale })\n')
++        self.assertEqual(self.run_sync()['Virtual-1']['scale'], '1.5')
++
++    def test_computed_override_keeps_hyprland_scale(self):
++        self.connector(2, edid(1920, 1080, 51, 29))
++        self.rules.write_text(json.dumps({'Virtual-1': {'output': 'Virtual-1', 'scale': '1.5'}}))
++        self.config.write_text('hl.monitor({ output = "Virtual-1", scale = choose_scale() })\n')
++        self.assertEqual(self.run_sync()['Virtual-1']['scale'], '1.5')
++        self.assertIn(f'eval hl.monitor({{ output = "Virtual-1", mode = "{HIGH}" }})', self.log.read_text())
++
++    def test_removal_clears_rules_and_returns_to_single_output_behavior(self):
++        second = self.connector(2, edid(1920, 1080, 51, 29))
++        self.run_sync()
++        (second / 'status').write_text('disconnected\n')
++        rules = self.run_sync()
++        self.assertEqual(rules, {'': dict(output='', mode=HIGH, scale='2')})
++        self.assertFalse(Path(str(self.state) + '.outputs').exists())
++        self.assertEqual(self.state.read_text(), HIGH + '\n2\n')
++        self.assertEqual(self.log.read_text().splitlines().count('reload'), 1)
++        self.run_sync()
++        self.assertEqual(self.log.read_text().splitlines().count('reload'), 1)
++        (self.drm / 'card0-Virtual-1/status').write_text('disconnected\n')
++        self.run_sync()
++        self.assertFalse(self.state.exists())
++        self.connector(2, edid(1920, 1080, 51, 29))
++        self.assertEqual(self.run_sync()['']['mode'], LOW)
++
++    def test_removal_with_two_remaining_clears_stale_connector_rule(self):
++        second = self.connector(2, edid(1920, 1080, 51, 29))
++        self.connector(3, edid(1920, 1080, 51, 29))
++        self.run_sync()
++        (second / 'status').write_text('disconnected\n')
++        self.assertEqual(set(self.run_sync()), {'Virtual-1', 'Virtual-3'})
++        self.assertNotIn('Virtual-2', Path(str(self.state) + '.outputs').read_text())
++
++    def test_unreadable_edid_does_not_forget_rule_ownership(self):
++        second = self.connector(2, edid(1920, 1080, 51, 29))
++        self.connector(3, edid(1920, 1080, 51, 29))
++        self.run_sync()
++        (second / 'edid').write_bytes(b'not an EDID')
++        self.run_sync()
++        self.assertIn('Virtual-2', Path(str(self.state) + '.outputs').read_text())
++        (second / 'status').write_text('disconnected\n')
++        self.assertEqual(set(self.run_sync()), {'Virtual-1', 'Virtual-3'})
++
++    def test_windows_multi_output_path_stays_catch_all(self):
++        self.cmdline.write_text('tryomarchy.host=windows\n')
++        self.connector(2, edid(1920, 1080, 51, 29))
++        self.run_sync()
++        self.assertEqual(set(json.loads(self.rules.read_text())), {''})
++        self.assertFalse(self.state.exists())
++        self.assertFalse(Path(str(self.state) + '.outputs').exists())
++
++    @unittest.skipUnless(shutil.which('lua'), 'Lua interpreter not installed')
++    def test_lua_replay_preserves_overrides_and_checks_hotplug(self):
++        second = self.connector(2, edid(1920, 1080, 51, 29))
++        self.config.write_text('local omarchy_monitor_scale = 2\nhl.monitor({ output = "Virtual-1", scale = 1.5 })\nhl.monitor({ output = "Virtual-2", scale = "auto" })\n')
++        self.run_sync()
++        harness = self.root / 'replay.lua'
++        harness.write_text("""
++local real_open = io.open
++io.open = function(path, mode)
++  if path == "/proc/cmdline" then return real_open(os.getenv("TRY_OMARCHY_CMDLINE"), mode) end
++  if path:match("/hypr/monitors.lua$") then return real_open(os.getenv("OMARCHY_DISPLAY_SYNC_CONFIG"), mode) end
++  return real_open(path, mode)
++end
++local real_getenv = os.getenv
++os.getenv = function(key)
++  if key == "XDG_RUNTIME_DIR" then return real_getenv("REPLAY_RUNTIME") end
++  return real_getenv(key)
++end
++omarchy_monitor_scale = 2
++hl = { config = function() end, monitor = function(rule)
++  print(rule.output .. "\\t" .. rule.mode .. "\\t" .. (rule.scale or "keep"))
++end }
++o = { exec_on_start = function() end }
++dofile(arg[1])
++""")
++        env = dict(self.env, REPLAY_RUNTIME=str(self.state.parent))
++        # Replay uses the public runtime path's fixed basename.
++        replay_state = self.state.parent / 'try-omarchy/display-mode.outputs'
++        replay_state.parent.mkdir()
++        replay_state.write_bytes(Path(str(self.state) + '.outputs').read_bytes())
++        def replay():
++            result = subprocess.run(['lua', str(harness), str(GUEST / 'fragments/hypr-monitors-qemu.append.lua')],
++                                    text=True, capture_output=True, env=env)
++            self.assertEqual(result.returncode, 0, result.stderr)
++            return result.stdout.splitlines()
++        self.cmdline.write_text('omarchy.qemu=1 tryomarchy.host=linux\n')
++        self.assertEqual(replay(), [f'Virtual-1\t{HIGH}\tkeep', f'Virtual-2\t{LOW}\t1'])
++        (second / 'status').write_text('disconnected\n')
++        self.assertEqual(replay(), [])
++        (second / 'status').write_text('connected\n')
++        self.cmdline.write_text('omarchy.qemu=1 tryomarchy.host=windows\n')
++        self.assertEqual(replay(), [])
++
++    def test_payload_and_revision_delivery(self):
++        finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
++        self.assertIn('compat_revision=62', finalizer)
++        self.assertIn('usr/local/bin/omarchy-native-display-sync', finalizer)
++        self.assertIn('usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua', finalizer)
++        self.assertEqual((GUEST / 'fragments/hypr-monitors-qemu.append.lua').read_bytes(),
++                         (GUEST / 'factory-overlay/usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua').read_bytes())
+diff --git a/guest/tests/test_guest_qol.py b/guest/tests/test_guest_qol.py
+index 42f83dd..1904939 100644
+--- a/guest/tests/test_guest_qol.py
++++ b/guest/tests/test_guest_qol.py
+@@ -215,7 +215,7 @@ class GuestQolTests(unittest.TestCase):
+     def test_compatibility_delivers_guarded_payload_once_per_revision(self):
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+         paths = finalize.split("compat_paths=(", 1)[1].split(")", 1)[0]
+-        self.assertIn("compat_revision=61", finalize)
++        self.assertIn("compat_revision=62", finalize)
+         for path in ("usr/local/bin/omarchy-native-screensaver-text", "usr/local/lib/try-omarchy/install-guest-qol", "usr/share/try-omarchy/guest-qol", "usr/local/bin/omarchy-windows-audio-bridge"):
+             self.assertIn(path, paths)
+         self.assertNotIn("etc/fonts/conf.d/30-try-omarchy.conf", paths)
+diff --git a/guest/tests/test_live_update.py b/guest/tests/test_live_update.py
+index 15a39ba..9efe36d 100644
+--- a/guest/tests/test_live_update.py
++++ b/guest/tests/test_live_update.py
+@@ -176,7 +176,7 @@ class LiveUpdateTests(unittest.TestCase):
+ 
+     def test_delivery_and_best_effort_hook(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+-        self.assertIn('compat_revision=61', finalizer)
++        self.assertIn('compat_revision=62', finalizer)
+         for path in ['usr/local/lib/try-omarchy/live-update', 'etc/pacman.d/hooks/00-try-omarchy-live-update.hook', 'etc/pacman.d/hooks/zz-try-omarchy-live-update.hook']:
+             self.assertIn(path, finalizer)
+         pre = (GUEST / 'factory-overlay/etc/pacman.d/hooks/00-try-omarchy-live-update.hook').read_text()
+diff --git a/guest/tests/test_native_nightlight.py b/guest/tests/test_native_nightlight.py
+index 3bbdf49..7c7f891 100644
+--- a/guest/tests/test_native_nightlight.py
++++ b/guest/tests/test_native_nightlight.py
+@@ -214,5 +214,5 @@ class PersistentNightlightTests(unittest.TestCase):
+         catch_up = (self.overlay / 'usr/local/lib/try-omarchy/catch-up').read_text()
+         for path in ['usr/local/bin/omarchy-native-nightlight', 'usr/local/share/try-omarchy/nightlight.frag', 'usr/local/lib/try-omarchy/install-nightlight', 'usr/share/try-omarchy/nightlight']:
+             self.assertIn(path, finalizer)
+-        self.assertIn('compat_revision=61', finalizer)
++        self.assertIn('compat_revision=62', finalizer)
+         self.assertIn('previous_revision < 61', catch_up)
+diff --git a/guest/tests/test_notification_privacy.py b/guest/tests/test_notification_privacy.py
+index 2235a8c..ea10192 100644
+--- a/guest/tests/test_notification_privacy.py
++++ b/guest/tests/test_notification_privacy.py
+@@ -116,7 +116,7 @@ for (const state of [null, {screensaverStateKnown:false}, {screensaverStateKnown
+     def test_compatibility_overlay_and_catch_up_revision(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+         catch_up = (GUEST / 'factory-overlay/usr/local/lib/try-omarchy/catch-up').read_text()
+-        self.assertIn('compat_revision=61', finalizer)
++        self.assertIn('compat_revision=62', finalizer)
+         self.assertIn('usr/share/try-omarchy/notifications', finalizer)
+         self.assertIn('usr/local/lib/try-omarchy/install-notifications', finalizer)
+         self.assertIn('previous_revision < 58', catch_up)
+diff --git a/guest/tests/test_overlay_scripts.py b/guest/tests/test_overlay_scripts.py
+index ec127b1..d0696d2 100644
+--- a/guest/tests/test_overlay_scripts.py
++++ b/guest/tests/test_overlay_scripts.py
+@@ -621,6 +621,17 @@ class CatchUpTests(OverlayCase):
+         for name in ("flags", "window-no-gaps", "single-window-aspect-ratio"):
+             os.utime(self.toggles / f"{name}.lua", (1700000000, 1700000000))
+ 
++    def test_revision_62_refreshes_stock_profile_from_61(self) -> None:
++        self.version.write_text("62:7.2.3-arch1\n")
++        self.state.mkdir()
++        (self.state / "catch-up-revision").write_text("61\n")
++        monitors = self.user / ".config/hypr/monitors.lua"
++        monitors.write_text(self.default.read_text() + self.old_fragment)
++        result = self.run_catch_up()
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertEqual(monitors.read_text(), self.default.read_text() + FRAGMENT.read_text())
++        self.assertEqual((self.state / "catch-up-revision").read_text(), "62\n")
++
+     def test_untouched_skeleton_gets_the_current_profile_and_seeded_toggles_go(self) -> None:
+         monitors = self.user / ".config/hypr/monitors.lua"
+         monitors.write_text(self.default.read_text() + self.old_fragment)
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 47710db..255c88f 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -326,7 +326,7 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=61" in finalize_rootfs
++        "compat_revision=62" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/host-window" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-host-window" in compat_paths
+         and "usr/share/try-omarchy/host-window-idle.qml" in compat_paths
+-- 
+2.56.0
+

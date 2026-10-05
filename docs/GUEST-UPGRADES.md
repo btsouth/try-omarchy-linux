@@ -33,6 +33,22 @@ playback-endpoint volume synchronization is omitted from this Linux series.
 The Linux patches through 0135 and their revisions remain unchanged, including
 the legacy `guest-series-origin` detection and exact Linux host gates.
 
+Compatibility revision 62 delivers independent monitor rules for Linux guests
+with several connected Virtio outputs, gated by `tryomarchy.host=linux`. Each
+connector uses its own preferred EDID mode and DPI-derived scale, including the
+96 logical DPI calculation when `tryomarchy.host-scale=1` is requested. Numeric
+connector scale overrides take precedence over `omarchy_monitor_scale`; explicit
+`"auto"` uses that connector's EDID, and computed scale expressions stay with
+Hyprland. Numeric scales use the existing closest-valid-scale rounding.
+Single-output and Windows behavior retain the existing catch-all path.
+
+The compatibility overlay replaces the sync script and QEMU profile fragment.
+Catch-up refreshes untouched monitor defaults before login and preserves custom
+monitor files. Stock profiles replay connected output modes on config reloads;
+custom profiles receive them through the existing reload watcher. DRM removal
+clears saved output rules and reloads the config to retire generated connector
+rules, then reapplies the remaining outputs.
+
 Installed Linux guests boot before downloading a changed launcher guest pin.
 After userspace is ready, the image is staged and verified in the background.
 Shut down and start again to apply it. The previous image is retained until

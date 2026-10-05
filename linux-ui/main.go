@@ -499,7 +499,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		for _, title := range []string{"General", "Devices", "Advanced"} {
 			body := gtk.NewBox(gtk.OrientationVertical, 20)
 			settingsPages[title] = body
-			pageLabels := map[string]string{"General": uiText("settings.linux.page.general"), "Devices": uiText("settings.linux.page.devices"), "Advanced": uiText("settings.linux.page.advanced")}
+			pageLabels := map[string]string{"General": uiText("settings.tab.general"), "Devices": uiText("settings.tab.devices"), "Advanced": uiText("settings.tab.advanced")}
 			form.AddTitled(body, title, pageLabels[title])
 		}
 		settingsPages["Devices"].Append(settingsStatus)
@@ -1334,7 +1334,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 					scroll.SetVisible(next.Prompt != "home" && next.Prompt != "settings")
 					homeScroll.SetVisible(next.Prompt == "home")
 					settingsScroll.SetVisible(next.Prompt == "settings")
-					productVersion.SetText("LINUX" + platformVersion(next.Version))
+					productVersion.SetText(uiText("brand.linux") + platformVersion(next.Version))
 					settingsTabs.SetVisible(next.Prompt == "settings")
 					settingsTiming.SetVisible(next.Prompt == "settings")
 					showSettingsFailure := next.Prompt == "settings" && next.Notice != "" && next.Status != ""

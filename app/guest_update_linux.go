@@ -53,7 +53,7 @@ func ensureLinuxGuest(cfg *config, release, sumsSHA256 string) error {
 func stageLinuxGuestUpdate(cfg *config, release, sumsSHA256 string) error {
 	ui := getUI()
 	ui.setUpdating(true)
-	ui.setStatus("Preparing an Omarchy image update...")
+	ui.setCatalogStatus("status.preparing_image_update", nil)
 	staged := filepath.Join(cfg.dir, "guest.next")
 	marker := filepath.Join(staged, linuxUpdateTargetFile)
 	target := normalizedRelease(release) + "\n" + normalizedSHA256(sumsSHA256) + "\n"

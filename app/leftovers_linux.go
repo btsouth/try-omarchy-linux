@@ -233,7 +233,7 @@ func linuxLeftoverRows(found []linuxLeftoverFound) []linuxRow {
 			if f.Kind == "backup" {
 				what = uiText("recovery.linux.an_earlier_backup_was_interrupted_this_is_only")
 			}
-			rows = append(rows, linuxRow{Title: linuxLeftoverTitle(f.linuxLeftover), Detail: linuxGB(f.Bytes) + " in " + where + "\n" + what})
+			rows = append(rows, linuxRow{Title: linuxLeftoverTitle(f.linuxLeftover), Detail: uiTextWith("recovery.linux.leftover_detail", map[string]string{"size": linuxGB(f.Bytes), "path": where, "detail": what})})
 		case leftoverUnreachable:
 			rows = append(rows, linuxRow{Title: uiTextWith("recovery.linux.folder_not_reachable", map[string]string{"value": linuxLeftoverTitle(f.linuxLeftover)}), Detail: uiTextWith("recovery.linux.reconnect_to_remove_it", map[string]string{"path": where})})
 		case leftoverUnrecognized:
@@ -308,6 +308,6 @@ func linuxLeftoverPrompt(items []linuxLeftoverFound) string {
 		fmt.Fprintf(&b, "%s, %s: %s\n", linuxLeftoverTitle(f.linuxLeftover), linuxGB(f.Bytes), linuxDisplayPath(f.Path))
 		total += f.Bytes
 	}
-	fmt.Fprintf(&b, "\nThis frees about %s. Only these files are removed. Your VM, your backups and everything else in those folders stay.", linuxGB(total))
+	b.WriteString(uiTextWith("recovery.linux.leftover_space", map[string]string{"size": linuxGB(total)}))
 	return b.String()
 }

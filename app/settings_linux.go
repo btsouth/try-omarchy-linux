@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 )
 
 // linuxSettingsForm is one Settings snapshot. Reclaim is nil before launch;
@@ -157,9 +158,9 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		status += uiText("settings.linux.camera_devices_could_not_be_listed_automatic_selection")
 	}
 	if running {
-		status += "\n\nCamera: " + cameraStatusText()
+		status += uiTextWith("settings.linux.camera_status", map[string]string{"status": cameraStatusText()})
 		if clipboardStatus, ok := linuxClipboardStatus.Load().(string); ok && clipboardStatus != "" {
-			status += "\n\nClipboard: " + clipboardStatus
+			status += uiTextWith("settings.linux.clipboard_status", map[string]string{"status": clipboardStatus})
 		}
 	}
 	notice := ""
@@ -696,7 +697,9 @@ func capitalizeFirst(s string) string {
 	if s == "" {
 		return s
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	runes := []rune(s)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
 
 func showLinuxHome(defaultDir, requestedDir string, explicitDir bool, autostart bool) bool {

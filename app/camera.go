@@ -233,7 +233,7 @@ func serveCamera(conn net.Conn, source cameraFrameSource) error {
 				continue
 			}
 			frames = result.frames
-			cameraState.Store("Camera in use by an application inside Omarchy.")
+			cameraState.Store(uiText("camera.in_use"))
 			if err := connection.status(map[string]any{"status": "streaming", "name": "Host Camera"}); err != nil {
 				return err
 			}

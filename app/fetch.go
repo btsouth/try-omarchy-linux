@@ -35,7 +35,7 @@ func ensureGuest(cfg *config, release, sumsSHA256 string) error {
 	}
 
 	ui := getUI()
-	ui.setStatus("%s", uiText("status.preparing_image_update"))
+	ui.setCatalogStatus("status.preparing_image_update", nil)
 	staged := filepath.Join(cfg.dir, "guest.next")
 	if err := os.RemoveAll(staged); err != nil {
 		return err
@@ -121,7 +121,7 @@ func ensureGuestFiles(cfg *config, release, sumsSHA256 string) error {
 	}
 	rootfs := filepath.Join(cfg.guestDir, "rootfs.ext4")
 	if _, err := os.Lstat(rootfs); err == nil {
-		ui.setStatus("%s", uiText("status.checking_cached_system"))
+		ui.setCatalogStatus("status.checking_cached_system", nil)
 	}
 	rootfsOK, err := verifyFileSHA256(rootfs, sums["rootfs.ext4"], ui.setProgress)
 	if err != nil {
@@ -143,7 +143,7 @@ func ensureGuestFiles(cfg *config, release, sumsSHA256 string) error {
 			return fmt.Errorf("preflighting Omarchy storage: %w", err)
 		}
 		if cfg.portable {
-			ui.setStatus("%s", uiText("status.checking_portable_system"))
+			ui.setCatalogStatus("status.checking_portable_system", nil)
 			ok, err := verifyFileSHA256(zst, sums["rootfs.ext4.zst"], ui.setProgress)
 			if err != nil {
 				return fmt.Errorf("checking rootfs.ext4.zst: %w", err)
@@ -159,7 +159,7 @@ func ensureGuestFiles(cfg *config, release, sumsSHA256 string) error {
 		if err := requireDiskSpace(cfg.guestDir, rootfsAllocated+diskSpaceReserve); err != nil {
 			return fmt.Errorf("preflighting Omarchy unpack: %w", err)
 		}
-		ui.setStatus("%s", uiText("status.unpacking_system"))
+		ui.setCatalogStatus("status.unpacking_system", nil)
 		if err := decompress(zst, rootfs, sums["rootfs.ext4"], ui); err != nil {
 			return fmt.Errorf("unpacking rootfs: %w", err)
 		}
@@ -170,7 +170,7 @@ func ensureGuestFiles(cfg *config, release, sumsSHA256 string) error {
 	if removeZst {
 		os.Remove(zst) // Keep only the unpacked image after a successful install.
 	}
-	ui.setStatus("%s", uiText("status.ready_starting"))
+	ui.setCatalogStatus("status.ready_starting", nil)
 	ui.setProgress(1, 1)
 	return sleepDuringSetup(700 * time.Millisecond)
 }
@@ -190,7 +190,7 @@ func releaseVersion(release string) string {
 
 func ensureVerifiedPortableCopy(src, dest, wantSum, status string, ui *progressUI) error {
 	if _, err := os.Lstat(dest); err == nil {
-		ui.setStatus("%s", uiTextWith("status.checking_cached_file", map[string]string{"file": filepath.Base(dest)}))
+		ui.setCatalogStatus("status.checking_cached_file", map[string]string{"file": filepath.Base(dest)})
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -204,13 +204,13 @@ func ensureVerifiedPortableCopy(src, dest, wantSum, status string, ui *progressU
 	if err := removeCachedFile(dest); err != nil {
 		return err
 	}
-	ui.setStatus("%s", status)
+	ui.setArtifactStatus(status, dest)
 	return copyPortableArtifact(src, dest, wantSum, ui.setProgress)
 }
 
 func ensureVerifiedDownload(client *http.Client, url, dest, wantSum, status string, ui *progressUI) error {
 	if _, err := os.Lstat(dest); err == nil {
-		ui.setStatus("%s", uiTextWith("status.checking_cached_file", map[string]string{"file": filepath.Base(dest)}))
+		ui.setCatalogStatus("status.checking_cached_file", map[string]string{"file": filepath.Base(dest)})
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -224,7 +224,7 @@ func ensureVerifiedDownload(client *http.Client, url, dest, wantSum, status stri
 	if err := removeCachedFile(dest); err != nil {
 		return err
 	}
-	ui.setStatus("%s", status)
+	ui.setArtifactStatus(status, dest)
 	return download(client, url, dest, wantSum, ui)
 }
 
@@ -241,9 +241,9 @@ func download(client *http.Client, url, dest, wantSum string, ui *progressUI) er
 	return downloadVerified(client, url, dest, wantSum, func(next string, done, total int64) {
 		if next != phase {
 			if next == downloadPhaseVerify {
-				ui.setStatus("%s", uiTextWith("status.checking_downloaded_file", map[string]string{"file": filepath.Base(dest)}))
+				ui.setCatalogStatus("status.checking_downloaded_file", map[string]string{"file": filepath.Base(dest)})
 			} else if phase == downloadPhaseVerify {
-				ui.setStatus("%s", uiTextWith("status.resuming_file", map[string]string{"file": filepath.Base(dest)}))
+				ui.setCatalogStatus("status.resuming_file", map[string]string{"file": filepath.Base(dest)})
 			}
 		}
 		phase = next
@@ -297,7 +297,7 @@ func decompress(src, dest, wantSum string, ui *progressUI) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-	ui.setStatus("%s", uiText("status.checking_unpacked_system"))
+	ui.setCatalogStatus("status.checking_unpacked_system", nil)
 	ok, err := verifyFileSHA256(tmp, wantSum, ui.setProgress)
 	if err != nil {
 		return err

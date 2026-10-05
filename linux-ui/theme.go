@@ -51,7 +51,7 @@ func newBrandHeader() (*gtk.Box, *gtk.Label) {
 	title.AddCSSClass("title-1")
 	title.AddCSSClass("product-title")
 	identity.Append(title)
-	version := gtk.NewLabel("LINUX")
+	version := gtk.NewLabel(uiText("brand.linux"))
 	version.SetXAlign(0)
 	version.AddCSSClass("caption")
 	version.AddCSSClass("product-platform")

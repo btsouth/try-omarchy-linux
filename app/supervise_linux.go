@@ -31,11 +31,11 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 				mode = "GPU accelerated OpenGL (software Vulkan)"
 			}
 		}
-		getUI().setStatus("Starting Omarchy - %s", mode)
+		getUI().setCatalogStatus("status.linux.starting", map[string]string{"mode": mode})
 		logf("booting - %s (attempt %d)", mode, attempt)
 		controlDir, err := prepareQMPControl()
 		if err != nil {
-			fatal(uiTextWith("shutdown.linux.cannot_prepare_private_vm_controls_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
+			fatal(uiTextWith("fatal.vm_controls", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		cfg.qmpDir = controlDir
 		// A startup fallback relaunch keeps forwards Settings changed live.
@@ -52,7 +52,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 			proc.Stdout, proc.Stderr = stderr, stderr
 		}
 		if err := proc.Start(); err != nil {
-			fatal(uiTextWith("shutdown.linux.qemu_failed_to_start_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
+			fatal(uiTextWith("fatal.qemu.start", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		exited := make(chan error, 1)
 		vmDone := make(chan struct{})
@@ -80,10 +80,10 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 				getUI().finish()
 			}
 			if linuxGUIEnabled && initialInterrupts == 0 {
-				getUI().setStatus("Booting Omarchy...")
+				getUI().setCatalogStatus("status.linux.booting", nil)
 				result := waitLinuxDesktopReady(setupContext(), exited, stop, lines, visibility,
 					desktopReady.Load, guestReady.Load, linuxDesktopReadyTimeout, 250*time.Millisecond,
-					func(status string) { getUI().setStatus("%s", status) }, confirmation)
+					func(_ string) { getUI().setCatalogStatus("status.linux.desktop_starting", nil) }, confirmation)
 				switch result {
 				case linuxDesktopReady:
 					getUI().finish()
@@ -364,7 +364,7 @@ func requestLinuxShutdown(qmp *qmpConn, proc *exec.Cmd, requests *int) {
 	*requests++
 	command := `{"execute":"system_powerdown"}`
 	if *requests == 1 {
-		getUI().setStatus("Asking Omarchy to shut down...")
+		getUI().setStatus("%s", uiText("launcher.linux.asking_omarchy_to_shut_down"))
 	} else {
 		logf("second shutdown request: stopping QEMU")
 		command = `{"execute":"quit"}`

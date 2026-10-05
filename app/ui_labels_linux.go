@@ -2,18 +2,16 @@
 
 package main
 
-// linuxUILabels resolves control labels before GTK creates its first widget.
-// The helper owns no catalog; protocol IDs and replies remain untranslated.
+// linuxUILabels resolves GTK labels from the one launcher catalog.
 func linuxUILabels() map[string]string {
 	return map[string]string{
-		"settings.linux.keyboard_detected":           uiTemplate("settings.linux.keyboard_detected"),
-		"settings.linux.keyboard_undetected":         uiTemplate("settings.linux.keyboard_undetected"),
-		"about.title":                                uiTemplate("about.title"),
-		"brand.name":                                 uiTemplate("brand.name"),
-		"install.button.done":                        uiTemplate("install.button.done"),
-		"launcher.close":                             uiTemplate("launcher.close"),
-		"launcher.linux.allowed":                     uiTemplate("launcher.linux.allowed"),
-		"launcher.linux.asking_omarchy_to_shut_down": uiTemplate("launcher.linux.asking_omarchy_to_shut_down"),
+		"brand.linux":            uiTemplate("brand.linux"),
+		"about.title":            uiTemplate("about.title"),
+		"brand.name":             uiTemplate("brand.name"),
+		"install.button.done":    uiTemplate("install.button.done"),
+		"launcher.close":         uiTemplate("launcher.close"),
+		"launcher.linux.allowed": uiTemplate("launcher.linux.allowed"),
+		"launcher.linux.asking_omarchy_to_shut_down":                         uiTemplate("launcher.linux.asking_omarchy_to_shut_down"),
 		"launcher.linux.audio_device_choices_apply_when_you_save_microphone": uiTemplate("launcher.linux.audio_device_choices_apply_when_you_save_microphone"),
 		"launcher.linux.back":                                                    uiTemplate("launcher.linux.back"),
 		"launcher.linux.cancelling_setup":                                        uiTemplate("launcher.linux.cancelling_setup"),
@@ -128,9 +126,10 @@ func linuxUILabels() map[string]string {
 		"settings.linux.graphics_acceleration":                                   uiTemplate("settings.linux.graphics_acceleration"),
 		"settings.linux.guest_display_scale":                                     uiTemplate("settings.linux.guest_display_scale"),
 		"settings.linux.guest_keyboard_layout":                                   uiTemplate("settings.linux.guest_keyboard_layout"),
-		"settings.linux.host_layout_changes_while_omarchy_runs_apply_on":         uiTemplate("settings.linux.host_layout_changes_while_omarchy_runs_apply_on"),
 		"settings.linux.keep_current_capacity":                                   uiTemplate("settings.linux.keep_current_capacity"),
 		"settings.linux.keep_guest_choice":                                       uiTemplate("settings.linux.keep_guest_choice"),
+		"settings.linux.keyboard_detected":                                       uiTemplate("settings.linux.keyboard_detected"),
+		"settings.linux.keyboard_undetected":                                     uiTemplate("settings.linux.keyboard_undetected"),
 		"settings.linux.memory_for_omarchy_gib":                                  uiTemplate("settings.linux.memory_for_omarchy_gib"),
 		"settings.linux.memory_for_omarchy_in_gib":                               uiTemplate("settings.linux.memory_for_omarchy_in_gib"),
 		"settings.linux.microphone_and_camera":                                   uiTemplate("settings.linux.microphone_and_camera"),
@@ -146,9 +145,6 @@ func linuxUILabels() map[string]string {
 		"settings.linux.open_this_launcher_when_you_log_in_omarchy":              uiTemplate("settings.linux.open_this_launcher_when_you_log_in_omarchy"),
 		"settings.linux.other_local_port_forwards_one_per_line":                  uiTemplate("settings.linux.other_local_port_forwards_one_per_line"),
 		"settings.linux.other_local_port_forwards_one_per_line_for":              uiTemplate("settings.linux.other_local_port_forwards_one_per_line_for"),
-		"settings.linux.page.advanced":                                           uiTemplate("settings.linux.page.advanced"),
-		"settings.linux.page.devices":                                            uiTemplate("settings.linux.page.devices"),
-		"settings.linux.page.general":                                            uiTemplate("settings.linux.page.general"),
 		"settings.linux.port_forwards_apply_when_saved":                          uiTemplate("settings.linux.port_forwards_apply_when_saved"),
 		"settings.linux.prepare_free_space":                                      uiTemplate("settings.linux.prepare_free_space"),
 		"settings.linux.processors":                                              uiTemplate("settings.linux.processors"),
@@ -191,6 +187,9 @@ func linuxUILabels() map[string]string {
 		"settings.section.storage":                                               uiTemplate("settings.section.storage"),
 		"settings.sound.microphone":                                              uiTemplate("settings.sound.microphone"),
 		"settings.storage.capacity":                                              uiTemplate("settings.storage.capacity"),
+		"settings.tab.advanced":                                                  uiTemplate("settings.tab.advanced"),
+		"settings.tab.devices":                                                   uiTemplate("settings.tab.devices"),
+		"settings.tab.general":                                                   uiTemplate("settings.tab.general"),
 		"setup.account.personal":                                                 uiTemplate("setup.account.personal"),
 		"setup.account.quick":                                                    uiTemplate("setup.account.quick"),
 		"setup.account.title":                                                    uiTemplate("setup.account.title"),

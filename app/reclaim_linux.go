@@ -66,7 +66,7 @@ func linuxReclaimInfoFor(dir string) *linuxReclaimInfo {
 		return &linuxReclaimInfo{Status: uiTextWith("reclaim.linux.omarchy_s_helper_is_not_connected_yet_wait", map[string]string{"usage": usage})}
 	}
 	status := uiTextWith("reclaim.linux.reclaim_gives_back_space_from_files_you_deleted", map[string]string{"usage": usage})
-	if previous := a.reclaimStatus(); strings.HasPrefix(previous, "Preparation") || strings.HasPrefix(previous, "Could not") {
+	if previous := a.reclaimStatus(); previous == uiText("reclaim.status.reconnected") || previous == uiText("reclaim.status.interrupted") || previous == uiText("reclaim.status.failed") || previous == uiText("reclaim.status.send_failed") {
 		status += " " + previous
 	}
 	return &linuxReclaimInfo{Status: status, CanStart: true}
@@ -228,7 +228,7 @@ func compactLinuxDisk(cfg *config) {
 func sendLinuxReclaim(address string, out, errOut io.Writer) int {
 	c, err := net.DialTimeout("tcp", address, 3*time.Second)
 	if err != nil {
-		fmt.Fprintln(errOut, "Try Omarchy is not running. Start Omarchy, then try again.")
+		fmt.Fprintln(errOut, uiText("reclaim.linux.not_running"))
 		return 1
 	}
 	defer c.Close()
@@ -239,7 +239,7 @@ func sendLinuxReclaim(address string, out, errOut io.Writer) int {
 	}
 	reply, err := bufio.NewReader(io.LimitReader(c, 4096)).ReadString('\n')
 	if err != nil {
-		fmt.Fprintln(errOut, "The running launcher did not confirm reclaim. It may need an update.")
+		fmt.Fprintln(errOut, uiText("control.reclaim_unconfirmed"))
 		return 1
 	}
 	reply = strings.TrimSpace(reply)

@@ -182,7 +182,7 @@ func linuxSnapshotRows(entries []vmCheckpoint) []linuxRow {
 
 // linuxDefaultSnapshotName is the suggested name, which the person can edit.
 func linuxDefaultSnapshotName(now time.Time) string {
-	return "Snapshot " + now.Format("Jan 2 15:04")
+	return uiTextWith("snapshots.linux.default_name", map[string]string{"date": now.Format("Jan 2 15:04")})
 }
 
 // linuxSnapshotSpaceNote says what one more snapshot costs before it starts.
@@ -297,7 +297,7 @@ func showLinuxSnapshot(w *linuxSetupWindow, dir string, entry vmCheckpoint) stri
 		page.Status = uiTextWith("snapshots.linux.this_snapshot_cannot_be_restored_you_can_delete", map[string]string{"problem": entry.Problem})
 		page.Actions = []linuxAction{{Label: uiText("snapshots.linux.delete_snapshot"), Reply: "delete", Destructive: true}, {Label: uiText("launcher.linux.back"), Reply: "close"}}
 	} else {
-		page.Status = "Saved " + entry.Created.Local().Format("Monday, January 2, 2006 at 15:04") + ". Uses " + linuxGB(entry.ArchiveBytes) + " in this VM's folder."
+		page.Status = uiTextWith("snapshots.linux.saved_detail", map[string]string{"date": entry.Created.Local().Format("Monday, January 2, 2006 at 15:04"), "size": linuxGB(entry.ArchiveBytes)})
 		page.Actions = []linuxAction{
 			{Label: uiText("launcher.linux.restore_as_a_copy"), Reply: "restore", Suggested: true},
 			{Label: uiText("snapshots.linux.roll_back_to_this_snapshot"), Reply: "rollback", Destructive: true},
@@ -341,7 +341,7 @@ func showLinuxSnapshot(w *linuxSetupWindow, dir string, entry vmCheckpoint) stri
 		logf("snapshots: rolled back to %s; previous state kept at %s", entry.ID, kept)
 		return uiTextWith("snapshots.linux.rolled_back_to_launch_omarchy_to_use_it", map[string]string{"name": entry.Name})
 	case "delete":
-		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Delete \"" + entry.Name + "\"?", Primary: uiText("snapshots.linux.keep_snapshot"), Secondary: uiText("snapshots.linux.delete_snapshot_2"), Destructive: true,
+		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiTextWith("snapshots.linux.delete_title", map[string]string{"name": entry.Name}), Primary: uiText("snapshots.linux.keep_snapshot"), Secondary: uiText("snapshots.linux.delete_snapshot_2"), Destructive: true,
 			Status: uiTextWith("snapshots.linux.this_frees_the_vm_itself_and_its_other", map[string]string{"entry_archive_bytes": linuxGB(entry.ArchiveBytes)})})
 		if err != nil || answer != "secondary" {
 			return ""

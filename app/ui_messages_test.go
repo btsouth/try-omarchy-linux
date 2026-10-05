@@ -183,9 +183,8 @@ func TestLauncherTextComesFromTheCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Linux also catalogs screen text, but raw engineering status patterns
-		// still feed its friendly-status adapter. Its key coverage is checked
-		// separately, including the GTK module.
+		// Linux screen sinks and key coverage are checked separately, including
+		// the GTK module, by ui_labels_linux_test.go.
 		if linuxOnlySource(name, file) {
 			continue
 		}
@@ -289,7 +288,10 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 				return true
 			}
 			function, ok := call.Fun.(*ast.Ident)
-			if !ok || function.Name != "uiText" && function.Name != "uiTextWith" && function.Name != "uiTemplate" || len(call.Args) == 0 {
+			if selector, selected := call.Fun.(*ast.SelectorExpr); selected && selector.Sel.Name == "setCatalogStatus" {
+				function, ok = selector.Sel, true
+			}
+			if !ok || function.Name != "uiText" && function.Name != "uiTextWith" && function.Name != "uiTemplate" && function.Name != "setCatalogStatus" || len(call.Args) == 0 {
 				return true
 			}
 			position := fset.Position(call.Pos())
@@ -313,6 +315,9 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 				if len(want) > 0 {
 					t.Errorf("%s: %q has placeholders %v; use uiTextWith", position, key, want)
 				}
+				return true
+			}
+			if function.Name == "setCatalogStatus" && len(want) == 0 {
 				return true
 			}
 			values, ok := call.Args[1].(*ast.CompositeLit)

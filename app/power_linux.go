@@ -58,7 +58,7 @@ func (s *logindSleepSource) close() {
 func (s *logindSleepSource) inhibit(ctx context.Context) (io.Closer, error) {
 	var fd dbus.UnixFD
 	err := s.conn.Object(linuxLoginName, linuxLoginPath).CallWithContext(ctx,
-		linuxLoginManager+".Inhibit", 0, "sleep", "Try Omarchy", "Pause the virtual machine before host sleep", "delay").Store(&fd)
+		linuxLoginManager+".Inhibit", 0, "sleep", "Try Omarchy", uiText("shutdown.linux.sleep_reason"), "delay").Store(&fd)
 	if err != nil {
 		return nil, err
 	}

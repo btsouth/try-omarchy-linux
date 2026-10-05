@@ -128,7 +128,7 @@ func waitLinuxDesktopReady(ctx context.Context, exited <-chan error, stop <-chan
 		case <-tick.C:
 			if !userspaceReported && userspace() {
 				userspaceReported = true
-				status("Omarchy is starting its desktop...")
+				status(uiText("status.linux.desktop_starting"))
 			}
 		}
 	}

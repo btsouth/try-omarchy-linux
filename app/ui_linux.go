@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -32,23 +33,49 @@ func newLinuxProgressUI() *progressUI {
 
 func getUI() *progressUI { return linuxUI }
 
+// setStatus handles text that needs no stage adaptation.
 func (u *progressUI) setStatus(format string, a ...any) {
-	msg := fmt.Sprintf(format, a...)
-	logf("%s", msg)
+	u.setStageStatus(fmt.Sprintf(format, a...), "", stageOther)
+}
+
+// Message identity and artifact identity survive translation. No translated
+// text is parsed to decide whether a progress bar should be shown.
+func (u *progressUI) setCatalogStatus(key string, values map[string]string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	text, stage := linuxFriendlyStatus(key, values, u.updating)
+	u.setStageStatusLocked(uiStatusText(key, values), text, stage)
+}
+
+func (u *progressUI) setArtifactStatus(raw, path string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	text, stage := linuxDownloadStatus(u.updating, filepath.Base(path) == "rootfs.ext4.zst")
+	u.setStageStatusLocked(raw, text, stage)
+}
+
+func (u *progressUI) setStageStatus(raw, text string, stage linuxStage) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.setStageStatusLocked(raw, text, stage)
+}
+
+func (u *progressUI) setStageStatusLocked(raw, text string, stage linuxStage) {
+	logf("%s", raw)
+	if text == "" {
+		text = raw
+	}
 	if u.midLine {
 		fmt.Fprintln(os.Stderr)
 		u.midLine = false
 	}
 	u.lastPercent = -1
-	text, stage := linuxFriendlyStatus(msg, u.updating)
 	u.stage = stage
 	u.state = linuxSetupState{Status: text, Detail: linuxProgressDetail(stage, 0, 0), Booting: u.booting}
 	if u.window != nil {
 		u.window.update(u.state)
 	}
-	fmt.Fprintln(os.Stderr, msg)
+	fmt.Fprintln(os.Stderr, raw)
 }
 
 // setUpdating names the guest download an update, so its steps say so.
@@ -106,7 +133,7 @@ func (u *progressUI) setProgress(current, total int64) {
 
 func (u *progressUI) startWindow() {
 	u.window = startLinuxSetupWindow()
-	u.setStatus("Preparing Omarchy...")
+	u.setCatalogStatus("launcher.linux.preparing_omarchy", nil)
 }
 
 func (u *progressUI) finish() {

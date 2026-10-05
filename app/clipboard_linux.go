@@ -268,9 +268,9 @@ func runLinuxClipboardBridge() func() {
 			supported = false
 		} else if portal, err := linuxPortalClipboardSession(c); err != nil {
 			rememberLinuxClipboardDenial(err)
-			message := "GNOME did not allow clipboard sharing, so it is off. " + linuxClipboardHowToTurnOn
+			message := uiTextWith("settings.clipboard.linux.denied", map[string]string{"help": linuxClipboardHowToTurnOn})
 			if !errors.Is(err, errLinuxClipboardDenied) {
-				message = "GNOME did not answer the clipboard request in time, so sharing is off for this session. Quit Omarchy and start it again to be asked once more. You can still drop files on its window."
+				message = uiText("settings.clipboard.linux.timed_out")
 			}
 			// Declining an optional permission is a choice, not an error.
 			// The explanation already says how to enable it later.
@@ -283,7 +283,7 @@ func runLinuxClipboardBridge() func() {
 		}
 		names = nil
 	} else if _, err := clipboardCommand(nil, 128, "try-omarchy-clipboard-capabilities"); err != nil {
-		message := "Automatic clipboard sharing is unavailable in this session. You can still drop files on Omarchy or use a shared folder."
+		message := uiText("settings.clipboard.linux.unavailable")
 		// Missing optional compositor support is a capability notice, not a
 		// runtime error. A separate window disrupts tiling desktops at startup.
 		setLinuxClipboardStatus(message, false)

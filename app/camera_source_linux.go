@@ -31,7 +31,7 @@ func configuredCameraSource(p desktopPreferences) cameraFrameSource {
 func linuxCameraRemote(ctx context.Context) (*os.File, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
-		return nil, fmt.Errorf("Camera permission service is unavailable: %w", err)
+		return nil, uiError(uiTextWith("camera.linux.camera_permission_service_is_unavailable", map[string]string{"error": err.Error()}), err)
 	}
 	defer conn.Close()
 	signals := make(chan *dbus.Signal, 16)
@@ -42,7 +42,7 @@ func linuxCameraRemote(ctx context.Context) (*os.File, error) {
 	var request dbus.ObjectPath
 	options := map[string]dbus.Variant{"handle_token": dbus.MakeVariant(fmt.Sprintf("trycamera_%d", time.Now().UnixNano()))}
 	if err = conn.Object(linuxPortalDesktop, linuxPortalObject).CallWithContext(ctx, "org.freedesktop.portal.Camera.AccessCamera", 0, options).Store(&request); err != nil {
-		return nil, fmt.Errorf("Could not request camera permission: %w", err)
+		return nil, uiError(uiTextWith("camera.linux.could_not_request_camera_permission", map[string]string{"error": err.Error()}), err)
 	}
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -55,24 +55,24 @@ func linuxCameraRemote(ctx context.Context) (*os.File, error) {
 			return nil, ctx.Err()
 		case signal, ok := <-signals:
 			if !ok {
-				return nil, errors.New("Camera permission service closed")
+				return nil, errors.New(uiText("camera.linux.camera_permission_service_closed"))
 			}
 			if signal == nil || signal.Path != request || len(signal.Body) != 2 {
 				continue
 			}
 			code, valid := signal.Body[0].(uint32)
 			if !valid {
-				return nil, errors.New("Invalid camera permission response")
+				return nil, errors.New(uiText("camera.linux.invalid_camera_permission_response"))
 			}
 			if code != 0 {
-				return nil, errors.New("Camera access was not granted by your desktop")
+				return nil, errors.New(uiText("camera.linux.camera_access_was_not_granted_by_your_desktop"))
 			}
 			var fd dbus.UnixFD
 			if err = conn.Object(linuxPortalDesktop, linuxPortalObject).CallWithContext(ctx, "org.freedesktop.portal.Camera.OpenPipeWireRemote", 0, map[string]dbus.Variant{}).Store(&fd); err != nil {
-				return nil, fmt.Errorf("Could not open the camera connection: %w", err)
+				return nil, uiError(uiTextWith("camera.linux.could_not_open_the_camera_connection", map[string]string{"error": err.Error()}), err)
 			}
 			if fd < 0 {
-				return nil, errors.New("Invalid camera connection")
+				return nil, errors.New(uiText("camera.linux.invalid_camera_connection"))
 			}
 			return os.NewFile(uintptr(fd), "camera-portal"), nil
 		}
@@ -97,9 +97,9 @@ func (d *cameraDiagnostic) error() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if text := strings.TrimSpace(d.text); text != "" {
-		return fmt.Errorf("Camera capture failed: %s", text)
+		return uiError(uiTextWith("camera.linux.capture_failed", map[string]string{"error": text}), nil)
 	}
-	return errors.New("Camera capture ended before a frame arrived")
+	return errors.New(uiText("camera.linux.camera_capture_ended_before_a_frame_arrived"))
 }
 
 type linuxCameraSource struct {
@@ -147,7 +147,7 @@ func (s *linuxCameraSource) startContext(parent context.Context) (<-chan []byte,
 	if err = cmd.Start(); err != nil {
 		cancel()
 		stdout.Close()
-		return nil, fmt.Errorf("Could not start camera capture: %w", err)
+		return nil, uiError(uiTextWith("camera.linux.could_not_start_camera_capture", map[string]string{"error": err.Error()}), err)
 	}
 	s.cancel, s.finished = cancel, make(chan struct{})
 	finished := s.finished
@@ -194,7 +194,7 @@ func (s *linuxCameraSource) startContext(parent context.Context) (<-chan []byte,
 		return nil, parent.Err()
 	case <-timer.C:
 		s.stop()
-		return nil, errors.New("The camera did not provide a frame. Close other camera apps and try again")
+		return nil, errors.New(uiText("camera.linux.the_camera_did_not_provide_a_frame_close_other_camera_apps_and_try_again"))
 	}
 }
 

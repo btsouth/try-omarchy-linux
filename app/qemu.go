@@ -347,7 +347,7 @@ func prepareDisk(cfg *config, expandedMiB int64) error {
 		return fmt.Errorf("marking disk sparse: %w", err)
 	}
 	ui := getUI()
-	ui.setStatus("%s", uiText("status.preparing_disk"))
+	ui.setCatalogStatus("status.preparing_disk", nil)
 	st, err := src.Stat()
 	if err != nil {
 		return err

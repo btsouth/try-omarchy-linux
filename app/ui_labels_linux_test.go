@@ -23,7 +23,7 @@ func TestLinuxUIMessageKeysExistAndAreForwarded(t *testing.T) {
 	}
 	labels := linuxUILabels()
 	usedByGTK := map[string]bool{}
-	for _, pattern := range []string{"*_linux.go", "../linux-ui/*.go"} {
+	for _, pattern := range []string{"*.go", "../linux-ui/*.go"} {
 		files, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)
@@ -33,9 +33,12 @@ func TestLinuxUIMessageKeysExistAndAreForwarded(t *testing.T) {
 				continue
 			}
 			fs := token.NewFileSet()
-			file, err := parser.ParseFile(fs, path, nil, 0)
+			file, err := parser.ParseFile(fs, path, nil, parser.ParseComments)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !strings.HasPrefix(path, "../linux-ui/") && !linuxOnlySource(path, file) {
+				continue
 			}
 			ast.Inspect(file, func(node ast.Node) bool {
 				call, ok := node.(*ast.CallExpr)
@@ -115,7 +118,7 @@ func TestLinuxScreenTextComesFromTheCatalog(t *testing.T) {
 			}
 		}
 	}
-	for _, pattern := range []string{"*_linux.go", "../linux-ui/*.go"} {
+	for _, pattern := range []string{"*.go", "../linux-ui/*.go"} {
 		files, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)
@@ -125,9 +128,12 @@ func TestLinuxScreenTextComesFromTheCatalog(t *testing.T) {
 				continue
 			}
 			fs := token.NewFileSet()
-			file, err := parser.ParseFile(fs, path, nil, 0)
+			file, err := parser.ParseFile(fs, path, nil, parser.ParseComments)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !strings.HasPrefix(path, "../linux-ui/") && !linuxOnlySource(path, file) {
+				continue
 			}
 			ast.Inspect(file, func(node ast.Node) bool {
 				switch n := node.(type) {

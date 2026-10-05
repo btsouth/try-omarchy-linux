@@ -56,7 +56,7 @@ func relaunchLinuxSelf() {
 }
 
 // fatal shows a finished message and exits. Shared code passes catalog text
-// from uiText or uiTextWith; Linux-only code formats with fatalf.
+// from uiText or uiTextWith; fatalf formats already-resolved errors.
 func fatal(msg string) {
 	if setupCancelled() {
 		getUI().finish()
@@ -466,13 +466,13 @@ func validateLinuxSharedFolder(path, dataDir string) (string, error) {
 		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("not a folder")
+		return "", uiError(uiText("share.linux.not_folder"), nil)
 	}
 	if linuxPathWithin(abs, dataDir) {
-		return "", fmt.Errorf("it contains the Try Omarchy data folder")
+		return "", uiError(uiText("share.linux.contains_data"), nil)
 	}
 	if linuxPathWithin(dataDir, abs) {
-		return "", fmt.Errorf("it is inside the Try Omarchy data folder")
+		return "", uiError(uiText("share.linux.inside_data"), nil)
 	}
 	return abs, nil
 }
@@ -554,5 +554,5 @@ func vulkanPresentMode(flagValue string, nvidiaOnly bool) (string, error) {
 	case "gpu", "cpu":
 		return flagValue, nil
 	}
-	return "", fmt.Errorf("-vulkan-present must be auto, gpu, or cpu")
+	return "", uiError(uiText("error.linux.vulkan_present"), nil)
 }

@@ -1351,5 +1351,20 @@
   "launcher.linux.flag.autostart": "open the launcher at login using saved startup preferences",
   "launcher.linux.flag.reclaim": "ask the running Omarchy to prepare its free space, so its disk file shrinks after shutdown, then exit",
   "brand.linux": "LINUX",
-  "settings.linux.clipboard_status": "\n\nClipboard: {status}"
+  "settings.linux.clipboard_status": "\n\nClipboard: {status}",
+  "share.linux.not_folder": "not a folder",
+  "share.linux.contains_data": "it contains the Try Omarchy data folder",
+  "share.linux.inside_data": "it is inside the Try Omarchy data folder",
+  "error.linux.vulkan_present": "-vulkan-present must be auto, gpu, or cpu",
+  "error.linux.audio_mode": "-audio must be auto, pipewire, sdl, or none",
+  "settings.linux.invalid_keyboard": "choose a valid keyboard layout",
+  "settings.linux.experience_too_large": "display and keyboard preferences are too large",
+  "settings.linux.invalid_experience": "invalid display and keyboard preferences",
+  "settings.linux.invalid_app_selection": "invalid app selection",
+  "settings.linux.app_uninstalled": "that app is no longer installed on this computer",
+  "settings.linux.approved_apps_limit": "you can approve up to {count} apps",
+  "error.linux.custom_image_flags": "a custom Omarchy image needs both -release and -sums-sha256",
+  "error.linux.image_digest": "the Linux Omarchy image has no valid trusted SHA256SUMS digest",
+  "error.linux.image_url": "the Linux Omarchy image URL is invalid",
+  "error.linux.image_https": "the Linux Omarchy image needs HTTPS outside local test fixtures"
 }

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 )
@@ -15,7 +14,7 @@ func linuxAudioMode(mode string) (string, error) {
 	case "sdl", "none":
 		return mode, nil
 	}
-	return "", fmt.Errorf("-audio must be auto, pipewire, sdl, or none")
+	return "", uiError(uiText("error.linux.audio_mode"), nil)
 }
 
 func linuxAudioArgs(cfg *config, args []string) []string {

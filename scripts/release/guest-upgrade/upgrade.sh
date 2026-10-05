@@ -117,5 +117,24 @@ if (( revision >= 56 )); then
   grep -qx 'Target = try-omarchy-runtime' /etc/pacman.d/hooks/95-try-omarchy-host-names.hook
   grep -Fq 'omarchy-shell shell ping' /usr/local/lib/try-omarchy/desktop-ready
 fi
+if (( revision >= 57 )); then
+  [[ -x /usr/local/bin/omarchy-native-nightlight ]]
+  [[ -f /usr/local/share/try-omarchy/nightlight.frag ]]
+fi
+if (( revision >= 58 )); then
+  [[ -x /usr/local/lib/try-omarchy/install-notifications ]]
+fi
+if (( revision >= 59 )); then
+  [[ -x /usr/local/lib/try-omarchy/compositor-health ]]
+  grep -Fq 'health_pid=$!' /usr/local/lib/try-omarchy/agent
+fi
+if (( revision >= 60 )); then
+  [[ -x /usr/local/lib/try-omarchy/live-update ]]
+  [[ -f /etc/pacman.d/hooks/00-try-omarchy-live-update.hook ]]
+  [[ -f /etc/pacman.d/hooks/zz-try-omarchy-live-update.hook ]]
+fi
+if (( revision >= 61 )); then
+  grep -Fq 'previous_revision < 61' /usr/local/lib/try-omarchy/catch-up
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

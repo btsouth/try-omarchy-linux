@@ -304,7 +304,11 @@ func runLinuxClipboardBridge() func() {
 		logf("clipboard: %v", err)
 		return func() {}
 	}
-	cache = filepath.Join(cache, "try-omarchy", "transfers")
+	cache = filepath.Join(cache, "try-omarchy", "transfers", "streaming")
+	if err := validateMovePath(cache); err != nil {
+		logf("clipboard: %v", err)
+		return func() {}
+	}
 	if err = os.MkdirAll(cache, 0700); err != nil {
 		logf("clipboard: %v", err)
 		return func() {}
@@ -327,7 +331,7 @@ func runLinuxClipboardBridge() func() {
 	if supported {
 		c.sequence()
 	}
-	b := &clipBridge{getHost: c.get, setHost: c.set, getPaths: c.getPaths, setPaths: c.setPaths,
+	b := &clipBridge{authorizePeer: lifecycleConnectionFromQEMU, getHost: c.get, setHost: c.set, getPaths: c.getPaths, setPaths: c.setPaths,
 		sequence: c.sequence, dropRequests: make(chan droppedFiles, 8),
 		transferError: func(err error) {
 			logf("file transfer: %v", err)

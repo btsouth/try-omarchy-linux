@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -93,7 +94,7 @@ func main() {
 	startImmediately := flag.Bool("start", false, "start Omarchy immediately without the launcher window")
 	diagnostics := flag.Bool("diagnostics", false, "write a zip of logs, settings, and machine facts for a bug report, then exit")
 	sshKeyPath := flag.String("ssh-key", "", "public key to authorize for the Omarchy account (default: your ~/.ssh/id_*.pub when -ssh is used)")
-	noUpdate := flag.Bool("no-update", false, "do not check for launcher or guest updates")
+	noUpdate := flag.Bool("no-update", false, "do not check the feed for newer releases")
 	updateURL := flag.String("update-url", defaultUpdateURL, "authenticated update manifest URL")
 	release := flag.String("release", defaultReleaseURL,
 		"base URL the guest image is downloaded from on first run")
@@ -107,9 +108,13 @@ func main() {
 	disableFastStartupFlag := flag.Bool("disable-fast-startup", false, "internal: elevated helper that turns off Windows Fast Startup before installing Omarchy next to Windows")
 	applyLauncherUpdateFlag := flag.Bool("apply-launcher-update", false, "internal: apply a staged launcher update")
 	applyLauncherRollbackFlag := flag.Bool("apply-launcher-rollback", false, "internal: restore the previous launcher")
+	restartWaitPID := flag.Int("restart-update-wait-pid", 0, "internal: wait for the stopped guest launcher before restarting")
 	updateWaitPID := flag.Int("update-wait-pid", 0, "internal: process to wait for before replacing the launcher")
 	updateRestartArgs := flag.String("update-restart-args", "", "internal: encoded launcher restart arguments")
 	flag.Parse()
+	if *restartWaitPID > 0 {
+		waitForProcess(*restartWaitPID)
+	}
 	if *openAbout {
 		runAbout()
 		return
@@ -166,6 +171,7 @@ func main() {
 	if strings.TrimSpace(*runtimeSumsSHA256) == "" {
 		*runtimeSumsSHA256 = *sumsSHA256
 	}
+	launcherPins := pinnedPayloadUpdate{*release, *sumsSHA256, *runtimeRelease, *runtimeSumsSHA256}
 
 	// The elevated relaunch does exactly one thing and reports back via exit
 	// code (see setup.go); it must not touch the single-instance port.
@@ -224,7 +230,7 @@ func main() {
 		runLifecycleListener()
 	}
 	if !cfg.portable {
-		resolved, moveErr := prepareMovedLocation(cfg.dir, !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag && !installWalkthrough)
+		resolved, moveErr := prepareMovedLocation(cfg.dir, !*openSettings && !*diagnostics && !*applyLauncherUpdateFlag && !*applyLauncherRollbackFlag && !installWalkthrough, *uninstall || *recoveryAction == "uninstall")
 		if moveErr != nil {
 			fatal(uiTextWith("fatal.move.resolve", map[string]string{"error": moveErr.Error()}))
 		}
@@ -241,6 +247,9 @@ func main() {
 		root := filepath.Dir(self)
 		cfg.dir = filepath.Join(root, "data")
 		cfg.payloadDir = filepath.Join(root, "payload")
+		if err := requirePortableStartupFilesystem(root); err != nil {
+			fatal(err.Error())
+		}
 		removeDataOnCancel, err = dataDirectoryEmpty(cfg.dir)
 		if err != nil {
 			fatal(uiTextWith("fatal.location.portable_inspect", map[string]string{"error": err.Error()}))
@@ -277,6 +286,9 @@ func main() {
 			}
 			return
 		}
+	}
+	if validUninstallState(cfg.dir) && !*uninstall && *recoveryAction != "uninstall" {
+		fatal(uiText("error.uninstall.incomplete"))
 	}
 	// The install walkthrough can inspect a running guest and ask its owner to
 	// shut down. It must not take over lifecycle or interrupted-update recovery.
@@ -409,6 +421,7 @@ func main() {
 		}
 		cfg.renderMode = mode
 	}
+	forceCPU := cfg.noGpu
 	if cfg.noGpu {
 		cfg.renderMode = renderCPU
 	}
@@ -436,12 +449,15 @@ func main() {
 		fatal(uiTextWith("fatal.ssh", map[string]string{"error": err.Error()}))
 	}
 	cfg.forwards = forwards
+	var pausedLANForwards []portForward
 	if !explicitFlags["forward"] && !explicitFlags["ssh"] && len(userSettings.ForwardAdapters) > 0 {
 		adapters, err := availableLANAdapters()
 		if err != nil {
 			fatal(uiTextWith("fatal.lan.adapters", map[string]string{"error": err.Error()}))
 		}
-		cfg.forwards, err = resolveForwardAdapters(forwards, userSettings.ForwardAdapters, adapters)
+		active, paused := filterUnavailableForwardAdapters(forwards, userSettings.ForwardAdapters, adapters)
+		pausedLANForwards = paused
+		cfg.forwards, err = resolveForwardAdapters(active, userSettings.ForwardAdapters, adapters)
 		if err != nil {
 			fatal(uiTextWith("fatal.lan.prepare", map[string]string{"error": err.Error()}))
 		}
@@ -531,20 +547,103 @@ func main() {
 	// previous run must not be mistaken for this one's.
 	os.Remove(filepath.Join(cfg.vmDir, "qemu-stderr.log"))
 
-	if !snapshotRecovery && !cfg.desktop.AutomaticUpdatesDisabled && automaticUpdatesEnabled(cfg, *noUpdate, *release, *sumsSHA256) {
-		checkDue := *updateURL != defaultUpdateURL || updateCheckDue(cfg.dir, time.Now())
-		if checkDue {
-			_ = recordUpdateCheck(cfg.dir, time.Now())
-			if updating, updateErr := maybeStartLauncherUpdate(cfg, *updateURL, os.Args[1:]); updateErr != nil {
-				logf("update check skipped: %v", updateErr)
-			} else if updating {
-				logf("starting authenticated launcher update")
-				uiDone()
-				closeLog()
-				return
+	updatesEnabled := !snapshotRecovery && !cfg.desktop.AutomaticUpdatesDisabled && automaticUpdatesEnabled(cfg, *noUpdate, *release, *sumsSHA256)
+	ownPayload := ownPayloadUpdate(cfg, completeAtStart, snapshotRecovery || payloadsRolledBack, explicitFlags, launcherPins)
+	// A new launcher can boot the installed image without upgrading it online.
+	// Explicit payload pins, reset and checkpoint recovery retain their meaning.
+	if completeAtStart && !cfg.fresh && !snapshotRecovery && !payloadsRolledBack {
+		if !explicitFlags["release"] && !explicitFlags["sums-sha256"] {
+			if r, digest, ok := installReceiptIdentity(cfg.guestDir); ok {
+				*release, *sumsSHA256 = r, digest
+			}
+		}
+		if !explicitFlags["runtime-release"] && !explicitFlags["runtime-sums-sha256"] {
+			if r, digest, ok := runtimeReceiptIdentity(filepath.Join(cfg.dir, "runtime")); ok {
+				*runtimeRelease, *runtimeSumsSHA256 = r, digest
 			}
 		}
 	}
+	payloadRoot := updatePayloadRoot(cfg.dir, cfg.payloadDir, cfg.portable)
+	appliedOwnPayload := false
+	if ownPayload != nil {
+		key, _ := updatePublicKey()
+		if err := verifiedLauncherPayloadUpdate(setupContext(), cfg.dir, payloadRoot, *ownPayload, key); err == nil {
+			*release, *sumsSHA256 = ownPayload.Release, ownPayload.Digest
+			*runtimeRelease, *runtimeSumsSHA256 = ownPayload.RuntimeRelease, ownPayload.RuntimeDigest
+			cfg.payloadDir, cfg.localPayload = payloadRoot, true
+			cfg.localPayloadSHA256, cfg.localRuntimePayloadSHA256 = ownPayload.Digest, ownPayload.RuntimeDigest
+			appliedOwnPayload = true
+			ownPayload = nil
+		} else if marker, e := os.ReadFile(filepath.Join(launcherUpdateDir(cfg.dir), stagedUpdateFilename)); e == nil && string(marker) == currentVersion {
+			if setupCancelled() {
+				return
+			}
+			if _, e := os.Stat(filepath.Join(launcherUpdateDir(cfg.dir), currentVersion, pinnedPayloadFilename)); e == nil {
+				logf("discarding staged launcher payload: %v", err)
+				_ = removeUpdateFile(filepath.Join(launcherUpdateDir(cfg.dir), stagedUpdateFilename))
+				_ = removeUpdateFile(filepath.Join(launcherUpdateDir(cfg.dir), currentVersion, pinnedPayloadFilename))
+			}
+		}
+	}
+	state, _ := readLauncherUpdateState(cfg.dir)
+	version := ""
+	activeUpdate := state != nil && state.Version == currentVersion && state.ManifestSHA256 != ""
+	if activeUpdate {
+		version = state.Version
+	} else if updatesEnabled && !payloadsRolledBack && !appliedOwnPayload {
+		data, _ := os.ReadFile(filepath.Join(launcherUpdateDir(cfg.dir), stagedUpdateFilename))
+		version = string(data)
+		if version == currentVersion && ownPayload != nil {
+			version = ""
+		}
+	}
+	if version != "" && !snapshotRecovery {
+		key, keyErr := updatePublicKey()
+		var manifest *updateManifest
+		var stageErr error
+		if keyErr != nil {
+			stageErr = keyErr
+		} else {
+			manifest, stageErr = verifiedStagedUpdate(setupContext(), cfg.dir, payloadRoot, version, key)
+		}
+		if stageErr != nil {
+			if setupCancelled() {
+				return
+			}
+			logf("discarding staged update: %v", stageErr)
+			discardStagedUpdate(cfg.dir, payloadRoot, version)
+			if activeUpdate {
+				fatal(uiTextWith("fatal.update.recover", map[string]string{"error": stageErr.Error()}))
+			}
+		} else if failedUpdateVersion(cfg.dir) != version && (activeUpdate || version == currentVersion || updateIsNewer(version, currentVersion)) {
+			if version != currentVersion {
+				if started, err := startStagedLauncherUpdate(cfg, manifest, os.Args[1:]); err != nil {
+					logf("staged update deferred: %v", err)
+				} else if started {
+					uiDone()
+					return
+				}
+			} else {
+				*release, *sumsSHA256 = manifest.Release, manifest.ManifestSHA256
+				if !explicitFlags["runtime-release"] && !explicitFlags["runtime-sums-sha256"] {
+					*runtimeRelease, *runtimeSumsSHA256 = manifest.Release, manifest.ManifestSHA256
+				}
+				if !cfg.portable {
+					cfg.payloadDir, cfg.localPayload = payloadRoot, true
+					cfg.localPayloadSHA256 = manifest.ManifestSHA256
+				}
+			}
+		}
+	}
+	stopUpdates := configureBackgroundUpdates(cfg, *updateURL, updatesEnabled && !payloadsRolledBack, ownPayload)
+	defer stopUpdates()
+	defer func() {
+		if (setupCancelled() || intentionalUpdateQuit.Load()) && !bootAnnouncedReady.Load() {
+			if err := interruptPendingUpdates(cfg.dir); err != nil {
+				logf("recording interrupted update: %v", err)
+			}
+		}
+	}()
 
 	if err := preparePortablePayloadTransition(cfg, *release, *sumsSHA256); err != nil {
 		if finishSetupCancellation(cfg, err) {
@@ -619,6 +718,8 @@ func main() {
 		if reason != "" {
 			logf("rendering: %s", reason)
 		}
+		cfg.venus, reason = venusDecision(os.Getenv(venusVariable), cfg.displayDriver)
+		logf("rendering: Venus Vulkan %s - %s", map[bool]string{false: "off", true: "on"}[cfg.venus], reason)
 	} else {
 		cfg.qemu = stockQemu
 	}
@@ -661,11 +762,10 @@ func main() {
 		cmdline += " tryomarchy.instant=1"
 	}
 	cmdline += sshCmdline(cfg.forwards, cfg.sshKey)
-	cmdline += shareCmdline(cfg.share)
-	zone, layout, variant, locale := hostLocale(*timeZoneFlag, *keyboardFlag, *localeFlag)
-	if words := hostLocaleCmdline(zone, layout, variant, locale); words != "" {
-		cmdline += words
-		logf("guest follows Windows locale:%s", words)
+	plan := &bootPlan{
+		explicit: explicitFlags, baseCmdline: cmdline, profile: resourcePrefs.Profile, forceCPU: forceCPU,
+		timeZone: *timeZoneFlag, keyboard: *keyboardFlag, language: *localeFlag, home: home,
+		gpuRuntime: gpuRoot != "", multiDisplayRuntime: gpuRoot != "" && gpuRoot != cfg.winqEmu,
 	}
 
 	if err := prepareDisk(cfg, spec.Runtime.Storage.ExpandedSizeMiB); err != nil {
@@ -673,6 +773,14 @@ func main() {
 			return
 		}
 		fatal(uiTextWith("fatal.disk", map[string]string{"error": err.Error()}))
+	}
+	if unclean, err := previousGuestExitUnclean(cfg.dir); err != nil {
+		logf("could not read previous guest exit: %v", err)
+	} else if unclean && msgBox(uiText("shutdown.unclean_recovery"), mbYesNo|mbIconQuestion|mbDefbutton2) == idYes {
+		if err := runRecoveryUI(cfg.dir, "snapshots"); err != nil {
+			errorBox(err.Error())
+		}
+		return
 	}
 	// From here onward the installation is complete. A last-second cancel may
 	// stop this launch, but must not remove the working VM it just finished.
@@ -688,37 +796,27 @@ func main() {
 	if finishSetupCancellation(cfg, checkSetupCancelled()) {
 		return
 	}
-	profile := effectiveResourceProfile(resourcePrefs.Profile, cfg.cpuOverride, cfg.memOverrideMiB)
 	getUI().setStatus("%s", uiText("status.measuring_resources"))
-	host := measureHostResources(profile == resourceMaximum)
-	allocation, err := planGuestResources(profile, host, cfg.useGpu, cfg.cpuOverride, cfg.memOverrideMiB,
-		explicitFlags["cpus"], explicitFlags["memory"])
-	if err != nil {
+	if err := planBootResources(cfg, plan); err != nil {
 		fatal(uiTextWith("fatal.resources", map[string]string{"error": err.Error()}))
 	}
-	cfg.cpus, cfg.memMiB, cfg.hostTotalMiB = allocation.CPUs, allocation.MemoryMiB, host.TotalMiB
-	logf("resources: profile=%s, %d of %d logical processors, %d MiB guest RAM; Windows available=%d MiB, CPU sample known=%t busy=%.1f%%",
-		profile, cfg.cpus, host.LogicalCPUs, cfg.memMiB, host.AvailableMiB, host.CPUKnown, host.CPUBusy*100)
+	bootLine := bootCmdline(cfg, plan)
 	getUI().setStatus("%s", uiText("status.starting_omarchy"))
 	stopTray := startTray(cfg)
 	defer stopTray()
+	if len(pausedLANForwards) > 0 {
+		rules := make([]string, 0, len(pausedLANForwards))
+		for _, forward := range pausedLANForwards {
+			rules = append(rules, forward.String())
+		}
+		message := uiTextWith("tray.lan.paused", map[string]string{"rules": strings.Join(rules, ", ")})
+		logf("%s", message)
+		showTrayNotice(uiText("tray.lan.title"), message)
+	}
 
 	// SDL's keyboard grab installs a system-wide Win-key hook that leaks past
 	// window focus; our hook does it right (focus-scoped).
 	os.Setenv("SDL_GRAB_KEYBOARD", "0")
-	// Launch-UX contract (NOTES.md): guest console sized to the window it will
-	// actually get, so the picture fills it from the first frame.
-	conW, conH := screenSize(cfg.fullscreen)
-	if cfg.fullscreen {
-		conW, conH = fullscreenTargetSize(cfg.fullscreenDisplay)
-	}
-	if !cfg.fullscreen {
-		if p := rememberedWindow(cfg.dir); p != nil && !p.Maximized {
-			conW, conH = p.consoleSize()
-		}
-	}
-	cfg.displayWidth, cfg.displayHeight = conW, conH
-	cmdline += fmt.Sprintf(" video=%dx%d", conW, conH)
 
 	reclaimDir.Store(&cfg.dir)
 	reclaimSupported.Store(cfg.diskFormat == "raw")
@@ -729,11 +827,6 @@ func main() {
 	go runTitleEnforcer(cfg.dir, cfg.fullscreen, cfg.fullscreenDisplay)
 	go runCursorReleaseGuard()
 	go runCloseGuard()
-	cfg.launchForwards = append([]portForward(nil), cfg.forwards...)
-	// Command-line -forward and -ssh replace the saved list for this launch.
-	if !explicitFlags["forward"] && !explicitFlags["ssh"] {
-		go runLiveForwardWatcher(cfg.dir, cfg.launchForwards)
-	}
 	runClipboardBridge()
 	runCameraBridge(cfg.desktop)
 	runHelloBridge()
@@ -751,22 +844,62 @@ func main() {
 		runAudioBridge(cfg.dir, cfg.qemu, cfg.desktop.MicrophoneDisabled)
 	}
 
-	if err := checkForwardBindings(cfg.forwards); err != nil {
-		fatal(uiTextWith("fatal.forwarding", map[string]string{"error": err.Error()}))
+	activeForwards, pausedPorts := filterForwardBindings(cfg.forwards)
+	cfg.forwards = activeForwards
+	pauseLaunchForwards(pausedPorts, false)
+	noticePausedForwards("tray.forward.paused", pausedPorts, "")
+	if err := prepareLANFirewall(cfg); err != nil {
+		var paused []portForward
+		cfg.forwards, paused = filterLANForwards(cfg.forwards)
+		pauseLaunchForwards(paused, true)
+		noticePausedForwards("tray.lan.firewall_paused", paused, err.Error())
+		logf("LAN firewall unavailable: %v", err)
 	}
-	if err := ensureLANFirewall(cfg); err != nil {
-		fatal(uiTextWith("fatal.lan.forwarding", map[string]string{"error": err.Error()}))
+	cfg.launchForwards = append([]portForward(nil), cfg.forwards...)
+	// Command-line -forward and -ssh replace the saved list for this launch.
+	if !explicitFlags["forward"] && !explicitFlags["ssh"] {
+		go runLiveForwardWatcher(cfg.dir, cfg.launchForwards)
 	}
 	cfg.audio = "sdl"
 
 	startBootCurtain(cfg)
-	for relaunch := true; relaunch; {
-		relaunch = supervise(cfg, cmdline)
+	stopDiskMonitor := startHostDiskMonitor(cfg.dir)
+	defer stopDiskMonitor()
+	for relaunch := supervise(cfg, bootLine); relaunch; relaunch = supervise(cfg, bootLine) {
+		// A guest reboot applies what Settings saved meanwhile. A failed
+		// measurement keeps the previous boot's size.
+		reloadBootSettings(cfg, plan)
+		if err := planBootResources(cfg, plan); err != nil {
+			logf("reboot: keeping %d CPUs and %d MiB: %v", cfg.cpus, cfg.memMiB, err)
+		}
+		bootLine = bootCmdline(cfg, plan)
 	}
-	if finishSetupCancellation(cfg, checkSetupCancelled()) {
+	stopDiskMonitor()
+	if (setupCancelled() || intentionalUpdateQuit.Load()) && !bootAnnouncedReady.Load() {
+		if err := interruptPendingUpdates(cfg.dir); err != nil {
+			logf("recording interrupted update: %v", err)
+		}
+	}
+	if !restartForUpdate.Load() && finishSetupCancellation(cfg, checkSetupCancelled()) {
 		return
 	}
+	stopUpdates()
+	if windowsSessionEnding.Load() {
+		return
+	}
+
 	compactAfterShutdown(cfg)
+	if restartForUpdate.Load() {
+		self, err := os.Executable()
+		if err == nil {
+			cmd := exec.Command(self, append(os.Args[1:], "-restart-update-wait-pid", strconv.Itoa(os.Getpid()))...)
+			if err := cmd.Start(); err != nil {
+				logf("restart to update: %v", err)
+			} else {
+				_ = cmd.Process.Release()
+			}
+		}
+	}
 	logf("---- exiting ----")
 }
 
@@ -803,15 +936,18 @@ func supervise(cfg *config, cmdline string) bool {
 	// final 1 GiB memory attempt. Keep a small margin without allowing a loop.
 	const maxLaunchAttempts = 12
 	for attempt := 1; attempt <= maxLaunchAttempts; attempt++ {
-		if setupCancelled() {
+		if setupCancelled() || windowsSessionEnding.Load() {
 			return false
 		}
 		mode := "CPU rendering (llvmpipe)"
-		if cfg.useGpu {
+		if cfg.useGpu && cfg.venus {
 			mode = "GPU accelerated (virgl + Venus Vulkan)"
+		} else if cfg.useGpu {
+			mode = "GPU accelerated (virgl)"
 		}
 		logf("booting - %s (attempt %d)", mode, attempt)
 		pendingReboot.Store(false)
+		guestCompositorHealth.boot(time.Now())
 		guestReady.Store(false)
 		guestBootStarted()
 		controlDir, err := prepareQMPControl()
@@ -827,7 +963,7 @@ func supervise(cfg *config, cmdline string) bool {
 		}
 		// Local forwards changed while running (forward_live.go) carry into a
 		// reboot instead of reverting to the launch list.
-		cfg.forwards = forwardsForBoot(cfg.launchForwards)
+		cfg.forwards = filterPausedLaunchForwards(forwardsForBoot(cfg.launchForwards))
 		audioSelection := cfg.audio == "sdl" && audioRuntimeSupportsSelection(cfg.qemu)
 		if cfg.audio == "sdl" {
 			cfg.audioRates = launchAudioSampleRates(cfg.audioDevices, audioSelection, cfg.desktop.MicrophoneDisabled)
@@ -849,18 +985,53 @@ func supervise(cfg *config, cmdline string) bool {
 		pinch := pinchEnabled(cfg)
 		logf("touchpad pinch forwarding: %v (guest declares device: %v)", pinch, cfg.guestPinch)
 		proc.Env = pinchEnvironment(proc.Env, pinch)
+		externalHook := keyboardRuntimeSupportsExternalHook(cfg.qemu)
+		qemuExternalKeyboardHook.Store(externalHook)
+		proc.Env = keyboardEnvironment(proc.Env, externalHook)
+		if cfg.useGpu {
+			cfg.displayDriver = displayDriverIdentity()
+			logGPULaunchFacts(cfg, proc.Env, dxgiAdapterFacts(), qemuGPUPreference(cfg.qemu))
+		}
 		// The w-binary's startup errors (bad args, SDL init) only ever reach
 		// stderr; without this they vanish and a dead QEMU is undebuggable.
-		if ef, err := os.OpenFile(filepath.Join(cfg.vmDir, "qemu-stderr.log"),
-			os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644); err == nil { // per-attempt: the memory ladder sniffs it
+		ef, err := os.OpenFile(filepath.Join(cfg.vmDir, "qemu-stderr.log"),
+			os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644) // per-attempt: the memory ladder sniffs it
+		if err == nil {
 			proc.Stdout = ef
 			proc.Stderr = ef
-			defer ef.Close()
 		}
-		if err := proc.Start(); err != nil {
+		guestLaunchInProgress.Store(true)
+		if windowsSessionEnding.Load() {
+			guestLaunchInProgress.Store(false)
+			if ef != nil {
+				ef.Close()
+			}
+			return false
+		}
+		guestRuntimeGeneration.Add(1)
+		guestExitedCleanly.Store(false)
+		if err := recordGuestExit(cfg.dir, false, "running"); err != nil {
+			logf("could not record guest start: %v", err)
+		}
+		if windowsSessionEnding.Load() {
+			guestLaunchInProgress.Store(false)
+			if ef != nil {
+				ef.Close()
+			}
+			return false
+		}
+		err = proc.Start()
+		// QEMU inherits its own handle. Closing ours per attempt keeps retries
+		// and guest reboots from leaking one handle each.
+		if ef != nil {
+			ef.Close()
+		}
+		if err != nil {
+			guestLaunchInProgress.Store(false)
 			fatal(uiTextWith("fatal.qemu.start", map[string]string{"error": err.Error()}))
 		}
 		qemuPid.Store(uint32(proc.Process.Pid))
+		guestLaunchInProgress.Store(false)
 		exited := make(chan error, 1)
 		go func() {
 			err := proc.Wait()
@@ -881,6 +1052,7 @@ func supervise(cfg *config, cmdline string) bool {
 		for qmp == nil && time.Now().Before(deadline) {
 			select {
 			case <-setupCancelWake:
+				cancelBackgroundUpdate()
 				proc.Process.Kill()
 				<-exited
 				qemuPid.Store(0)
@@ -891,6 +1063,25 @@ func supervise(cfg *config, cmdline string) bool {
 					logf("QEMU startup failure (attempt %d, %s):\n%s", attempt, mode, detail)
 				}
 				if forwardStartupProblem(cfg.vmDir) {
+					active, paused := failedStartupForwards(cfg.vmDir, cfg.forwards)
+					if len(paused) == 0 {
+						// Some QEMU versions omit the rule. Re-probe before giving up
+						// forwarding for this launch; keep the VM available either way.
+						active, paused = filterForwardBindings(cfg.forwards)
+						if len(paused) == 0 {
+							active, paused = nil, cfg.forwards
+						}
+					}
+					if len(paused) > 0 {
+						pauseLaunchForwards(paused, false)
+						cfg.forwards, cfg.launchForwards = active, active
+						setLiveForwards(active)
+						noticePausedForwards("tray.forward.paused", paused, "")
+						// Every retry removes a rule. Keep the existing watchdog budget
+						// for VM failures rather than spending it on up to 64 forwards.
+						attempt--
+						break probe
+					}
 					fatal(uiText("fatal.qemu.port"))
 				}
 				// The host refused nested virtualization for the partition
@@ -1004,12 +1195,68 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 	logf("supervisor: watching guest lifecycle and file drops")
 	lines := qmp.readLines()
 	reason := ""
-	silent := 0
+	cleanExit := false
+	silence := qmpSilence{}
+	postReady := false
+	qmpRunning := true
+	lastTick, lastReply := time.Now(), time.Now()
+	hangReported := false
+	var recovery <-chan gpuRecoveryDecision
+	var cancelRecovery context.CancelFunc
+	defer func() {
+		if cancelRecovery != nil {
+			cancelRecovery()
+		}
+	}()
+	offerRecovery := func(trigger string) {
+		if recovery != nil || !postReady || setupCancelled() || pendingReboot.Load() || guestCompositorHealth.suppressRecovery() {
+			return
+		}
+		logf("display health: %s stopped responding; preserving session while offering recovery", trigger)
+		suggest := false
+		if cfg.useGpu {
+			var err error
+			suggest, err = recordGPUFreeze(cfg.dir, cfg.renderMode, true, postReady, cfg.runtimeID, cfg.displayDriver)
+			if err != nil {
+				logf("could not record GPU freeze: %v", err)
+			}
+		}
+		result := make(chan gpuRecoveryDecision, 1)
+		recovery = result
+		snapshotCfg := *cfg
+		snapshotPID, snapshotMisses := qemuPid.Load(), silence.misses
+		dialogContext, cancel := context.WithCancel(context.Background())
+		cancelRecovery = cancel
+		go func() {
+			facts := launcherFacts(&snapshotCfg)
+			facts["display.freeze.trigger"] = trigger
+			facts["display.freeze.qemuPID"] = fmt.Sprint(snapshotPID)
+			facts["display.freeze.qmpMisses"] = fmt.Sprint(snapshotMisses)
+			facts["display.freeze.qmpHangThresholdProbes"] = fmt.Sprint(qmpHangMisses)
+			if snapshotCfg.useGpu {
+				recordGPURuntimeReport(snapshotCfg.dir, snapshotCfg.vmDir)
+			}
+			bundle, err := writeDiagnostics(snapshotCfg.dir, facts)
+			if err != nil {
+				logf("display freeze diagnostics failed: %v", err)
+			} else {
+				logf("display freeze diagnostics saved: %s", bundle)
+			}
+			select {
+			case <-dialogContext.Done():
+				result <- gpuRecoveryDecision{}
+				return
+			default:
+			}
+			result <- chooseFreezeRecovery(dialogContext.Done(), snapshotCfg.useGpu, trigger, bundle, err, suggest)
+		}()
+	}
 	tick := 0
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	procDown := false
 	movedBootPending := false
+	diskPauseNotified := false
 	// Cancel in the setup window, which stays up while Omarchy boots, shuts
 	// the guest down. Early in its boot the guest misses the power button, so
 	// it is pressed again once Omarchy reports that it is up; stopping it
@@ -1025,9 +1272,19 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 			stopDeadline = time.After(30 * time.Second)
 		}
 		if guestReady.Swap(false) {
+			postReady = true
+			guestCompositorHealth.userspaceReady()
+			if cfg.useGpu {
+				recordGPURuntimeReport(cfg.dir, cfg.vmDir)
+			}
+			pendingPayload, _ := readPayloadUpdateState(cfg.dir)
 			commitLauncherUpdate(cfg.dir)
 			commitPayloadUpdates(cfg.dir)
 			commitCheckpointBoot(cfg.dir)
+			if pendingPayload != nil {
+				pruneCommittedUpdatePayloads(cfg)
+			}
+			startReadyUpdateCheck()
 			recordRenderResult(cfg)
 			movedBootPending = true
 		}
@@ -1039,11 +1296,45 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 			procDown = true
 		case line, ok := <-lines:
 			if !ok {
-				lines = nil // connection gone; QEMU is exiting
-				procDown = waitExit(exited, 15*time.Second, cfg)
+				lines = nil
+				if postReady && !pendingReboot.Load() && !setupCancelled() {
+					hangReported = true
+					select {
+					case <-exited:
+						procDown = true
+					default:
+						offerRecovery("qmp")
+					}
+				} else {
+					procDown = waitExit(exited, 15*time.Second, cfg)
+				}
 				break
 			}
-			silent = 0
+			silence.answered()
+			hangReported = false
+			lastReply = time.Now()
+			var status struct {
+				Return *vmRuntimeStatus `json:"return"`
+				Event  string           `json:"event"`
+			}
+			if json.Unmarshal([]byte(line), &status) == nil {
+				if status.Return != nil && status.Return.Status != "" {
+					qmpRunning = status.Return.Running
+				}
+				if status.Event == "STOP" {
+					qmpRunning = false
+				}
+				if status.Event == "RESUME" {
+					qmpRunning = true
+					guestCompositorHealth.power(time.Now(), false)
+				}
+			}
+			if diskFullPauseEvent(line) && !diskPauseNotified {
+				diskPauseNotified = true
+				message := uiText("tray.disk.paused")
+				logf("%s", message)
+				showTrayNotice(uiText("tray.disk.paused_title"), message)
+			}
 			if paths, point, ok := droppedFilesEvent(line); ok {
 				logf("file drop: received %d item(s)", len(paths))
 				if err := sendDroppedFilesAt(paths, guestDropPoint(point), cursorPosition()); err != nil {
@@ -1052,9 +1343,12 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 			}
 			if r := shutdownReason(line); r != "" {
 				reason = r
+				cleanExit = cleanGuestShutdown(line)
 			}
 		case <-setupCancelWake:
+			cancelBackgroundUpdate()
 			if stopDeadline == nil {
+				guestCompositorHealth.stop()
 				logf("startup cancelled - shutting the guest down")
 				if err := qmp.writeLine(`{"execute":"system_powerdown"}`); err != nil {
 					procDown = waitExit(exited, 15*time.Second, cfg)
@@ -1072,17 +1366,60 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 			qmp.writeLine(`{"execute":"quit"}`)
 			stopDeadline = nil
 			procDown = waitExit(exited, 15*time.Second, cfg)
+		case decision := <-recovery:
+			recovery = nil
+			if cancelRecovery != nil {
+				cancelRecovery()
+				cancelRecovery = nil
+			}
+			if !decision.restart || setupCancelled() || pendingReboot.Load() || guestCompositorHealth.suppressRecovery() {
+				continue
+			}
+			if err := saveGPURecoveryChoice(cfg.dir, decision); err != nil {
+				errorBox(uiTextWith("recovery.gpu.settings_failed", map[string]string{"error": err.Error()}))
+				continue
+			}
+			guestCompositorHealth.stop()
+			cfg.recoveryChoice = &decision
+			// Only this explicit choice authorizes discarding the session.
+			qmp.writeLine(`{"execute":"quit"}`)
+			waitExit(exited, 15*time.Second, cfg)
+			guestUp.Store(false)
+			qemuPid.Store(0)
+			return true
 		case <-ticker.C:
+			now := time.Now()
+			if cancelRecovery != nil && guestCompositorHealth.suppressRecovery() {
+				cancelRecovery()
+			}
+			if now.Sub(lastTick) > 5*time.Second {
+				silence.answered()
+				lastReply = now
+			}
+			lastTick = now
+			if stopDeadline == nil && !pendingReboot.Load() && !setupCancelled() && guestCompositorHealth.stalled(now, qmpRunning && now.Sub(lastReply) < 15*time.Second) {
+				offerRecovery("compositor")
+			}
 			tick++
 			if tick%5 == 0 {
 				if err := qmp.writeLine(`{"execute":"query-status"}`); err != nil {
-					procDown = waitExit(exited, 15*time.Second, cfg)
-					break
+					if !postReady {
+						procDown = waitExit(exited, 15*time.Second, cfg)
+						break
+					}
+					if !hangReported && stopDeadline == nil {
+						hangReported = true
+						offerRecovery("qmp")
+					}
 				}
-				silent++
-				if silent >= 9 {
-					logf("QEMU main loop stopped answering - guest is down")
-					procDown = waitExit(exited, 15*time.Second, cfg)
+				if silence.probe() && !hangReported {
+					hangReported = true
+					if postReady && stopDeadline == nil && !setupCancelled() && !pendingReboot.Load() {
+						offerRecovery("qmp")
+					} else if !postReady {
+						logf("QEMU stopped answering during boot")
+						procDown = waitExit(exited, 15*time.Second, cfg)
+					}
 				}
 			}
 		}
@@ -1096,6 +1433,7 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 					lines = nil
 				} else if r := shutdownReason(line); r != "" {
 					reason = r
+					cleanExit = cleanGuestShutdown(line)
 				}
 				if reason != "" || lines == nil {
 					goto drained
@@ -1106,6 +1444,11 @@ func watch(cfg *config, qmp *qmpConn, exited <-chan error) bool {
 		}
 	}
 drained:
+	if !postReady && (setupCancelled() || intentionalUpdateQuit.Load()) {
+		if err := interruptPendingUpdates(cfg.dir); err != nil {
+			logf("recording interrupted first boot: %v", err)
+		}
+	}
 	if !procDown {
 		waitExit(exited, 15*time.Second, cfg)
 	}
@@ -1119,6 +1462,13 @@ drained:
 	// lifecycle port before the network goes down.
 	if reason == "" && pendingReboot.Swap(false) {
 		reason = "reboot"
+	}
+	if err := recordGuestExit(cfg.dir, cleanExit, reason); err != nil {
+		logf("could not record guest exit: %v", err)
+	}
+	guestExitedCleanly.Store(cleanExit)
+	if windowsSessionEnding.Load() {
+		return false
 	}
 	if reason == "reboot" {
 		logf("guest rebooted - relaunching")
@@ -1159,6 +1509,8 @@ func runGuestAgent(dir string) {
 	}
 	logf("agent: listening on %d", agentPort)
 	a := newGuestAgent()
+	a.peerAllowed = lifecycleConnectionFromQEMU
+	a.health = &guestCompositorHealth
 	a.appsDir = dir
 	a.launchApp = func(id string) error { return launchApprovedWindowsApp(dir, id) }
 	a.dropDrag = performDropDrag

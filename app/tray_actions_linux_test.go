@@ -17,17 +17,17 @@ func TestLinuxTrayOffersSessionActions(t *testing.T) {
 			<-ch
 		}
 	}
-	for _, ch := range []chan struct{}{linuxShareRequests, linuxDiagnosticsRequests, linuxHelpRequests} {
+	for _, ch := range []chan struct{}{linuxShareRequests, linuxDiagnosticsRequests, linuxHelpRequests, linuxResumeRequests} {
 		drain(ch)
 		defer drain(ch)
 	}
 	menu := &linuxTrayMenu{}
-	for _, id := range []int32{linuxTrayShare, linuxTrayDiagnostics, linuxTrayHelp} {
+	for _, id := range []int32{linuxTrayShare, linuxTrayDiagnostics, linuxTrayHelp, linuxTrayResume} {
 		menu.Event(id, "hovered", dbus.MakeVariant(""), 0)
 		menu.Event(id, "clicked", dbus.MakeVariant(""), 0)
 		menu.Event(id, "clicked", dbus.MakeVariant(""), 0)
 	}
-	if len(linuxShareRequests) != 1 || len(linuxDiagnosticsRequests) != 1 || len(linuxHelpRequests) != 1 {
+	if len(linuxShareRequests) != 1 || len(linuxDiagnosticsRequests) != 1 || len(linuxHelpRequests) != 1 || len(linuxResumeRequests) != 1 {
 		t.Fatalf("queued share=%d diagnostics=%d help=%d", len(linuxShareRequests), len(linuxDiagnosticsRequests), len(linuxHelpRequests))
 	}
 	var labels []string
@@ -40,7 +40,7 @@ func TestLinuxTrayOffersSessionActions(t *testing.T) {
 			separators++
 		}
 	}
-	want := []string{"Open shared folder", "Settings...", "USB devices", "Reclaim disk space...", "Create diagnostics", "Help and shortcuts...", "Shut down Omarchy..."}
+	want := []string{"Open shared folder", "Settings...", "USB devices", "Reclaim disk space...", "Create diagnostics", "Help and shortcuts...", "Resume Omarchy", "Shut down Omarchy..."}
 	if len(labels) != len(want) || separators != 2 {
 		t.Fatalf("labels %q, %d separators", labels, separators)
 	}

@@ -13,70 +13,60 @@ import (
 
 // The Windows-key forwarder, ported from scripts/winkey-forwarder.ps1.
 // While the QEMU window is foreground: swallow Win on the host and forward it
-// to the guest as Super (meta_l) over a dedicated QMP socket. Otherwise the key
+// to the guest as Super (meta_l/meta_r) over a dedicated QMP socket. Otherwise the key
 // behaves normally. Pair with SDL_GRAB_KEYBOARD=0 so SDL never installs its own
 // (system-wide) hook. Print Screen gets the same treatment: Windows opens its
 // own screen capture on it system-wide, so Omarchy's screenshot binding would
 // otherwise fire together with Snipping Tool. Ctrl+Alt+End stands in for
 // Windows-reserved Ctrl+Alt+Delete while Omarchy is focused.
 
+var qemuExternalKeyboardHook atomic.Bool
+
 var (
-	qemuPid        atomic.Uint32   // current QEMU child, set by the supervisor
-	guestUp        atomic.Bool     // supervisor handshake succeeded for this launch
-	winDown        bool            // hook-thread only
-	printDown      bool            // hook-thread only
-	altTab         altTabForwarder // hook-thread only
-	ctrlAltEndSent bool            // hook-thread only
-	keyEvents      = make(chan forwardedKey, 64)
+	qemuPid        atomic.Uint32                // current QEMU child, set by the supervisor
+	guestUp        atomic.Bool                  // supervisor handshake succeeded for this launch
+	lwinKey        = routedKey{qcode: "meta_l"} // hook-thread only
+	rwinKey        = routedKey{qcode: "meta_r"} // hook-thread only
+	printKey       = routedKey{qcode: "print"}  // hook-thread only
+	altTab         altTabForwarder              // hook-thread only
+	ctrlAltEndSent bool                         // hook-thread only
+	hookChaining   bool                         // hook-thread only
+	keyEvents      = newForwardedKeyQueue()
 	pointerScripts = make(chan dragScript, 1)
 	// dragButtonHeld is set while a drag has pressed the tablet button and not
 	// yet released it; a reconnect releases it first. QMP drain goroutine only.
 	dragButtonHeld bool
 )
 
-// forwardKey hands a key state change to the QMP drain without blocking the
-// hook thread. Returns 1 so the host never sees the key.
-func forwardKey(state *bool, qcode string, down bool) uintptr {
-	if down != *state {
-		*state = down
-		select {
-		case keyEvents <- forwardedKey{qcode: qcode, down: down}:
-		default:
-		}
-	}
-	return 1
-}
+const (
+	// rehookInterval paces the keyboard rehook in runWinKeyHook.
+	rehookInterval = 800 * time.Millisecond
+)
 
-// sendKeys hands key changes to the QMP drain without blocking, dropping any
-// that do not fit, like forwardKey.
+// Only a live drain for this QEMU process accepts input. Boot and reconnect
+// input is discarded rather than replayed after the connection comes back.
 func sendKeys(keys []forwardedKey) {
-	for _, key := range keys {
-		select {
-		case keyEvents <- key:
-		default:
-		}
+	if guestUp.Load() {
+		keyEvents.add(qemuPid.Load(), keys, false)
 	}
 }
 
 func queueKeys(keys ...forwardedKey) bool {
-	if len(keyEvents)+len(keys) > cap(keyEvents) {
-		return false
-	}
-	for _, key := range keys {
-		keyEvents <- key
-	}
-	return true
+	return guestUp.Load() && keyEvents.add(qemuPid.Load(), keys, true)
 }
 
-// releaseKey lets go of a forwarded key in the guest when focus leaves mid-press.
-func releaseKey(state *bool, qcode string) {
-	if *state {
-		*state = false
-		select {
-		case keyEvents <- forwardedKey{qcode: qcode, down: false}:
-		default:
-		}
+// routedKeyFor is the routing state of a key the hook sends to the side
+// that saw it go down, or nil.
+func routedKeyFor(vk uint32) *routedKey {
+	switch vk {
+	case vkLwin:
+		return &lwinKey
+	case vkRwin:
+		return &rwinKey
+	case vkSnapshot:
+		return &printKey
 	}
+	return nil
 }
 
 func isAltVK(vk uint32) bool {
@@ -93,7 +83,9 @@ func isCtrlOrAltVK(vk uint32) bool {
 }
 
 func hookCallback(nCode, wParam, lParam uintptr) uintptr {
-	if int32(nCode) >= 0 {
+	// While runWinKeyHook swaps hooks, both are briefly installed and this
+	// one's CallNextHookEx can reach the other. Route each event once.
+	if int32(nCode) >= 0 && !hookChaining {
 		vk := *(*uint32)(unsafe.Pointer(lParam))  // KBDLLHOOKSTRUCT.vkCode
 		if vk == vkF4 && wParam == wmSyskeydown { // Alt+F4 on the VM window
 			if pid := qemuPid.Load(); pid != 0 && foregroundPid() == pid {
@@ -101,26 +93,20 @@ func hookCallback(nCode, wParam, lParam uintptr) uintptr {
 				return 1 // swallow; the close guard takes it from here
 			}
 		}
-		if vk == vkLwin || vk == vkRwin {
+		if key := routedKeyFor(vk); key != nil {
 			down := wParam == wmKeydown || wParam == wmSyskeydown
 			pid := qemuPid.Load()
-			if pid != 0 && foregroundPid() == pid {
-				return forwardKey(&winDown, "meta_l", down) // swallow on host; QMP delivers it to the guest
+			held, _, _ := procGetAsyncKeyState.Call(uintptr(vk)) // state before this change
+			keys, swallow := key.route(pid != 0 && foregroundPid() == pid, held&0x8000 != 0, down)
+			sendKeys(keys)
+			if swallow {
+				return 1 // QMP delivers it to the guest
 			}
-			releaseKey(&winDown, "meta_l") // focus left mid-press: release in the guest
-			// VM not focused: approve the key and SKIP the rest of the hook
-			// chain. QEMU installs its own LL hook on every grab which
-			// swallows Win even when unfocused; returning 0 without
-			// CallNextHookEx bypasses it.
-			return 0
-		}
-		if vk == vkSnapshot {
-			down := wParam == wmKeydown || wParam == wmSyskeydown
-			pid := qemuPid.Load()
-			if pid != 0 && foregroundPid() == pid {
-				return forwardKey(&printDown, "print", down)
+			if vk != vkSnapshot && !qemuExternalKeyboardHook.Load() {
+				// Older runtimes still install SDL's reserved-key hook. Keep
+				// their host-owned Win presses out of that hook.
+				return 0
 			}
-			releaseKey(&printDown, "print")
 		}
 		// Windows consumes Alt+Tab before SDL can deliver the chord to the
 		// guest. Forward it while the VM has focus (see altTabForwarder),
@@ -152,7 +138,8 @@ func hookCallback(nCode, wParam, lParam uintptr) uintptr {
 			focused := pid != 0 && foregroundPid() == pid
 			control, _, _ := procGetAsyncKeyState.Call(vkControl)
 			menu, _, _ := procGetAsyncKeyState.Call(vkMenu)
-			switch classifyCtrlAltEnd(focused, control&0x8000 != 0, menu&0x8000 != 0, ctrlAltEndSent, down) {
+			rightAlt, _, _ := procGetAsyncKeyState.Call(0xA5)
+			switch classifyCtrlAltEnd(focused, control&0x8000 != 0, menu&0x8000 != 0, rightAlt&0x8000 != 0, ctrlAltEndSent, down) {
 			case ctrlAltEndSend:
 				ctrlAltEndSent = queueKeys(
 					forwardedKey{qcode: "ctrl", down: true},
@@ -171,13 +158,17 @@ func hookCallback(nCode, wParam, lParam uintptr) uintptr {
 			}
 		}
 	}
+	chaining := hookChaining
+	hookChaining = true
 	r, _, _ := procCallNextHookEx.Call(0, nCode, wParam, lParam)
+	hookChaining = chaining
 	return r
 }
 
 // runWinKeyHook owns the hook and its message pump. LL hooks run newest-first
-// and QEMU re-installs its own on every grab toggle, so the hook is torn down
-// and re-installed every ~800ms to stay at the front of the chain.
+// and QEMU re-installs its own on every grab toggle, so the keyboard hook is
+// re-installed every rehookInterval to stay at the front of the chain. The new
+// hook goes in before the old one comes out, so no key event slips past both.
 func runWinKeyHook() {
 	runtime.LockOSThread()
 	cb := syscall.NewCallback(hookCallback)
@@ -200,20 +191,27 @@ func runWinKeyHook() {
 	// The VM window events share this pump too.
 	installQemuWindowHooks()
 	var m msgStruct
+	rehooked := time.Now()
 	for {
-		procMsgWaitForMultipleObj.Call(0, 0, 0, 800, qsAllinput)
+		// Every key event wakes this wait, so the rehook is paced by time.
+		wait := max(rehookInterval-time.Since(rehooked), 0)
+		procMsgWaitForMultipleObj.Call(0, 0, 0, uintptr(wait.Milliseconds()), qsAllinput)
 		for {
 			r, _, _ := procPeekMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0, pmRemove)
 			if r == 0 {
 				break
 			}
 		}
-		procUnhookWindowsHookEx.Call(h)
-		h = install()
-		if h == 0 {
-			time.Sleep(500 * time.Millisecond)
-			h = install()
+		if time.Since(rehooked) < rehookInterval {
+			continue
 		}
+		rehooked = time.Now()
+		if next := install(); next != 0 {
+			procUnhookWindowsHookEx.Call(h)
+			h = next
+		}
+		// On failure the old hook stays in, behind QEMU's at worst; retry
+		// on the next interval.
 	}
 }
 
@@ -222,56 +220,128 @@ func runWinKeyHook() {
 // supervisor's handshake succeeds: a QMP connection during early guest boot
 // reliably wedges QEMU's main loop under WHPX (see docs/FINDINGS.md).
 func runWinKeyQmp() {
+	delivered := make(deliveredKeys)
 	for {
 		if !guestUp.Load() {
 			time.Sleep(time.Second)
 			continue
 		}
+		pid := qemuPid.Load()
 		c := qmpConnect(qmpFwdPort, 8*time.Second)
 		if c == nil {
 			time.Sleep(2 * time.Second)
 			continue
 		}
+		if !guestUp.Load() || pid == 0 || qemuPid.Load() != pid {
+			c.close()
+			continue
+		}
 		logf("winkey: QMP connected on %d", qmpFwdPort)
 		if dragButtonHeld {
 			// The last connection broke mid-drag; let go of the button.
-			if c.writeLine(`{"execute":"input-send-event","arguments":{"events":[{"type":"btn","data":{"down":false,"button":"left"}}]}}`) == nil {
-				dragButtonHeld = false
+			if err := c.writeLine(`{"execute":"input-send-event","arguments":{"events":[{"type":"btn","data":{"down":false,"button":"left"}}]}}`); err != nil {
+				c.close()
+				time.Sleep(2 * time.Second)
+				continue
 			}
+			dragButtonHeld = false
 		}
+
+		releaseKeys := func() error {
+			for qcode := range delivered {
+				if err := c.writeLine(keyCommand(forwardedKey{qcode: qcode})); err != nil {
+					return err
+				}
+				delete(delivered, qcode)
+			}
+			return nil
+		}
+		// Reconcile even an ambiguous final write on the previous connection.
+		if err := releaseKeys(); err != nil {
+			c.close()
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		keyEvents.session(pid)
 		lines := c.readLines()
+		var pointer pointerSequence
+		timer := time.NewTimer(time.Hour)
+		timer.Stop()
+		health := time.NewTicker(100 * time.Millisecond)
 	drain:
 		for {
+			if !guestUp.Load() || qemuPid.Load() != pid {
+				break
+			}
+			// Consume replies even under continuous input, so the reader keeps up.
 			select {
-			case key := <-keyEvents:
-				if key.qcode != "meta_l" && key.down {
-					logf("winkey: forwarded %s to the guest", key.qcode)
-				}
-				ev := fmt.Sprintf(`{"execute":"input-send-event","arguments":{"events":[{"type":"key","data":{"down":%t,"key":{"type":"qcode","data":%q}}}]}}`, key.down, key.qcode)
-				if err := c.writeLine(ev); err != nil {
+			case _, ok := <-lines:
+				if !ok {
 					break drain
 				}
-			case script := <-pointerScripts:
-				// A late script would press on a helper the guest gave up on.
+			default:
+			}
+			// One step per iteration keeps pointer timing independent of key load.
+			if step, ok := pointer.next(time.Now()); ok {
+				if step.button == 1 {
+					dragButtonHeld = true
+				}
+				if err := c.writeLine(pointerStepCommand(step)); err != nil {
+					break
+				}
+				if step.button >= 0 {
+					dragButtonHeld = step.button == 1
+				}
+			}
+			key, ok, reset := keyEvents.next()
+			if reset {
+				if err := releaseKeys(); err != nil {
+					break
+				}
+				continue
+			}
+			if ok {
+				if key.qcode != "meta_l" && key.qcode != "meta_r" && key.down {
+					logf("winkey: forwarded %s to the guest", key.qcode)
+				}
+				delivered.writing(key)
+				if err := c.writeLine(keyCommand(key)); err != nil {
+					break
+				}
+				delivered.written(key)
+				continue
+			}
+			var pointerTick <-chan time.Time
+			if len(pointer.steps) > 0 {
+				timer.Reset(max(time.Until(pointer.due), 0))
+				pointerTick = timer.C
+			}
+			// Leave a second script queued until the current drag has finished.
+			var scripts <-chan dragScript
+			if len(pointer.steps) == 0 {
+				scripts = pointerScripts
+			}
+			select {
+			case <-keyEvents.wake:
+			case <-pointerTick:
+			case <-health.C:
+			case script := <-scripts:
 				if time.Now().After(script.deadline) || !guestUp.Load() {
 					logf("file drop: skipped a drag that was no longer wanted")
 					break
 				}
-				for _, step := range script.steps {
-					if err := c.writeLine(pointerStepCommand(step)); err != nil {
-						break drain
-					}
-					if step.button >= 0 {
-						dragButtonHeld = step.button == 1
-					}
-					time.Sleep(step.pause)
-				}
+				pointer = pointerSequence{steps: script.steps, due: time.Now()}
 			case _, ok := <-lines:
 				if !ok {
 					break drain
 				}
 			}
+			timer.Stop()
 		}
+		health.Stop()
+		timer.Stop()
+		keyEvents.session(0)
+
 		c.close()
 		time.Sleep(2 * time.Second)
 	}
@@ -318,4 +388,8 @@ func runCursorReleaseGuard() {
 	for range ticker.C {
 		releaseQemuCursor()
 	}
+}
+
+func keyCommand(key forwardedKey) string {
+ return fmt.Sprintf(`{"execute":"input-send-event","arguments":{"events":[{"type":"key","data":{"down":%t,"key":{"type":"qcode","data":%q}}}]}}`, key.down, key.qcode)
 }

@@ -53,19 +53,19 @@ func linuxReclaimInfoFor(dir string) *linuxReclaimInfo {
 	}
 	a := theAgent.Load()
 	if a == nil {
-		return &linuxReclaimInfo{Status: "Omarchy is still starting. Reclaim becomes available once its desktop is up."}
+		return &linuxReclaimInfo{Status: uiText("reclaim.linux.omarchy_is_still_starting_reclaim_becomes_available_once")}
 	}
 	usage := ""
 	if used, err := platformAllocatedFileBytes(filepath.Join(dir, "vm", "disk.raw")); err == nil {
-		usage = "Omarchy's disk uses " + linuxGB(used) + " on this drive. "
+		usage = uiTextWith("reclaim.linux.omarchy_s_disk_uses_on_this_drive", map[string]string{"used": linuxGB(used)})
 	}
 	if a.reclaimInProgress() {
 		return &linuxReclaimInfo{Status: usage + a.reclaimStatus()}
 	}
 	if !a.connected() {
-		return &linuxReclaimInfo{Status: usage + "Omarchy's helper is not connected yet. Wait for the desktop, then try again."}
+		return &linuxReclaimInfo{Status: uiTextWith("reclaim.linux.omarchy_s_helper_is_not_connected_yet_wait", map[string]string{"usage": usage})}
 	}
-	status := usage + "Reclaim gives back space from files you deleted inside Omarchy."
+	status := uiTextWith("reclaim.linux.reclaim_gives_back_space_from_files_you_deleted", map[string]string{"usage": usage})
 	if previous := a.reclaimStatus(); strings.HasPrefix(previous, "Preparation") || strings.HasPrefix(previous, "Could not") {
 		status += " " + previous
 	}
@@ -74,13 +74,11 @@ func linuxReclaimInfoFor(dir string) *linuxReclaimInfo {
 
 // linuxReclaimPrompt says what a pass costs before it starts.
 func linuxReclaimPrompt(budgetMiB int64) string {
-	amount := "some of its free space"
+	amount := uiText("reclaim.linux.some_of_its_free_space")
 	if budgetMiB > 0 {
-		amount = "up to " + linuxGB(budgetMiB<<20) + " of its free space"
+		amount = uiTextWith("reclaim.linux.up_to_of_its_free_space", map[string]string{"budget_mi_b_20": linuxGB(budgetMiB << 20)})
 	}
-	return "Omarchy prepares " + amount + " in this pass. While it does, that space is in use on this drive, and at least 4 GB stays free. " +
-		"Keep Omarchy running until Try Omarchy says it is ready, then shut Omarchy down. Shutting down takes a little longer while the space is given back. " +
-		"Your files inside Omarchy are not changed. Run it again for another pass if you deleted a lot."
+	return uiTextWith("reclaim.linux.omarchy_prepares_in_this_pass_while_it_does", map[string]string{"amount": amount})
 }
 
 // runLinuxReclaim confirms and starts a pass in an open window. It returns
@@ -94,8 +92,8 @@ func runLinuxReclaim(ctx context.Context, w *linuxSetupWindow, dir string) strin
 	if free, err := reclaimFreeBytes(dir); err == nil {
 		budget = reclaimBudgetMiB(free)
 	}
-	answer, err := w.ask(ctx, linuxSetupState{Prompt: "choice", Title: "Give unused space back?",
-		Primary: "Prepare free space", Secondary: "Not now", Status: linuxReclaimPrompt(budget)})
+	answer, err := w.ask(ctx, linuxSetupState{Prompt: "choice", Title: uiText("reclaim.linux.give_unused_space_back"),
+		Primary: uiText("settings.linux.prepare_free_space"), Secondary: uiText("setup.share.no"), Status: linuxReclaimPrompt(budget)})
 	if err != nil || answer != "primary" {
 		return ""
 	}
@@ -119,7 +117,7 @@ func showLinuxReclaim(parent context.Context, dir string) {
 	}
 	defer w.stop()
 	if result := runLinuxReclaim(ctx, w, dir); result != "" {
-		w.ask(ctx, linuxSetupState{Prompt: "message", Title: "Reclaim disk space", Status: result})
+		w.ask(ctx, linuxSetupState{Prompt: "message", Title: uiText("reclaim.linux.reclaim_disk_space"), Status: result})
 	}
 }
 
@@ -144,10 +142,10 @@ func startLinuxReclaimFromSettings(dir string) *linuxReclaimInfo {
 // Preparation can take minutes, so they should not have to keep checking.
 func linuxReclaimFinished(ok bool) {
 	if ok {
-		tellLinuxUser("reclaim", "Ready to give space back", "Shut down Omarchy to give its unused space back to this computer. Shutting down takes a little longer while that happens.")
+		tellLinuxUser("reclaim", uiText("reclaim.linux.ready_to_give_space_back"), uiText("reclaim.linux.shut_down_omarchy_to_give_its_unused_space"))
 		return
 	}
-	tellLinuxUser("reclaim", "Space was not prepared", "Omarchy could not prepare its free space. Nothing changed. If it keeps failing, create diagnostics from Backup and recovery.")
+	tellLinuxUser("reclaim", uiText("reclaim.linux.space_was_not_prepared"), uiText("reclaim.linux.omarchy_could_not_prepare_its_free_space_nothing"))
 }
 
 // linuxCanPunchHoles checks that the folder holding disk.raw can give blocks
@@ -196,8 +194,8 @@ func compactLinuxDisk(cfg *config) {
 		w = startLinuxWindow(func() {})
 		defer w.stop()
 	}
-	const status = "Giving unused space back..."
-	detail := "Omarchy has shut down. Try Omarchy is returning the space it prepared. This can take a minute."
+	var status = uiText("reclaim.linux.giving_unused_space_back")
+	detail := uiText("reclaim.linux.omarchy_has_shut_down_try_omarchy_is_returning")
 	var last time.Time
 	report := func(done, total int64) {
 		if w == nil || (time.Since(last) < 100*time.Millisecond && done < total) {
@@ -213,16 +211,16 @@ func compactLinuxDisk(cfg *config) {
 	reclaimed, err := compactDisk(cfg.disk, report)
 	if err != nil {
 		logf("reclaim: compaction failed after %s: %v", formatGiB(reclaimed), err)
-		tellLinuxUser("reclaim", "Space was not given back", "Omarchy shut down normally and your files are intact, but Try Omarchy could not return the prepared space: "+err.Error())
+		tellLinuxUser("reclaim", uiText("reclaim.linux.space_was_not_given_back"), uiTextWith("reclaim.linux.omarchy_shut_down_normally_and_your_files_are", map[string]string{"error": err.Error()}))
 		return
 	}
 	after, afterErr := platformAllocatedFileBytes(cfg.disk)
 	logf("reclaim: %s of zero blocks turned back into holes", formatGiB(reclaimed))
 	if beforeErr != nil || afterErr != nil {
-		tellLinuxUser("reclaim", "Space given back", "Omarchy shut down and its unused space was returned.")
+		tellLinuxUser("reclaim", uiText("reclaim.linux.space_given_back"), uiText("reclaim.linux.omarchy_shut_down_and_its_unused_space_was"))
 		return
 	}
-	tellLinuxUser("reclaim", "Space given back", "Omarchy's disk now uses "+linuxGB(after)+" on this drive, "+linuxGB(max(before-after, 0))+" less than before.")
+	tellLinuxUser("reclaim", uiText("reclaim.linux.space_given_back"), uiTextWith("reclaim.linux.omarchy_s_disk_now_uses_on_this_drive", map[string]string{"after": linuxGB(after), "max_before_after_0": linuxGB(max(before-after, 0))}))
 }
 
 // sendLinuxReclaim asks a running launcher to start a pass. It is the

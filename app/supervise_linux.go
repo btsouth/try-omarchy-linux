@@ -35,7 +35,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 		logf("booting - %s (attempt %d)", mode, attempt)
 		controlDir, err := prepareQMPControl()
 		if err != nil {
-			fatalf("Cannot prepare private VM controls: %v", err)
+			fatal(uiTextWith("shutdown.linux.cannot_prepare_private_vm_controls_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		cfg.qmpDir = controlDir
 		// A startup fallback relaunch keeps forwards Settings changed live.
@@ -52,7 +52,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 			proc.Stdout, proc.Stderr = stderr, stderr
 		}
 		if err := proc.Start(); err != nil {
-			fatalf("QEMU failed to start: %v", err)
+			fatal(uiTextWith("shutdown.linux.qemu_failed_to_start_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		exited := make(chan error, 1)
 		vmDone := make(chan struct{})
@@ -92,7 +92,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 					}
 				case linuxDesktopTimedOut:
 					desktopTimedOut = true
-					getUI().showDesktopTimeout("Omarchy is running. Finish account setup or sign in in the Omarchy window. If the guest is stuck, use Stop Omarchy and try again; diagnostics are in the data folder. The launcher closes when the desktop is ready.")
+					getUI().showDesktopTimeout(uiText("shutdown.linux.omarchy_is_running_finish_account_setup_or_sign"))
 				case linuxDesktopCancelled:
 					confirmation.close()
 					requestLinuxShutdown(qmp, proc, &initialInterrupts)
@@ -107,7 +107,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 					if stderr != nil {
 						stderr.Close()
 					}
-					fatalf("Omarchy stopped before its desktop became ready. Check %s for the VM error and try again.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+					fatal(uiTextWith("shutdown.linux.omarchy_stopped_before_its_desktop_became_ready_check", map[string]string{"error": filepath.Join(cfg.vmDir, "qemu-stderr.log")}))
 				}
 			} else if initialInterrupts == 0 {
 				getUI().finish()
@@ -124,7 +124,7 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 			logf("QEMU did not answer on its control socket - stopping it")
 			proc.Process.Kill()
 			<-exited
-			fatalf("QEMU did not start answering - see %s.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+			fatal(uiTextWith("shutdown.linux.qemu_did_not_start_answering_see_s", map[string]string{"error": filepath.Join(cfg.vmDir, "qemu-stderr.log")}))
 		}
 		if stderr != nil {
 			stderr.Close()
@@ -133,10 +133,10 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 			logf("QEMU startup failure (attempt %d, %s):\n%s", attempt, mode, detail)
 		}
 		if !linuxStartupFallback(cfg) {
-			fatalf("QEMU exited at startup - see %s.", filepath.Join(cfg.vmDir, "qemu-stderr.log"))
+			fatal(uiTextWith("shutdown.linux.qemu_exited_at_startup_see_s", map[string]string{"error": filepath.Join(cfg.vmDir, "qemu-stderr.log")}))
 		}
 	}
-	fatalf("QEMU failed to come up after %d attempts.", maxLaunchAttempts)
+	fatal(uiTextWith("shutdown.linux.qemu_failed_to_come_up_after_d_attempts", map[string]string{"count": fmt.Sprintf("%d", maxLaunchAttempts)}))
 	return nil
 }
 
@@ -207,7 +207,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 		requestLinuxShutdown(qmp, proc, &interrupts)
 	}
 	if getUI().window == nil && interrupts == 0 {
-		getUI().setStatus("Omarchy is running. Close its window, shut it down from its own menu, or press Ctrl+C here.")
+		getUI().setStatus("%s", uiText("shutdown.linux.omarchy_is_running_close_its_window_shut_it"))
 	}
 	reason := ""
 	ctx, cancel := context.WithCancel(context.Background())
@@ -256,10 +256,10 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 				reason = "QEMU exited"
 			}
 			if err != nil && interrupts == 0 {
-				return fmt.Errorf("Omarchy stopped unexpectedly. Check %s for the VM error, or create diagnostics from Backup and recovery.\n\nQEMU: %w", filepath.Join(cfg.vmDir, "qemu-stderr.log"), err)
+				return uiError(uiTextWith("shutdown.linux.omarchy_stopped_unexpectedly_check_for_the_vm_error", map[string]string{"path": filepath.Join(cfg.vmDir, "qemu-stderr.log"), "error": fmt.Sprint(err)}), err)
 			}
 			logf("guest stopped (%s)", reason)
-			getUI().setStatus("Omarchy stopped.")
+			getUI().setStatus("%s", uiText("shutdown.linux.omarchy_stopped"))
 			return nil
 		case line, ok := <-lines:
 			if !ok {
@@ -316,7 +316,7 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			if cfg.useGpu && !graphicsWarningShown && linuxVirglDesktopError(cfg.vmDir) {
 				graphicsWarningShown = true
 				logf("graphics: virgl reported a guest display error; offering software rendering recovery")
-				showLinuxRuntimeError("Graphics error", "The VM reported a graphics error. If Omarchy is black or frozen, save your work if possible, then close its window and confirm shutdown. Open Try Omarchy again, choose Settings, select Software rendering, and launch your saved VM. Your files stay in place.")
+				showLinuxRuntimeError(uiText("shutdown.linux.graphics_error"), uiText("shutdown.linux.the_vm_reported_a_graphics_error_if_omarchy"))
 			}
 		case <-shutdownRetry.C:
 			if interrupts == 1 && guestReady.Load() {
@@ -481,6 +481,6 @@ func confirmLinuxForceStop(parent context.Context) <-chan bool {
 }
 
 func linuxForceStopState() linuxSetupState {
-	return linuxSetupState{Prompt: "choice", Title: "Force stop Omarchy?", Primary: "Keep waiting", Secondary: "Force stop", Destructive: true,
-		Status: "Omarchy has not shut down yet. Force stopping turns off the VM immediately. Unsaved work may be lost."}
+	return linuxSetupState{Prompt: "choice", Title: uiText("shutdown.linux.force_stop_omarchy"), Primary: uiText("shutdown.linux.keep_waiting"), Secondary: uiText("shutdown.linux.force_stop"), Destructive: true,
+		Status: uiText("shutdown.linux.omarchy_has_not_shut_down_yet_force_stopping")}
 }

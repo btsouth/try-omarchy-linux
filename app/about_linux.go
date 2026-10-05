@@ -16,38 +16,38 @@ func linuxVersionLabel(version string) string {
 // the app does to their VM, and how updates arrive.
 func linuxAboutState() linuxSetupState {
 	return linuxSetupState{Prompt: "about", Version: linuxAppVersion,
-		Status: "Try Omarchy for Linux " + linuxVersionLabel(linuxAppVersion) + " runs Omarchy in a virtual machine on this computer.",
+		Status: uiTextWith("about.linux.try_omarchy_for_linux_runs_omarchy_in_a", map[string]string{"value": linuxVersionLabel(linuxAppVersion)}),
 		Sections: []linuxSection{
-			{Heading: "Keyboard, mouse and window", Rows: []linuxRow{
-				{Title: "Get your keyboard back", Detail: "While the Omarchy window is focused it takes your keyboard, including the Super key. Press Ctrl+Alt+G, or click another window, to use your desktop's shortcuts again. Click the Omarchy window to give it the keyboard back."},
-				{Title: "If Super opens your desktop's overview", Detail: "Your desktop asks once whether Try Omarchy may use its shortcuts. If that was refused, allow it again in your desktop's settings; on GNOME, turn on Inhibit Shortcuts in Settings, Apps, Try Omarchy."},
-				{Title: "Fullscreen", Detail: "Press Ctrl+Alt+F to make the Omarchy window fullscreen, and again to leave. Settings can open it fullscreen every time."},
-				{Title: "Omarchy's own menu", Detail: "Inside Omarchy, Super+Space opens its menu and Super+K shows every key binding."},
+			{Heading: uiText("about.linux.keyboard_mouse_and_window"), Rows: []linuxRow{
+				{Title: uiText("about.linux.get_your_keyboard_back"), Detail: uiText("about.linux.while_the_omarchy_window_is_focused_it_takes")},
+				{Title: uiText("about.linux.if_super_opens_your_desktop_s_overview"), Detail: uiText("about.linux.your_desktop_asks_once_whether_try_omarchy_may")},
+				{Title: uiText("about.linux.fullscreen"), Detail: uiText("about.linux.press_ctrl_alt_f_to_make_the_omarchy")},
+				{Title: uiText("about.linux.omarchy_s_own_menu"), Detail: uiText("about.linux.inside_omarchy_super_space_opens_its_menu_and")},
 			}},
-			{Heading: "Files", Rows: []linuxRow{
-				{Title: "Copy, paste and drop", Detail: "Text, images and files move both ways through the clipboard, and dropping files on the window sends them to Omarchy. On GNOME, clipboard sharing asks your permission once."},
-				{Title: "A shared folder", Detail: "Settings can share one folder with Omarchy, where it appears as /mnt/host. Omarchy can change what is in it. Nothing else on your computer is visible to Omarchy."},
-				{Title: "Disk space", Detail: "Deleting files inside Omarchy does not shrink its disk on this drive. While Omarchy runs, choose Prepare free space in Settings or Reclaim disk space in the tray, then shut Omarchy down when it is ready. The space comes back during shutdown."},
+			{Heading: uiText("about.linux.files"), Rows: []linuxRow{
+				{Title: uiText("about.linux.copy_paste_and_drop"), Detail: uiText("about.linux.text_images_and_files_move_both_ways_through")},
+				{Title: uiText("about.linux.a_shared_folder"), Detail: uiText("about.linux.settings_can_share_one_folder_with_omarchy_where")},
+				{Title: uiText("settings.linux.disk_space"), Detail: uiText("about.linux.deleting_files_inside_omarchy_does_not_shrink_its")},
 			}},
-			{Heading: "Settings and devices", Rows: []linuxRow{
-				{Title: "Resources", Detail: "Balanced leaves room for your Linux desktop. Maximum performance uses more available resources. Manual lets you tune memory and processors. Changes apply on the next VM launch."},
-				{Title: "When changes apply", Detail: "Audio devices and local port forwards can change when you save during a running session. Camera and microphone access, shared folders, clipboard sharing, disk, display, keyboard and SSH settings need a shutdown and launch. A guest reboot does not apply them. Startup behavior applies the next time you open Try Omarchy."},
-				{Title: "If Save fails", Detail: "Settings identifies any groups already saved and keeps your remaining edits. Fix the folder's permissions or free space, then Save again. If a live audio switch fails, the saved choices remain available for the next launch."},
+			{Heading: uiText("about.linux.settings_and_devices"), Rows: []linuxRow{
+				{Title: uiText("settings.section.resources"), Detail: uiText("about.linux.balanced_leaves_room_for_your_linux_desktop_maximum")},
+				{Title: uiText("about.linux.when_changes_apply"), Detail: uiText("about.linux.audio_devices_and_local_port_forwards_can_change")},
+				{Title: uiText("about.linux.if_save_fails"), Detail: uiText("about.linux.settings_identifies_any_groups_already_saved_and_keeps")},
 			}},
-			{Heading: "Removing the app and your VM", Rows: []linuxRow{
-				{Title: "Uninstalling the app", Detail: "Your VM stays if you keep the app's data: choose Keep under App Settings & Data in Software, or use flatpak uninstall without --delete-data. Choosing Delete also removes a VM stored in the app's own storage. A VM in a folder you chose is never touched."},
-				{Title: "Deleting a VM", Detail: "Delete this VM, in the menu on the home screen, removes only the VM in the app's own storage, with its snapshots. To delete a folder you chose, remove it in your file manager. Backups are ordinary .zip files; delete them yourself when you no longer need them."},
-				{Title: "Snapshots", Detail: "Backup and recovery, Snapshots saves the VM inside its folder so you can roll back to that point or restore it as a separate copy. Rolling back keeps the state you left until you remove it."},
-				{Title: "Coming back", Detail: "After reinstalling, your VM opens as before. If you deleted the app's data, choose Use existing data folder and pick the folder that holds your VM."},
+			{Heading: uiText("about.linux.removing_the_app_and_your_vm"), Rows: []linuxRow{
+				{Title: uiText("about.linux.uninstalling_the_app"), Detail: uiText("about.linux.your_vm_stays_if_you_keep_the_app")},
+				{Title: uiText("about.linux.deleting_a_vm"), Detail: uiText("about.linux.delete_this_vm_in_the_menu_on_the")},
+				{Title: uiText("launcher.linux.snapshots"), Detail: uiText("about.linux.backup_and_recovery_snapshots_saves_the_vm_inside")},
+				{Title: uiText("about.linux.coming_back"), Detail: uiText("about.linux.after_reinstalling_your_vm_opens_as_before_if")},
 			}},
-			{Heading: "Updates", Rows: []linuxRow{
-				{Title: "The app", Detail: "Try Omarchy updates through Software or flatpak update, like other Flatpak apps."},
-				{Title: "Omarchy's system files", Detail: "A new app version can bring newer system files. Try Omarchy downloads them at the next launch, keeps your files, and goes back to the old ones if the new ones do not start. Updates inside Omarchy (Super+Space, then Update) are separate."},
+			{Heading: uiText("about.linux.updates"), Rows: []linuxRow{
+				{Title: uiText("about.linux.the_app"), Detail: uiText("about.linux.try_omarchy_updates_through_software_or_flatpak_update")},
+				{Title: uiText("about.linux.omarchy_s_system_files"), Detail: uiText("about.linux.a_new_app_version_can_bring_newer_system")},
 			}},
-			{Heading: "This version", Rows: []linuxRow{
-				{Title: "Try Omarchy", Detail: linuxVersionLabel(linuxAppVersion)},
-				{Title: "Omarchy system files", Detail: releaseVersion(linuxGuestReleaseURL)},
-				{Title: "Help and reports", Detail: strings.TrimPrefix(linuxHelpPage[:strings.Index(linuxHelpPage, "/blob/")], "https://")},
+			{Heading: uiText("about.linux.this_version"), Rows: []linuxRow{
+				{Title: uiText("brand.name"), Detail: linuxVersionLabel(linuxAppVersion)},
+				{Title: uiText("about.linux.omarchy_system_files"), Detail: releaseVersion(linuxGuestReleaseURL)},
+				{Title: uiText("about.linux.help_and_reports"), Detail: strings.TrimPrefix(linuxHelpPage[:strings.Index(linuxHelpPage, "/blob/")], "https://")},
 			}},
 		}}
 }

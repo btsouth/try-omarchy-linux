@@ -62,7 +62,7 @@ func openLinuxFolderThroughPortal(path string) error {
 	}
 	defer dir.Close()
 	if info, err := dir.Stat(); err != nil || !info.IsDir() {
-		return fmt.Errorf("%s is not a folder", path)
+		return uiError(uiTextWith("tray.linux.is_not_a_folder", map[string]string{"path": path}), nil)
 	}
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
@@ -81,7 +81,7 @@ func openLinuxFolderThroughPortal(path string) error {
 	_, err = linuxPortalRequest(ctx, conn, signals, "org.freedesktop.portal.OpenURI.OpenFile",
 		"", dbus.UnixFD(dir.Fd()), map[string]dbus.Variant{"handle_token": dbus.MakeVariant(token)})
 	if errors.Is(err, errLinuxClipboardDenied) {
-		return errors.New("the desktop did not open it")
+		return errors.New(uiText("tray.linux.the_desktop_did_not_open_it"))
 	}
 	return err
 }
@@ -90,12 +90,12 @@ func openLinuxFolderThroughPortal(path string) error {
 // folder chosen in Settings since launch is shared only from the next launch.
 func openLinuxSharedFolder(share string) {
 	if share == "" {
-		tellLinuxUser("share", "No shared folder", "Omarchy was started without a shared folder. Choose one in Settings; it is shared the next time Omarchy starts.")
+		tellLinuxUser("share", uiText("tray.linux.no_shared_folder"), uiText("tray.linux.omarchy_was_started_without_a_shared_folder_choose"))
 		return
 	}
 	if err := linuxOpenFolder(share); err != nil {
 		logf("tray: open shared folder: %v", err)
-		tellLinuxUser("share", "Could not open the shared folder", "Try Omarchy could not open "+linuxSharedFolderDisplayPath(share)+": "+err.Error())
+		tellLinuxUser("share", uiText("tray.linux.could_not_open_the_shared_folder"), uiTextWith("tray.linux.try_omarchy_could_not_open", map[string]string{"path": linuxSharedFolderDisplayPath(share), "error": err.Error()}))
 	}
 }
 
@@ -111,10 +111,10 @@ func createLinuxDiagnostics(dir string) {
 	facts["time"] = time.Now().Format(time.RFC3339)
 	path, err := writeDiagnostics(dir, facts)
 	if err != nil {
-		tellLinuxUser("diagnostics", "Diagnostics failed", "Could not create diagnostics: "+err.Error())
+		tellLinuxUser("diagnostics", uiText("tray.linux.diagnostics_failed"), uiTextWith("tray.linux.could_not_create_diagnostics", map[string]string{"error": err.Error()}))
 		return
 	}
-	tellLinuxUser("diagnostics", "Diagnostics saved", "Saved to "+path+". Review the bundle before sharing it; logs can still contain local details.")
+	tellLinuxUser("diagnostics", uiText("tray.linux.diagnostics_saved"), uiTextWith("tray.linux.saved_to_review_the_bundle_before_sharing_it", map[string]string{"path": path}))
 }
 
 // showLinuxHelp opens the help and shortcuts page in its own window.
@@ -131,6 +131,6 @@ func showLinuxHelp(parent context.Context) {
 	}
 	defer w.stop()
 	state := linuxAboutState()
-	state.Primary = "Close"
+	state.Primary = uiText("launcher.close")
 	w.ask(ctx, state)
 }

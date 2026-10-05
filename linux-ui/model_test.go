@@ -126,7 +126,7 @@ func TestHostAppOffersLeaveOutAllowedAppsAndTellTwinsApart(t *testing.T) {
 		t.Fatalf("offers %+v", offers)
 	}
 	labels, offers = hostAppOffersFor(installed, installed)
-	if len(offers) != 0 || !reflect.DeepEqual(labels, []string{noHostAppsLabel}) {
+	if len(offers) != 0 || !reflect.DeepEqual(labels, []string{noHostAppsLabel()}) {
 		t.Fatalf("nothing left: %q %+v", labels, offers)
 	}
 	if kept := withoutHostApp(installed, "nemo.desktop"); len(kept) != 3 || kept[2].ID != "zed.desktop" {

@@ -139,12 +139,12 @@ func main() {
 	// desktop launch waits for an explicit Launch choice; CLI use stays direct.
 	runLifecycleListener()
 	if err := recoverLinuxMove(defaultLinuxDataDirectory()); err != nil {
-		fatalf("Could not finish moving the Omarchy data folder: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_finish_moving_the_omarchy_data_folder", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if explicitFlags["dir"] {
 		resolved, err := resolveLinuxMovedDirectory(defaultLinuxDataDirectory(), cfg.dir)
 		if err != nil {
-			fatalf("Cannot read the data folder move record: %v", err)
+			fatal(uiTextWith("fatal.linux.cannot_read_the_data_folder_move_record_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		cfg.dir = resolved
 	}
@@ -160,7 +160,7 @@ func main() {
 	selectedRelease, selectedSumsSHA256, err := selectLinuxGuestRelease(*release, *sumsSHA256,
 		explicitFlags["release"], explicitFlags["sums-sha256"])
 	if err != nil {
-		fatalf("Cannot select the Linux Omarchy image: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_select_the_linux_omarchy_image_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 
 	if err := checkKVM(); err != nil {
@@ -168,7 +168,7 @@ func main() {
 	}
 	qemu, err := exec.LookPath(cfg.qemu)
 	if err != nil {
-		fatalf("Cannot find QEMU (%s): %v", cfg.qemu, err)
+		fatal(uiTextWith("fatal.linux.cannot_find_qemu_s_v", map[string]string{"qemu": cfg.qemu, "error": fmt.Sprintf("%v", err)}))
 	}
 	cfg.qemu = qemu
 	cfg.supportsSharing = true
@@ -179,7 +179,7 @@ func main() {
 	}
 	selected, proceed, err := resolveLinuxDataDirectory(defaultLinuxDataDirectory(), cfg.dir, explicitFlags["dir"], chooser)
 	if err != nil {
-		fatalf("Cannot select the data folder: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_select_the_data_folder_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if !proceed {
 		return
@@ -189,7 +189,7 @@ func main() {
 		noteLinuxLocationHint(defaultLinuxDataDirectory(), selected)
 	}
 	if cfg.dir, err = filepath.Abs(cfg.dir); err != nil {
-		fatalf("Cannot resolve the data directory: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_resolve_the_data_directory_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	cfg.hostDir = cfg.dir
 	cfg.guestDir = filepath.Join(cfg.dir, "guest")
@@ -200,10 +200,10 @@ func main() {
 	// An interrupted roll back can have moved vm aside. Finish or undo it
 	// before anything creates or reads the VM's files.
 	if err := recoverLinuxSnapshots(cfg.dir); err != nil {
-		fatalf("Could not finish an interrupted snapshot operation: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_finish_an_interrupted_snapshot_operation_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if err := os.MkdirAll(cfg.vmDir, 0o700); err != nil {
-		fatalf("Could not create the Omarchy data directory: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_create_the_omarchy_data_directory_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if shellLog, _ := os.OpenFile(filepath.Join(cfg.vmDir, "shell.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); shellLog != nil {
 		openLog(shellLog)
@@ -217,10 +217,10 @@ func main() {
 	}
 
 	if cfg.desktop, err = loadDesktopPreferences(cfg.dir); err != nil {
-		fatalf("Cannot read device and update preferences: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_read_device_and_update_preferences_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if cfg.audioDevices, err = loadAudioPreferences(cfg.dir); err != nil {
-		fatalf("Cannot read audio preferences: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_read_audio_preferences_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if explicitFlags["audio-output"] {
 		cfg.audioDevices.Output = *audioOutput
@@ -232,11 +232,11 @@ func main() {
 		cfg.desktop.MicrophoneDisabled = !*microphone
 	}
 	if err := cfg.audioDevices.validate(); err != nil {
-		fatalf("Cannot use audio devices: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_use_audio_devices_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	experience, err := loadLinuxExperiencePreferences(cfg.dir)
 	if err != nil {
-		fatalf("Cannot read display and keyboard preferences: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_read_display_and_keyboard_preferences_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if !explicitFlags["scale"] {
 		*scaleFlag = experience.Scale
@@ -249,14 +249,14 @@ func main() {
 	}
 	userSettings, err := loadSettings(settingsPath(cfg.dir))
 	if err != nil {
-		fatalf("Cannot read its settings: %v\n\nFix or delete %s and try again.", err, settingsPath(cfg.dir))
+		fatal(uiTextWith("fatal.linux.cannot_read_its_settings_v_fix_or_delete", map[string]string{"error": fmt.Sprintf("%v", err), "path": settingsPath(cfg.dir)}))
 	}
 	if err := applySettings(cfg, userSettings, explicitFlags, &forwards, sshKeyPath); err != nil {
-		fatalf("Cannot use its settings: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_use_its_settings_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	resourcePrefs, err := loadResourcePreferences(cfg.dir)
 	if err != nil {
-		fatalf("Cannot read resource preferences: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_read_resource_preferences_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if explicitFlags["resource-profile"] {
 		resourcePrefs.Profile = *resourceProfileFlag
@@ -270,12 +270,12 @@ func main() {
 		}
 	}
 	if cfg.memOverrideMiB != 0 && (cfg.memOverrideMiB < minimumGuestMemoryMiB || cfg.memOverrideMiB > maximumGuestMemoryMiB) {
-		fatalf("-memory must be between %d and %d MiB.", minimumGuestMemoryMiB, maximumGuestMemoryMiB)
+		fatal(uiTextWith("fatal.linux.memory_must_be_between_d_and_d_mib", map[string]string{"minimum": fmt.Sprintf("%d", minimumGuestMemoryMiB), "maximum": fmt.Sprintf("%d", maximumGuestMemoryMiB)}))
 	}
 	if !explicitFlags["disk-size"] {
 		storage, err := loadStorageSettings(cfg.dir)
 		if err != nil {
-			fatalf("Cannot read storage preferences: %v", err)
+			fatal(uiTextWith("fatal.linux.cannot_read_storage_preferences_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 		}
 		cfg.diskGiB = storage.DiskGiB
 	}
@@ -301,7 +301,7 @@ func main() {
 		}
 	}
 	if err := chooseLinuxProvisionMode(cfg, explicitFlags["instant"], chooseAccount); err != nil {
-		fatalf("Cannot select the account setup: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_select_the_account_setup_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	// A shared folder is chosen in Settings. Asking at first setup put a third
 	// question in front of the desktop, so only -choose-share asks it here.
@@ -312,14 +312,14 @@ func main() {
 		}
 	}
 	if *chooseShare && chooseFolder == nil {
-		fatalf("Choosing a shared folder requires the setup window. Use -share with an accessible folder in terminal mode.")
+		fatal(uiText("fatal.linux.choosing_a_shared_folder_requires_the_setup_window"))
 	}
 	if err := configureLinuxSharing(cfg, &userSettings, explicitFlags["share"], *chooseShare, chooseFolder); err != nil {
-		fatalf("Cannot configure the shared folder: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_configure_the_shared_folder_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	if cfg.share != "" {
 		if cfg.share, err = validateLinuxSharedFolder(cfg.share, cfg.dir); err != nil {
-			fatalf("Cannot share %s: %v", cfg.share, err)
+			fatal(uiTextWith("fatal.linux.cannot_share_s_v", map[string]string{"path": cfg.share, "error": fmt.Sprintf("%v", err)}))
 		}
 	}
 	if err := checkSetupCancelled(); err != nil {
@@ -333,13 +333,13 @@ func main() {
 	}
 
 	if err := recoverLinuxGuestUpdate(cfg.dir, &selectedRelease, &selectedSumsSHA256); err != nil {
-		fatalf("Could not restore the previous Omarchy image after an interrupted update: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_restore_the_previous_omarchy_image_after", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	// A rolled-back VM first boots on the system files saved with it. A newer
 	// image, if this app pins one, is fetched on the launch after that.
 	var runtimeRelease, runtimeSums string
 	if pinned, err := pinCheckpointBoot(cfg.dir, explicitFlags, &selectedRelease, &selectedSumsSHA256, &runtimeRelease, &runtimeSums); err != nil {
-		fatalf("Could not prepare the snapshot you rolled back to: %v", err)
+		fatal(uiTextWith("fatal.linux.could_not_prepare_the_snapshot_you_rolled_back", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	} else if pinned {
 		logf("snapshots: first boot after roll back uses its saved system files (%s)", releaseVersion(selectedRelease))
 	}
@@ -348,11 +348,11 @@ func main() {
 	}
 	specData, err := os.ReadFile(filepath.Join(cfg.guestDir, "build-spec.json"))
 	if err != nil {
-		fatalf("Cannot read build-spec.json: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_read_build_spec_json_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	var spec buildSpec
 	if err := json.Unmarshal(specData, &spec); err != nil {
-		fatalf("Cannot parse build-spec.json: %v", err)
+		fatal(uiTextWith("fatal.linux.cannot_parse_build_spec_json_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 	cfg.guestPinch = guestAcceptsPinch(spec)
 	cfg.followHostTimeZone = strings.TrimSpace(*timeZoneFlag) != "keep" && guestAcceptsTimeZone(spec)
@@ -391,7 +391,7 @@ func main() {
 	allocation, err := planGuestResources(profile, host, cfg.useGpu, cfg.cpuOverride, cfg.memOverrideMiB,
 		explicitFlags["cpus"], explicitFlags["memory"])
 	if err != nil {
-		fatalf("Cannot allocate resources: %s", linuxResourceErrorText(err))
+		fatal(uiTextWith("fatal.linux.cannot_allocate_resources_s", map[string]string{"error": linuxResourceErrorText(err)}))
 	}
 	cfg.cpus, cfg.memMiB, cfg.hostTotalMiB = allocation.CPUs, allocation.MemoryMiB, host.TotalMiB
 	logf("resources: profile=%s, %d of %d logical processors, %d MiB guest RAM; host available=%d MiB, CPU sample known=%t busy=%.1f%%",
@@ -432,7 +432,7 @@ func main() {
 		}
 	}
 	if err := checkForwardBindings(cfg.forwards); err != nil {
-		fatalf("Could not prepare port forwarding:\n\n%v", err)
+		fatal(uiTextWith("fatal.linux.could_not_prepare_port_forwarding_v", map[string]string{"error": fmt.Sprintf("%v", err)}))
 	}
 
 	// The first interrupt asks the guest to shut down; a second one stops QEMU.

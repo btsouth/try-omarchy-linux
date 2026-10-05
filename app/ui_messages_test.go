@@ -183,8 +183,9 @@ func TestLauncherTextComesFromTheCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The Linux front end is English-only for now; its own files are
-		// not checked until their text moves to the catalog.
+		// Linux also catalogs screen text, but raw engineering status patterns
+		// still feed its friendly-status adapter. Its key coverage is checked
+		// separately, including the GTK module.
 		if linuxOnlySource(name, file) {
 			continue
 		}
@@ -266,11 +267,16 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gtkFiles, err := filepath.Glob("../linux-ui/*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, gtkFiles...)
 	used := map[string]bool{}
 	fset := token.NewFileSet()
 	for _, name := range files {
 		// ui_messages.go is the catalog itself.
-		if strings.HasSuffix(name, "_test.go") || name == "ui_messages.go" {
+		if strings.HasSuffix(name, "_test.go") || filepath.Base(name) == "ui_messages.go" {
 			continue
 		}
 		file, err := parser.ParseFile(fset, name, nil, 0)
@@ -283,7 +289,7 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 				return true
 			}
 			function, ok := call.Fun.(*ast.Ident)
-			if !ok || function.Name != "uiText" && function.Name != "uiTextWith" || len(call.Args) == 0 {
+			if !ok || function.Name != "uiText" && function.Name != "uiTextWith" && function.Name != "uiTemplate" || len(call.Args) == 0 {
 				return true
 			}
 			position := fset.Position(call.Pos())
@@ -299,6 +305,9 @@ func TestLauncherMessageKeysMatchTheCatalog(t *testing.T) {
 				return true
 			}
 			used[key] = true
+			if function.Name == "uiTemplate" {
+				return true
+			}
 			want := sortedPlaceholders(message)
 			if function.Name == "uiText" {
 				if len(want) > 0 {

@@ -157,7 +157,7 @@ func (u *progressUI) showFailure(f linuxFailure) (retry bool) {
 func (u *progressUI) showDesktopTimeout(message string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.state = linuxSetupState{Status: "Waiting for the Omarchy desktop", Detail: message, Booting: true}
+	u.state = linuxSetupState{Status: uiText("status.linux.waiting_for_the_omarchy_desktop"), Detail: message, Booting: true}
 	if u.window != nil {
 		u.window.update(u.state)
 	}

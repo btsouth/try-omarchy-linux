@@ -26,10 +26,10 @@ var linuxRollbackStage = regexp.MustCompile(`^\.snapshot-rollback-[0-9a-f]{32}$`
 // It runs before anything reads the VM's files, and needs Omarchy stopped.
 func recoverLinuxSnapshots(dir string) error {
 	if err := recoverCheckpointRollback(dir); err != nil {
-		return fmt.Errorf("finishing an interrupted roll back: %w", err)
+		return uiError(uiTextWith("snapshots.linux.finishing_an_interrupted_roll_back", map[string]string{"error": fmt.Sprint(err)}), err)
 	}
 	if err := (checkpointStore{installation: dir}).Recover(); err != nil {
-		return fmt.Errorf("clearing an interrupted snapshot: %w", err)
+		return uiError(uiTextWith("snapshots.linux.clearing_an_interrupted_snapshot", map[string]string{"error": fmt.Sprint(err)}), err)
 	}
 	// A roll back prepares the snapshot in a private folder, publishes it as
 	// its stage and only then writes its journal. With no journal, nothing
@@ -91,12 +91,12 @@ func linuxRollbackKept(dir string) []string {
 // Only recognized stage folders inside this VM's folder are removed.
 func removeLinuxRollbackKept(dir string) error {
 	if _, err := os.Lstat(filepath.Join(dir, checkpointRollbackFile)); err == nil {
-		return fmt.Errorf("a roll back is not finished; open Try Omarchy again before removing its kept state")
+		return uiError(uiText("snapshots.linux.a_roll_back_is_not_finished_open_try"), nil)
 	}
 	for _, data := range linuxRollbackKept(dir) {
 		stage := filepath.Dir(data)
 		if !linuxRollbackStage.MatchString(filepath.Base(stage)) || filepath.Dir(stage) != filepath.Clean(dir) {
-			return fmt.Errorf("unexpected kept state at %s", stage)
+			return uiError(uiTextWith("snapshots.linux.unexpected_kept_state_at", map[string]string{"stage": stage}), nil)
 		}
 		info, err := os.Lstat(stage)
 		if err != nil {
@@ -128,7 +128,7 @@ func removeLinuxSnapshotStore(dir string) error {
 	}
 	for _, entry := range entries {
 		if err := store.Delete(entry.ID); err != nil {
-			return fmt.Errorf("%s: %w", entry.Name, err)
+			return uiError(uiTextWith("snapshots.linux.message", map[string]string{"name": entry.Name, "error": fmt.Sprint(err)}), err)
 		}
 	}
 	// What remains is the store's lock file. Anything else is not ours.
@@ -141,7 +141,7 @@ func removeLinuxSnapshotStore(dir string) error {
 	}
 	for _, entry := range remaining {
 		if entry.Name() != "mutation.lock" || !entry.Type().IsRegular() {
-			return fmt.Errorf("%s contains files Try Omarchy did not create; nothing else was removed", store.path())
+			return uiError(uiTextWith("snapshots.linux.contains_files_try_omarchy_did_not_create_nothing", map[string]string{"path": store.path()}), nil)
 		}
 	}
 	if err := os.Remove(filepath.Join(store.path(), "mutation.lock")); err != nil && !os.IsNotExist(err) {
@@ -165,13 +165,13 @@ func linuxSnapshotsBytes(dir string) (count int, bytes int64) {
 
 func linuxSnapshotRows(entries []vmCheckpoint) []linuxRow {
 	if len(entries) == 0 {
-		return []linuxRow{{Title: "No snapshots yet", Detail: "Create one before trying something you may want to undo, such as a big update or a new setup."}}
+		return []linuxRow{{Title: uiText("snapshots.linux.no_snapshots_yet"), Detail: uiText("snapshots.linux.create_one_before_trying_something_you_may_want")}}
 	}
 	rows := make([]linuxRow, 0, len(entries))
 	for _, entry := range entries {
 		row := linuxRow{Title: entry.Name, Reply: "snapshot:" + entry.ID}
 		if entry.Problem != "" {
-			row.Detail, row.State = "This snapshot cannot be used: "+entry.Problem, "unavailable"
+			row.Detail, row.State = uiTextWith("snapshots.linux.this_snapshot_cannot_be_used", map[string]string{"problem": entry.Problem}), "unavailable"
 		} else {
 			row.Detail = entry.Created.Local().Format("Jan 2, 2006 at 15:04") + " · " + linuxGB(entry.ArchiveBytes)
 		}
@@ -187,12 +187,12 @@ func linuxDefaultSnapshotName(now time.Time) string {
 
 // linuxSnapshotSpaceNote says what one more snapshot costs before it starts.
 func linuxSnapshotSpaceNote(dir string) string {
-	note := "A snapshot is a compressed copy of this VM, kept in its folder."
+	note := uiText("snapshots.linux.a_snapshot_is_a_compressed_copy_of_this")
 	if used := linuxAllocatedBytes(filepath.Join(dir, "vm", "disk.raw")) + linuxTreeBytes(filepath.Join(dir, "guest")); used > 0 {
-		note += " This one can take up to " + linuxGB(used) + "."
+		note += uiTextWith("snapshots.linux.this_one_can_take_up_to", map[string]string{"used": linuxGB(used)})
 	}
 	if free := linuxFreeBytes(dir); free >= 0 {
-		note += " " + linuxGB(free) + " is free on this drive."
+		note += uiTextWith("snapshots.linux.is_free_on_this_drive", map[string]string{"free": linuxGB(free)})
 	}
 	return note
 }
@@ -202,11 +202,11 @@ func linuxSnapshotsResult(err error, success string) string {
 		return success
 	}
 	if errors.Is(err, errSetupCancelled) {
-		return "Cancelled. Your VM and its other snapshots were not changed."
+		return uiText("snapshots.linux.cancelled_your_vm_and_its_other_snapshots_were")
 	}
 	var space *insufficientSpaceError
 	if errors.As(err, &space) {
-		return fmt.Sprintf("This needs %s free on the drive; %s is available. Free some space, or remove an old snapshot, then try again. Your VM was not changed.", formatGiB(space.need), formatGiB(space.have))
+		return uiTextWith("snapshots.linux.this_needs_free_on_the_drive_is_available", map[string]string{"space_need": formatGiB(space.need), "space_have": formatGiB(space.have)})
 	}
 	return capitalizeFirst(err.Error()) + "."
 }
@@ -227,20 +227,20 @@ func runLinuxSnapshotOperation(w *linuxSetupWindow, status, label string, operat
 // returns to the recovery page with what happened.
 func showLinuxSnapshots(w *linuxSetupWindow, dir string) string {
 	if !completeInstallExists(dir, "disk.raw") {
-		return "There is no complete VM here to snapshot."
+		return uiText("snapshots.linux.there_is_no_complete_vm_here_to_snapshot")
 	}
 	store := checkpointStore{installation: dir}
 	status := ""
 	for {
 		entries, err := store.List()
 		if err != nil {
-			return "Could not read snapshots: " + err.Error()
+			return uiTextWith("snapshots.linux.could_not_read_snapshots", map[string]string{"error": err.Error()})
 		}
 		page := linuxSetupState{Prompt: "snapshots", Status: status,
 			Sections: []linuxSection{{Rows: linuxSnapshotRows(entries)}},
-			Actions:  []linuxAction{{Label: "Create snapshot", Reply: "create", Suggested: true}, {Label: "Back", Reply: "close"}}}
+			Actions:  []linuxAction{{Label: uiText("snapshots.create"), Reply: "create", Suggested: true}, {Label: uiText("launcher.linux.back"), Reply: "close"}}}
 		if status == "" {
-			page.Status = "A snapshot saves this VM as it is now, so you can return to that point later. Roll back replaces the VM with a snapshot; Restore as a copy makes a separate VM from it."
+			page.Status = uiText("snapshots.linux.a_snapshot_saves_this_vm_as_it_is")
 		}
 		answer, err := w.ask(context.Background(), page)
 		if err != nil || answer == "close" || answer == "back" {
@@ -258,7 +258,7 @@ func showLinuxSnapshots(w *linuxSetupWindow, dir string) string {
 				}
 			}
 			if selected == nil {
-				status = "That snapshot is no longer here."
+				status = uiText("snapshots.linux.that_snapshot_is_no_longer_here")
 				continue
 			}
 			status = showLinuxSnapshot(w, dir, *selected)
@@ -270,8 +270,8 @@ func createLinuxSnapshot(w *linuxSetupWindow, dir string) string {
 	name := linuxDefaultSnapshotName(time.Now())
 	notice := ""
 	for {
-		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "snapshot-name", Title: "Create a snapshot", Text: name, Notice: notice,
-			Status: "Name this snapshot so you can find it later. Shut down Omarchy first if it is running.\n\n" + linuxSnapshotSpaceNote(dir)})
+		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "snapshot-name", Title: uiText("launcher.linux.create_a_snapshot"), Text: name, Notice: notice,
+			Status: uiTextWith("snapshots.linux.name_this_snapshot_so_you_can_find_it", map[string]string{"linux_snapshot_space_note_dir": linuxSnapshotSpaceNote(dir)})})
 		if err != nil || answer == "cancel" {
 			return ""
 		}
@@ -279,30 +279,30 @@ func createLinuxSnapshot(w *linuxSetupWindow, dir string) string {
 		if validCheckpointName(name) {
 			break
 		}
-		notice = "Use a name of 1 to 80 characters, without line breaks."
+		notice = uiText("snapshots.linux.use_a_name_of_1_to_80_characters")
 	}
 	var created vmCheckpoint
-	err := runLinuxSnapshotOperation(w, "Creating snapshot...", "Saving snapshot", func(report backupProgress) error {
+	err := runLinuxSnapshotOperation(w, uiText("snapshots.linux.creating_snapshot"), uiText("snapshots.linux.saving_snapshot"), func(report backupProgress) error {
 		var err error
 		created, err = (checkpointStore{installation: dir}).Create(name, report)
 		return err
 	})
-	return linuxSnapshotsResult(err, "Snapshot \""+created.Name+"\" saved ("+linuxGB(created.ArchiveBytes)+").")
+	return linuxSnapshotsResult(err, uiTextWith("snapshots.linux.snapshot_saved", map[string]string{"created_name": created.Name, "created_archive_bytes": linuxGB(created.ArchiveBytes)}))
 }
 
 func showLinuxSnapshot(w *linuxSetupWindow, dir string, entry vmCheckpoint) string {
 	store := checkpointStore{installation: dir}
 	page := linuxSetupState{Prompt: "snapshot", Title: entry.Name}
 	if entry.Problem != "" {
-		page.Status = "This snapshot cannot be restored: " + entry.Problem + ". You can delete it to free its space."
-		page.Actions = []linuxAction{{Label: "Delete snapshot...", Reply: "delete", Destructive: true}, {Label: "Back", Reply: "close"}}
+		page.Status = uiTextWith("snapshots.linux.this_snapshot_cannot_be_restored_you_can_delete", map[string]string{"problem": entry.Problem})
+		page.Actions = []linuxAction{{Label: uiText("snapshots.linux.delete_snapshot"), Reply: "delete", Destructive: true}, {Label: uiText("launcher.linux.back"), Reply: "close"}}
 	} else {
 		page.Status = "Saved " + entry.Created.Local().Format("Monday, January 2, 2006 at 15:04") + ". Uses " + linuxGB(entry.ArchiveBytes) + " in this VM's folder."
 		page.Actions = []linuxAction{
-			{Label: "Restore as a copy", Reply: "restore", Suggested: true},
-			{Label: "Roll back to this snapshot...", Reply: "rollback", Destructive: true},
-			{Label: "Delete snapshot...", Reply: "delete"},
-			{Label: "Back", Reply: "close"},
+			{Label: uiText("launcher.linux.restore_as_a_copy"), Reply: "restore", Suggested: true},
+			{Label: uiText("snapshots.linux.roll_back_to_this_snapshot"), Reply: "rollback", Destructive: true},
+			{Label: uiText("snapshots.linux.delete_snapshot"), Reply: "delete"},
+			{Label: uiText("launcher.linux.back"), Reply: "close"},
 		}
 	}
 	answer, err := w.ask(context.Background(), page)
@@ -311,27 +311,26 @@ func showLinuxSnapshot(w *linuxSetupWindow, dir string, entry vmCheckpoint) stri
 	}
 	switch answer {
 	case "restore":
-		parent, err := w.ask(context.Background(), linuxSetupState{Prompt: "restore-parent", Status: "Choose the folder that will hold a new VM made from \"" + entry.Name + "\". This VM stays as it is."})
+		parent, err := w.ask(context.Background(), linuxSetupState{Prompt: "restore-parent", Status: uiTextWith("snapshots.linux.choose_the_folder_that_will_hold_a_new", map[string]string{"name": entry.Name})})
 		if err != nil || parent == "cancel" {
 			return ""
 		}
 		if !filepath.IsAbs(parent) {
-			return "Choose an absolute destination folder."
+			return uiText("recovery.linux.choose_an_absolute_destination_folder")
 		}
 		destination := filepath.Join(parent, "try-omarchy-snapshot-"+time.Now().Format("20060102-150405"))
-		err = runLinuxSnapshotOperation(w, "Restoring a copy...", "Restoring", func(report backupProgress) error {
+		err = runLinuxSnapshotOperation(w, uiText("recovery.linux.restoring_a_copy"), uiText("recovery.linux.restoring"), func(report backupProgress) error {
 			return store.Restore(entry.ID, destination, report)
 		})
-		return linuxSnapshotsResult(err, "Copy saved as "+filepath.Base(destination)+" in the folder you chose. On the home screen, choose Use existing data folder to open it. This VM was not changed.")
+		return linuxSnapshotsResult(err, uiTextWith("snapshots.linux.copy_saved_as_in_the_folder_you_chose", map[string]string{"path": filepath.Base(destination)}))
 	case "rollback":
-		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Roll back to \"" + entry.Name + "\"?", Primary: "Keep current state", Secondary: "Roll back", Destructive: true,
-			Status: "This replaces this VM's disk, Omarchy's system files and Try Omarchy's settings for it with the snapshot from " + entry.Created.Local().Format("Jan 2 at 15:04") + ". Everything changed inside Omarchy since then is set aside.\n\n" +
-				"The current state is kept in this VM's folder until you remove it from Backup and recovery, so nothing is lost yet. Shared folders and backups are not touched. Shut down Omarchy first if it is running."})
+		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiTextWith("snapshots.linux.roll_back_to", map[string]string{"name": entry.Name}), Primary: uiText("snapshots.linux.keep_current_state"), Secondary: uiText("snapshots.linux.roll_back"), Destructive: true,
+			Status: uiTextWith("snapshots.linux.rollback_detail", map[string]string{"date": entry.Created.Local().Format("Jan 2 at 15:04")})})
 		if err != nil || answer != "secondary" {
 			return ""
 		}
 		var kept string
-		err = runLinuxSnapshotOperation(w, "Rolling back...", "Restoring snapshot", func(report backupProgress) error {
+		err = runLinuxSnapshotOperation(w, uiText("snapshots.linux.rolling_back"), uiText("snapshots.linux.restoring_snapshot"), func(report backupProgress) error {
 			var err error
 			kept, err = store.Rollback(entry.ID, report)
 			return err
@@ -340,17 +339,17 @@ func showLinuxSnapshot(w *linuxSetupWindow, dir string, entry vmCheckpoint) stri
 			return linuxSnapshotsResult(err, "")
 		}
 		logf("snapshots: rolled back to %s; previous state kept at %s", entry.ID, kept)
-		return "Rolled back to \"" + entry.Name + "\". Launch Omarchy to use it. The previous state is kept in this VM's folder until you remove it from Backup and recovery."
+		return uiTextWith("snapshots.linux.rolled_back_to_launch_omarchy_to_use_it", map[string]string{"name": entry.Name})
 	case "delete":
-		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Delete \"" + entry.Name + "\"?", Primary: "Keep snapshot", Secondary: "Delete snapshot", Destructive: true,
-			Status: "This frees " + linuxGB(entry.ArchiveBytes) + ". The VM itself and its other snapshots are not changed."})
+		answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Delete \"" + entry.Name + "\"?", Primary: uiText("snapshots.linux.keep_snapshot"), Secondary: uiText("snapshots.linux.delete_snapshot_2"), Destructive: true,
+			Status: uiTextWith("snapshots.linux.this_frees_the_vm_itself_and_its_other", map[string]string{"entry_archive_bytes": linuxGB(entry.ArchiveBytes)})})
 		if err != nil || answer != "secondary" {
 			return ""
 		}
 		if err := store.Delete(entry.ID); err != nil {
-			return "Could not delete the snapshot: " + err.Error()
+			return uiTextWith("snapshots.linux.could_not_delete_the_snapshot", map[string]string{"error": err.Error()})
 		}
-		return "Snapshot \"" + entry.Name + "\" deleted."
+		return uiTextWith("snapshots.linux.snapshot_deleted", map[string]string{"name": entry.Name})
 	}
 	return ""
 }
@@ -359,19 +358,19 @@ func showLinuxSnapshot(w *linuxSetupWindow, dir string, entry vmCheckpoint) stri
 func cleanupLinuxRollbackKept(w *linuxSetupWindow, dir string) string {
 	kept := linuxRollbackKept(dir)
 	if len(kept) == 0 {
-		return "There is no state kept from a roll back."
+		return uiText("snapshots.linux.there_is_no_state_kept_from_a_roll")
 	}
 	var size int64
 	for _, data := range kept {
 		size += linuxTreeBytes(data)
 	}
-	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: "Remove the state kept from roll back?", Primary: "Keep it", Secondary: "Remove kept state", Destructive: true,
-		Status: "Permanently remove the VM state set aside by rolling back to a snapshot? This frees about " + linuxGB(size) + ". Files inside it will be lost. The current VM and its snapshots are not affected.\n\n" + strings.Join(kept, "\n")})
+	answer, err := w.ask(context.Background(), linuxSetupState{Prompt: "choice", Title: uiText("snapshots.linux.remove_the_state_kept_from_roll_back"), Primary: uiText("recovery.linux.keep_it"), Secondary: uiText("snapshots.linux.remove_kept_state"), Destructive: true,
+		Status: uiTextWith("snapshots.linux.permanently_remove_the_vm_state_set_aside_by", map[string]string{"size": linuxGB(size), "names": strings.Join(kept, "\n")})})
 	if err != nil || answer != "secondary" {
-		return "The kept state was not removed."
+		return uiText("snapshots.linux.the_kept_state_was_not_removed")
 	}
 	if err := removeLinuxRollbackKept(dir); err != nil {
-		return "Could not remove the kept state: " + err.Error()
+		return uiTextWith("snapshots.linux.could_not_remove_the_kept_state", map[string]string{"error": err.Error()})
 	}
-	return "The state kept from the roll back was removed."
+	return uiText("snapshots.linux.the_state_kept_from_the_roll_back_was")
 }

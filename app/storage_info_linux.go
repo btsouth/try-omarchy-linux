@@ -176,17 +176,17 @@ type linuxKeptCopy struct {
 func linuxKeptCopies(dir, defaultDir string) []linuxKeptCopy {
 	var kept []linuxKeptCopy
 	for _, disk := range linuxRetainedResetDisks(dir) {
-		kept = append(kept, linuxKeptCopy{Title: "Disk kept from a reset", Path: filepath.Dir(disk), Bytes: linuxAllocatedBytes(disk)})
+		kept = append(kept, linuxKeptCopy{Title: uiText("location.linux.disk_kept_from_a_reset"), Path: filepath.Dir(disk), Bytes: linuxAllocatedBytes(disk)})
 	}
 	for _, data := range linuxRollbackKept(dir) {
-		kept = append(kept, linuxKeptCopy{Title: "State kept from a roll back", Path: data, Bytes: linuxTreeBytes(data)})
+		kept = append(kept, linuxKeptCopy{Title: uiText("location.linux.state_kept_from_a_roll_back"), Path: data, Bytes: linuxTreeBytes(data)})
 	}
 	if retained, _ := linuxRetainedMove(defaultDir, dir); retained != nil {
 		var size int64
 		for _, part := range []string{"vm", "guest"} {
 			size += linuxTreeBytes(filepath.Join(retained.Source, part))
 		}
-		kept = append(kept, linuxKeptCopy{Title: "Previous copy from the last move", Path: retained.Source, Bytes: size})
+		kept = append(kept, linuxKeptCopy{Title: uiText("location.linux.previous_copy_from_the_last_move"), Path: retained.Source, Bytes: size})
 	}
 	sort.SliceStable(kept, func(i, j int) bool { return kept[i].Path < kept[j].Path })
 	return kept
@@ -200,9 +200,9 @@ func linuxFreeBytes(dir string) int64 {
 	return free
 }
 
-const (
-	linuxAppStorageNote    = "Inside the app's own storage. Uninstalling keeps it unless you also delete the app's data."
-	linuxFolderStorageNote = "A folder you chose. Uninstalling the app never touches it."
+var (
+	linuxAppStorageNote    = uiText("location.linux.inside_the_app_s_own_storage_uninstalling_keeps")
+	linuxFolderStorageNote = uiText("location.linux.a_folder_you_chose_uninstalling_the_app_never")
 )
 
 // linuxStorageRows is the storage summary. The compact form is for the home
@@ -213,12 +213,12 @@ func linuxStorageRows(dir, defaultDir string, full bool) []linuxRow {
 	if pathsEqual(dir, defaultDir) {
 		note = linuxAppStorageNote
 	}
-	rows := []linuxRow{{Title: "Location", Detail: linuxDisplayPath(dir) + "\n" + note}}
+	rows := []linuxRow{{Title: uiText("settings.storage.location"), Detail: linuxDisplayPath(dir) + "\n" + note}}
 	disk, err := os.Lstat(filepath.Join(dir, "vm", "disk.raw"))
 	if err == nil && disk.Mode().IsRegular() {
 		used := linuxAllocatedBytes(filepath.Join(dir, "vm", "disk.raw"))
-		rows = append(rows, linuxRow{Title: "Omarchy disk",
-			Detail: linuxGB(used) + " used of " + linuxGB(disk.Size()) + "\nOmarchy sees the full " + linuxGB(disk.Size()) + ". Only what it uses takes space here."})
+		rows = append(rows, linuxRow{Title: uiText("location.linux.omarchy_disk"),
+			Detail: uiTextWith("location.linux.used_of_omarchy_sees_the_full_only_what", map[string]string{"used": linuxGB(used), "disk_size": linuxGB(disk.Size()), "disk_size_2": linuxGB(disk.Size())})})
 	}
 	kept := linuxKeptCopies(dir, defaultDir)
 	if !full {
@@ -227,26 +227,26 @@ func linuxStorageRows(dir, defaultDir string, full bool) []linuxRow {
 			for _, copy := range kept {
 				total += copy.Bytes
 			}
-			word := "copy uses"
-			if len(kept) != 1 {
-				word = "copies use"
+			key := uiTextWith("location.linux.kept_copies.many", map[string]string{"count": strconv.Itoa(len(kept)), "size": linuxGB(total)})
+			if len(kept) == 1 {
+				key = uiTextWith("location.linux.kept_copies.one", map[string]string{"count": "1", "size": linuxGB(total)})
 			}
-			rows = append(rows, linuxRow{Title: "Kept copies", Detail: fmt.Sprintf("%d %s %s. Manage them in Backup and recovery.", len(kept), word, linuxGB(total))})
+			rows = append(rows, linuxRow{Title: uiText("location.linux.kept_copies"), Detail: key})
 		}
 		return rows
 	}
 	if system := linuxTreeBytes(filepath.Join(dir, "guest")); system > 0 {
-		rows = append(rows, linuxRow{Title: "System files", Detail: linuxGB(system) + "\nKept so Omarchy can start, repair itself and reset."})
+		rows = append(rows, linuxRow{Title: uiText("location.linux.system_files"), Detail: uiTextWith("location.linux.kept_so_omarchy_can_start_repair_itself_and", map[string]string{"system": linuxGB(system)})})
 	}
 	if count, bytes := linuxSnapshotsBytes(dir); count > 0 {
-		word := "snapshots"
+		message := uiTextWith("location.linux.snapshots.many", map[string]string{"count": strconv.Itoa(count), "size": linuxGB(bytes)})
 		if count == 1 {
-			word = "snapshot"
+			message = uiTextWith("location.linux.snapshots.one", map[string]string{"count": "1", "size": linuxGB(bytes)})
 		}
-		rows = append(rows, linuxRow{Title: "Snapshots", Detail: fmt.Sprintf("%d %s, %s\nIn this VM's folder. Delete old ones from Snapshots.", count, word, linuxGB(bytes))})
+		rows = append(rows, linuxRow{Title: uiText("launcher.linux.snapshots"), Detail: message})
 	}
 	if free := linuxFreeBytes(dir); free >= 0 {
-		rows = append(rows, linuxRow{Title: "Free on this drive", Detail: linuxGB(free)})
+		rows = append(rows, linuxRow{Title: uiText("location.linux.free_on_this_drive"), Detail: linuxGB(free)})
 	}
 	for _, copy := range kept {
 		rows = append(rows, linuxRow{Title: copy.Title, Detail: linuxGB(copy.Bytes) + "\n" + linuxDisplayPath(copy.Path)})

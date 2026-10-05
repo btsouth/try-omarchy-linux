@@ -49,6 +49,9 @@ func uiText(key string) string {
 	return activeUI.text(key)
 }
 
+// uiTemplate returns a resolved message for the GTK helper to fill in later.
+func uiTemplate(key string) string { return uiText(key) }
+
 // uiError is an error whose text is a catalog message. It still wraps cause,
 // so errors.Is and errors.As see through it.
 func uiError(text string, cause error) error { return catalogError{text: text, cause: cause} }

@@ -34,9 +34,7 @@ func linuxDefaultVMCanDelete(defaultDir string) bool {
 // is lost and what is kept, since Delete cannot be undone.
 func linuxDeletePrompt(defaultDir string) string {
 	freed := linuxTreeBytes(filepath.Join(defaultDir, "vm")) + linuxTreeBytes(filepath.Join(defaultDir, "guest")) + linuxTreeBytes(filepath.Join(defaultDir, "checkpoints"))
-	return "Delete this VM and its downloaded system files from " + linuxDisplayPath(defaultDir) + "? This frees about " + linuxGB(freed) +
-		". Everything inside Omarchy is lost: your files, apps and settings there. Try Omarchy's own settings, shared folders and backups stay. " +
-		"To use Omarchy again you would set it up and download it again."
+	return uiTextWith("recovery.linux.delete_this_vm_and_its_downloaded_system_files", map[string]string{"path": linuxDisplayPath(defaultDir), "freed": linuxGB(freed)})
 }
 
 func checkLinuxDeleteFolder(dir string, allowed map[string]bool) ([]string, error) {
@@ -45,7 +43,7 @@ func checkLinuxDeleteFolder(dir string, allowed map[string]bool) ([]string, erro
 		return nil, err
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("%s is not a regular folder", dir)
+		return nil, uiError(uiTextWith("recovery.linux.is_not_a_regular_folder", map[string]string{"path": dir}), nil)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -55,14 +53,14 @@ func checkLinuxDeleteFolder(dir string, allowed map[string]bool) ([]string, erro
 	for _, entry := range entries {
 		name := entry.Name()
 		if !allowed[name] {
-			return nil, fmt.Errorf("%s contains an unrecognized file; nothing was deleted", dir)
+			return nil, uiError(uiTextWith("recovery.linux.contains_an_unrecognized_file_nothing_was_deleted", map[string]string{"path": dir}), nil)
 		}
 		info, err := os.Lstat(filepath.Join(dir, name))
 		if err != nil {
 			return nil, err
 		}
 		if !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("%s is not a regular file; nothing was deleted", filepath.Join(dir, name))
+			return nil, uiError(uiTextWith("recovery.linux.is_not_a_regular_file_nothing_was_deleted", map[string]string{"path": filepath.Join(dir, name)}), nil)
 		}
 		files = append(files, name)
 	}
@@ -78,21 +76,21 @@ func deleteLinuxDefaultVM(defaultDir string) error {
 		return err
 	}
 	if filepath.Base(defaultDir) != "try-omarchy" {
-		return fmt.Errorf("the default data folder is not a Try Omarchy folder")
+		return uiError(uiText("recovery.linux.the_default_data_folder_is_not_a_try"), nil)
 	}
 	if !linuxDefaultVMCanDelete(defaultDir) {
-		return fmt.Errorf("only an app-owned default VM can be deleted here")
+		return uiError(uiText("recovery.linux.only_an_app_owned_default_vm_can_be"), nil)
 	}
 	info, err := os.Lstat(defaultDir)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("the default data location is not a regular folder")
+		return uiError(uiText("recovery.linux.the_default_data_location_is_not_a_regular"), nil)
 	}
 	prefs, err := loadSettings(settingsPath(defaultDir))
 	if err != nil {
-		return fmt.Errorf("could not check the shared folder: %w", err)
+		return uiError(uiTextWith("recovery.linux.could_not_check_the_shared_folder", map[string]string{"error": fmt.Sprint(err)}), err)
 	}
 	if prefs.Share != "" && pathsOverlap(defaultDir, prefs.Share) {
-		return fmt.Errorf("a shared folder overlaps this data location; no files were deleted")
+		return uiError(uiText("recovery.linux.a_shared_folder_overlaps_this_data_location_no"), nil)
 	}
 	vmDir, guestDir := filepath.Join(defaultDir, "vm"), filepath.Join(defaultDir, "guest")
 	vmFiles, err := checkLinuxDeleteFolder(vmDir, linuxVMDeleteFiles)
@@ -107,7 +105,7 @@ func deleteLinuxDefaultVM(defaultDir string) error {
 	modePresent := false
 	if info, err := os.Lstat(mode); err == nil {
 		if !info.Mode().IsRegular() {
-			return fmt.Errorf("%s is not a regular file; nothing was deleted", mode)
+			return uiError(uiTextWith("recovery.linux.is_not_a_regular_file_nothing_was_deleted_2", map[string]string{"mode": mode}), nil)
 		}
 		modePresent = true
 	} else if !os.IsNotExist(err) {
@@ -115,13 +113,13 @@ func deleteLinuxDefaultVM(defaultDir string) error {
 	}
 	disk, err := openBackupDisk(filepath.Join(vmDir, "disk.raw"))
 	if err != nil {
-		return fmt.Errorf("the guest disk is in use or could not be locked; shut down Omarchy before deleting this VM: %w", err)
+		return uiError(uiTextWith("recovery.linux.the_guest_disk_is_in_use_or_could", map[string]string{"error": fmt.Sprint(err)}), err)
 	}
 	defer disk.Close()
 	// Snapshots and the state a roll back kept are this VM's own copies.
 	// Remove them first, so a failure leaves the VM itself in place.
 	if err := removeLinuxSnapshotStore(defaultDir); err != nil {
-		return fmt.Errorf("could not remove this VM's snapshots: %w", err)
+		return uiError(uiTextWith("recovery.linux.could_not_remove_this_vm_s_snapshots", map[string]string{"error": fmt.Sprint(err)}), err)
 	}
 	if err := removeLinuxRollbackKept(defaultDir); err != nil {
 		return err

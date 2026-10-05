@@ -30,7 +30,7 @@ var linuxClipboardStatus atomic.Value
 func setLinuxClipboardStatus(message string, visible bool) {
 	linuxClipboardStatus.Store(message)
 	if visible {
-		showLinuxRuntimeError("Clipboard access", message)
+		showLinuxRuntimeError(uiText("settings.clipboard.linux.clipboard_access"), message)
 	}
 }
 
@@ -156,7 +156,7 @@ func (c *linuxClipboard) sequence() uint32 {
 		var grantErr error
 		c.paths, grantErr = linuxPortalClipboardFiles(string(data))
 		if grantErr != nil {
-			setLinuxClipboardStatus("Could not access files copied from the desktop: "+grantErr.Error(), true)
+			setLinuxClipboardStatus(uiTextWith("settings.clipboard.linux.access_files_error", map[string]string{"error": grantErr.Error()}), true)
 		}
 	case "text/uri-list":
 		c.paths, _ = linuxClipboardPaths(data)
@@ -279,7 +279,7 @@ func runLinuxClipboardBridge() func() {
 			supported = false
 		} else {
 			c.portal = portal
-			setLinuxClipboardStatus("GNOME clipboard access granted.", false)
+			setLinuxClipboardStatus(uiText("settings.clipboard.linux.gnome_granted"), false)
 		}
 		names = nil
 	} else if _, err := clipboardCommand(nil, 128, "try-omarchy-clipboard-capabilities"); err != nil {
@@ -322,7 +322,7 @@ func runLinuxClipboardBridge() func() {
 		listeners = append(listeners, l)
 	}
 	if supported {
-		setLinuxClipboardStatus("Text, images, and files synchronize through the clipboard.", false)
+		setLinuxClipboardStatus(uiText("settings.clipboard.linux.synchronizes"), false)
 	}
 	if supported {
 		c.sequence()
@@ -331,7 +331,7 @@ func runLinuxClipboardBridge() func() {
 		sequence: c.sequence, dropRequests: make(chan droppedFiles, 8),
 		transferError: func(err error) {
 			logf("file transfer: %v", err)
-			showLinuxRuntimeError("File transfer failed", err.Error())
+			showLinuxRuntimeError(uiText("error.linux.file_transfer_failed"), err.Error())
 		},
 		setDropPaths: c.setPaths, transfers: newFileTransferService(cache, clipboardTransferLimits), showTransfer: showLinuxTransfer}
 	if !supported {

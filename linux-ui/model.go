@@ -65,9 +65,9 @@ func dynamicActionsPrompt(prompt string) bool {
 func errorActions(s state) []action {
 	var actions []action
 	if s.CanRetry {
-		actions = append(actions, action{Label: "Try again", Reply: "retry", Suggested: true})
+		actions = append(actions, action{Label: uiText("settings.linux.try_again"), Reply: "retry", Suggested: true})
 	}
-	return append(actions, action{Label: "Close", Reply: "close"})
+	return append(actions, action{Label: uiText("launcher.close"), Reply: "close"})
 }
 
 func percentText(current, total int64) string {
@@ -99,7 +99,7 @@ func homeSectionsForState(s state) (visible, setup []section) {
 		return nil, nil
 	}
 	for _, group := range s.Sections {
-		if group.Heading == "What setup does" {
+		if group.Heading == uiText("launcher.linux.what_setup_does") {
 			setup = append(setup, group)
 		} else {
 			visible = append(visible, group)
@@ -142,17 +142,17 @@ func sectionsText(sections []section) string {
 
 // settingsFooterText keeps operation timing visible without repeating row help.
 func settingsFooterText(running, audioLive, forwardsLive bool) string {
-	text := "VM settings apply on the next launch."
+	text := uiText("settings.linux.vm_settings_apply_on_the_next_launch")
 	if running {
-		text = "Shut down Omarchy and launch again to apply VM settings."
+		text = uiText("settings.linux.shut_down_omarchy_and_launch_again_to_apply")
 	}
 	switch {
 	case audioLive && forwardsLive:
-		text += " Audio devices and port forwards apply when saved."
+		text += uiText("settings.linux.audio_devices_and_port_forwards_apply_when_saved")
 	case audioLive:
-		text += " Audio device choices apply when saved."
+		text += uiText("settings.linux.audio_device_choices_apply_when_saved")
 	case forwardsLive:
-		text += " Port forwards apply when saved."
+		text += uiText("settings.linux.port_forwards_apply_when_saved")
 	}
 	return text
 }
@@ -160,26 +160,28 @@ func settingsFooterText(running, audioLive, forwardsLive bool) string {
 // forwardsHelpText says when edits to the forward list reach the VM.
 func forwardsHelpText(live bool) string {
 	if live {
-		return "Each forward opens a port on 127.0.0.1. Changes apply when you save."
+		return uiText("settings.linux.each_forward_opens_a_port_on_127_0")
 	}
-	return "Each forward opens a port on 127.0.0.1. Changes apply on the next launch."
+	return uiText("settings.linux.each_forward_opens_a_port_on_127_0_2")
 }
 
 // The launcher cannot inspect keys already installed inside the guest.
 func sshKeyWarningText(enabled bool, keyPath string) string {
 	if enabled && strings.TrimSpace(keyPath) == "" {
-		return "No public key chosen. Choose one for SSH login unless a key is already installed in Omarchy."
+		return uiText("settings.linux.no_public_key_chosen_choose_one_for_ssh")
 	}
 	return ""
 }
 
 // reclaimHelpText states what a reclaim pass costs, beside its button.
-const reclaimHelpText = "Deleting files inside Omarchy does not shrink its disk on this drive. Each pass prepares up to 8 GB of Omarchy's free space and keeps at least 4 GB free here. When it is ready, shut Omarchy down; the space comes back during shutdown. Your files are not changed."
+func reclaimHelpText() string {
+	return uiText("settings.linux.deleting_files_inside_omarchy_does_not_shrink_its")
+}
 
 // The launcher's limit on approved apps; it checks the saved list again.
 const maximumHostApps = 16
 
-const noHostAppsLabel = "No more apps to add"
+func noHostAppsLabel() string { return uiText("settings.linux.no_more_apps_to_add") }
 
 func withoutHostApp(apps []hostApp, id string) []hostApp {
 	kept := make([]hostApp, 0, len(apps))
@@ -214,7 +216,7 @@ func hostAppOffersFor(allowed, installed []hostApp) (labels []string, offers []h
 		offers = append(offers, app)
 	}
 	if len(offers) == 0 {
-		labels = []string{noHostAppsLabel}
+		labels = []string{noHostAppsLabel()}
 	}
 	return labels, offers
 }

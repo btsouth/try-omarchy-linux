@@ -48,6 +48,12 @@ setup. If you choose **Ignore**, the install still works, but Flatpak adds a
 second Flathub source of its own, named `flathub-1`, for the runtime. From a
 terminal, run `sudo fedora-third-party enable` before installing.
 
+On Debian with KDE, Discover can install Flatpak support and the app in one
+go. If Flatpak was not set up before, Discover's **Launch** button and the
+application menu may not find Try Omarchy until you log out and back in,
+because Flatpak adds its apps to the desktop's search path at login. Until
+then, `flatpak run com.tryomarchy.TryOmarchy` starts it from a terminal.
+
 On Linux Mint, Software Manager shows the app as `com.tryomarchy.TryOmarchy`
 with a generic icon and an **Unverified Flatpak** badge until it is installed.
 It shows every app from outside Flathub that way. Once installed, the menu

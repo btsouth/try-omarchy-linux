@@ -172,6 +172,8 @@ modules:
         path: patches/qemu/0111-report-sdl-drop-positions.patch
       - type: patch
         path: patches/qemu/0112-preserve-precise-sdl-scroll.patch
+      - type: patch
+        path: patches/qemu/0113-place-guest-displays-on-host-monitors.patch
 
   # Build GTK separately so launcher edits reuse the expensive bindings build.
   - name: try-omarchy-setup

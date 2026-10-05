@@ -143,11 +143,13 @@ func probeLinuxMonitors() []linuxHostMonitor {
 	}
 	return monitors
 }
-func setLinuxDisplaySizes(cfg *config, monitors []linuxHostMonitor, explicit map[string]bool) {
-	cfg.displaySizes = make([][2]int, guestDisplayCount(cfg.displays))
-	cfg.displayBounds = make([][4]int, len(cfg.displaySizes))
-	for i := range cfg.displaySizes {
-		size := [2]int{cfg.displayWidth, cfg.displayHeight}
+
+// Resolve placement separately from EDID sizing: single-output guests keep
+// their existing device and video= mode, but still need monitor identity.
+func setLinuxDisplayTargets(cfg *config, monitors []linuxHostMonitor) []linuxHostMonitor {
+	resolved := make([]linuxHostMonitor, guestDisplayCount(cfg.displays))
+	cfg.displayBounds = make([][4]int, len(resolved))
+	for i := range resolved {
 		target := ""
 		if i < len(cfg.displayTargets) {
 			target = cfg.displayTargets[i]
@@ -164,20 +166,29 @@ func setLinuxDisplaySizes(cfg *config, monitors []linuxHostMonitor, explicit map
 		}
 		if index >= 0 && index < len(monitors) {
 			m := monitors[index]
+			resolved[i] = m
 			if validLinuxMonitorBounds(m.Bounds) {
 				cfg.displayBounds[i] = m.Bounds
 			}
-			// Resolve Automatic using the same ordering as the size probe. SDL's
-			// monitor ordering need not match GDK's.
+			// Resolve Automatic using GDK's ordering, which need not match SDL's.
 			if target == "" && i < len(cfg.displayTargets) && len(m.Connector) <= 64 && !strings.ContainsAny(m.Connector, ",\x00\r\n") {
 				cfg.displayTargets[i] = m.Connector
 			}
-			if !explicit["width"] && m.Width >= 640 && m.Width <= 8192 {
-				size[0] = m.Width
-			}
-			if !explicit["height"] && m.Height >= 480 && m.Height <= 8192 {
-				size[1] = m.Height
-			}
+		}
+	}
+	return resolved
+}
+
+func setLinuxDisplaySizes(cfg *config, monitors []linuxHostMonitor, explicit map[string]bool) {
+	resolved := setLinuxDisplayTargets(cfg, monitors)
+	cfg.displaySizes = make([][2]int, len(resolved))
+	for i, m := range resolved {
+		size := [2]int{cfg.displayWidth, cfg.displayHeight}
+		if !explicit["width"] && m.Width >= 640 && m.Width <= 8192 {
+			size[0] = m.Width
+		}
+		if !explicit["height"] && m.Height >= 480 && m.Height <= 8192 {
+			size[1] = m.Height
 		}
 		cfg.displaySizes[i] = size
 	}

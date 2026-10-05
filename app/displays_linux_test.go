@@ -161,11 +161,27 @@ func TestLinuxDisplayAutomaticBoundsAndValidation(t *testing.T) {
 			t.Fatalf("accepted invalid bounds %v", b)
 		}
 	}
-	// Single-display targeting uses the same bounds, preserving its device/video path.
-	cfg.displays = 1
-	monitors[0].Bounds = [4]int{1920, 0, 1600, 900}
-	setLinuxDisplaySizes(cfg, monitors, nil)
-	if !strings.Contains(strings.Join(linuxDisplayEnvironment(nil, cfg), "\n"), "BOUNDS_0=1920,0,1600,900") || linuxDisplayKernelOption(cfg) != " video=3200x1800" {
-		t.Fatal("single display targeting or mode changed")
+}
+
+func TestLinuxSingleDisplayTargetPreservesDeviceAndMode(t *testing.T) {
+	cfg := &config{displays: 1, displayWidth: 1280, displayHeight: 800, displayTargets: []string{"HEADLESS-2"}, displayFullscreen: []bool{true}}
+	monitors := []linuxHostMonitor{{Connector: "HEADLESS-1", Width: 1920, Height: 1080, Bounds: [4]int{0, 0, 1920, 1080}}, {Connector: "HEADLESS-2", Width: 3200, Height: 1800, Bounds: [4]int{1920, 0, 1600, 900}}}
+	setLinuxDisplayTargets(cfg, monitors)
+	if len(cfg.displaySizes) != 0 || linuxDisplayKernelOption(cfg) != " video=1280x800" || !strings.Contains(strings.Join(linuxDisplayEnvironment(nil, cfg), "\n"), "BOUNDS_0=1920,0,1600,900") {
+		t.Fatalf("single target changed sizing: %+v", cfg)
+	}
+	args := []string{"-device", "virtio-gpu-pci,id=gpu0"}
+	if got := linuxDisplayArgs(cfg, append([]string(nil), args...)); !reflect.DeepEqual(got, args) {
+		t.Fatalf("single device changed: %v", got)
+	}
+	cfg.displayTargets[0] = ""
+	setLinuxDisplayTargets(cfg, monitors)
+	if cfg.displayTargets[0] != "HEADLESS-1" || cfg.displayBounds[0] != monitors[0].Bounds {
+		t.Fatalf("single Automatic: %+v", cfg)
+	}
+	cfg.displayTargets[0] = "missing"
+	setLinuxDisplayTargets(cfg, monitors)
+	if cfg.displayBounds[0] != ([4]int{}) {
+		t.Fatal("missing single target acquired unrelated bounds")
 	}
 }

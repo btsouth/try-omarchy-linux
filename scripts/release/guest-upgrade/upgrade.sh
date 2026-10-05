@@ -136,5 +136,10 @@ fi
 if (( revision >= 61 )); then
   grep -Fq 'previous_revision < 61' /usr/local/lib/try-omarchy/catch-up
 fi
+if (( revision >= 62 )); then
+  grep -Fq 'configured_output_scale()' /usr/local/bin/omarchy-native-display-sync
+  grep -Fq 'tryomarchy.host=linux' /usr/local/bin/omarchy-native-display-sync
+  grep -Fq 'omarchy_synced_display_outputs' /usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

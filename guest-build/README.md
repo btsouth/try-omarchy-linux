@@ -411,3 +411,23 @@ VM host. Existing host-specific Linux flags and legacy lineage detection stay
 in place. New catch-up gates use revisions 58 and 61, so disks released at
 Linux revision 55 receive these fixes even though Windows used the same old
 revision numbers for unrelated payloads.
+
+## Linux output mode and scale
+
+Patch 0141, compatibility revision 62, applies per-connector monitor rules only
+with `tryomarchy.host=linux` and several connected Virtio outputs. Each output
+keeps its own preferred EDID mode and DPI-derived scale. The shared decoder
+retains the existing rounding and valid-scale rules; `tryomarchy.host-scale=1`
+uses the 96 logical DPI calculation for each output's own physical dimensions.
+A connector's explicit numeric scale wins over `omarchy_monitor_scale`; `"auto"`
+uses its EDID and computed Lua scale expressions remain under Hyprland's control.
+The single-output path and Windows multi-output path retain their existing rules.
+
+The compatibility overlay delivers the updated sync script and QEMU fragment.
+Catch-up refreshes stock monitor files while keeping customized content. Saved
+connector modes replay only for connected outputs on Linux; the existing config
+reload watcher also handles custom profiles. Hotplug removal clears the saved
+rules and reloads once to retire generated rules before applying the remaining
+outputs. Fake DRM/EDID contracts cover distinct modes and scales, explicit
+connector overrides, reloads, removal and the unchanged single-output result.
+Patches 0001-0140 and the legacy lineage markers remain unchanged.

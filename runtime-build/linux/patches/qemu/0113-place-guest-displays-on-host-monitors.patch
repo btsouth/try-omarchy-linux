@@ -1,10 +1,12 @@
 --- a/include/ui/sdl2.h
 +++ b/include/ui/sdl2.h
-@@ -36,6 +36,11 @@
+@@ -36,6 +36,13 @@
      SDL_Window *real_window;
      SDL_Renderer *real_renderer;
      int idx;
 +    char *target_monitor;
++    SDL_Rect target_bounds;
++    bool has_target_bounds;
 +    bool placement_initialized;
 +    bool fullscreen_requested;
 +    bool fullscreen;
@@ -32,7 +34,7 @@
  static int gui_grab_code = KMOD_LALT | KMOD_LCTRL;
  static SDL_Cursor *sdl_cursor_normal;
  static SDL_Cursor *sdl_cursor_hidden;
-@@ -74,28 +74,126 @@
+@@ -74,28 +74,190 @@
  static struct sdl2_console *get_scon_from_window(uint32_t window_id)
  {
      int i;
@@ -51,21 +53,59 @@
      return NULL;
  }
  
-+/* Connector names, not SDL indices, survive host display reordering. */
++/* Names vary by backend: Wayland SDL names may be wl_output descriptions,
++ * while GTK supplies connectors. Logical bounds align the two monitor lists. */
 +static int sdl_target_display(struct sdl2_console *scon)
 +{
 +    int count = SDL_GetNumVideoDisplays();
 +    int i;
 +
-+    if (!scon->target_monitor) {
-+        return count > 0 ? scon->idx % count : -1;
-+    }
-+    for (i = 0; i < count; i++) {
-+        if (g_strcmp0(SDL_GetDisplayName(i), scon->target_monitor) == 0) {
-+            return i;
++    if (scon->target_monitor && *scon->target_monitor) {
++        for (i = 0; i < count; i++) {
++            const char *name = SDL_GetDisplayName(i);
++            if (name && *name && !strcmp(name, scon->target_monitor)) {
++                return i;
++            }
 +        }
 +    }
-+    return -1;
++    if (scon->has_target_bounds) {
++        for (i = 0; i < count; i++) {
++            SDL_Rect b;
++            if (SDL_GetDisplayBounds(i, &b) == 0 &&
++                b.x == scon->target_bounds.x && b.y == scon->target_bounds.y &&
++                b.w == scon->target_bounds.w && b.h == scon->target_bounds.h) {
++                return i;
++            }
++        }
++    }
++    if (scon->target_monitor || scon->has_target_bounds) {
++        return -1;
++    }
++    return count > 0 ? scon->idx % count : -1;
++}
++
++/* Automatic without GTK still pins a bounds identity. Empty or duplicate
++ * display names must never collapse distinct outputs onto the first match. */
++static void sdl_pin_output(struct sdl2_console *scon, int display)
++{
++    const char *name;
++    int i, count;
++
++    if (display < 0 || scon->target_monitor || scon->has_target_bounds) {
++        return;
++    }
++    scon->has_target_bounds = SDL_GetDisplayBounds(display, &scon->target_bounds) == 0;
++    name = SDL_GetDisplayName(display);
++    if (!name || !*name) {
++        return;
++    }
++    count = SDL_GetNumVideoDisplays();
++    for (i = 0; i < count; i++) {
++        if (i != display && g_strcmp0(SDL_GetDisplayName(i), name) == 0) {
++            return;
++        }
++    }
++    scon->target_monitor = g_strdup(name);
 +}
 +
 +static bool sdl_display_available(struct sdl2_console *scon, int display)
@@ -119,6 +159,36 @@
 +    g_autofree char *fskey = g_strdup_printf("QEMU_SDL_OUTPUT_FULLSCREEN_%d",
 +                                            scon->idx);
 +    const char *fullscreen = g_getenv(fskey);
++    g_autofree char *boundskey = g_strdup_printf("QEMU_SDL_OUTPUT_BOUNDS_%d",
++                                                scon->idx);
++    const char *bounds = g_getenv(boundskey);
++
++    scon->has_target_bounds = false;
++    if (bounds) {
++        int values[4], i;
++        const char *next = bounds;
++        for (i = 0; i < 4; i++) {
++            char *end;
++            int64_t value;
++            if (!g_ascii_isdigit(*next) && *next != '-') {
++                break;
++            }
++            value = g_ascii_strtoll(next, &end, 10);
++            if (end == next || value < (i < 2 ? -1048576 : 1) ||
++                value > (i < 2 ? 1048576 : 32768) ||
++                (i < 3 ? *end != ',' : *end != '\0')) {
++                break;
++            }
++            values[i] = value;
++            next = end + (i < 3);
++        }
++        if (i != 4) {
++            error_report("Invalid SDL output bounds for console %d", scon->idx);
++            exit(1);
++        }
++        scon->target_bounds = (SDL_Rect) {values[0], values[1], values[2], values[3]};
++        scon->has_target_bounds = true;
++    }
 +
 +    /* Reject malformed launch environments rather than silently misroute. */
 +    if (name && (strlen(name) > 64 || strpbrk(name, ",\r\n"))) {
@@ -152,11 +222,7 @@
 -        flags |= SDL_WINDOW_RESIZABLE;
 -    }
 +    display = sdl_target_display(scon);
-+    /* Pin Automatic to a connector, so removing/reordering displays cannot
-+     * turn its fullscreen window into a second window on another monitor. */
-+    if (!scon->target_monitor && display >= 0) {
-+        scon->target_monitor = g_strdup(SDL_GetDisplayName(display));
-+    }
++    sdl_pin_output(scon, display);
 +    if (!scon->placement_initialized) {
 +        scon->placement_initialized = true;
 +        scon->fullscreen = scon->fullscreen_requested;
@@ -166,7 +232,7 @@
      if (scon->hidden) {
          flags |= SDL_WINDOW_HIDDEN;
      }
-@@ -105,11 +203,19 @@
+@@ -105,11 +267,19 @@
      }
  #endif
  
@@ -188,7 +254,7 @@
      if (scon->opengl) {
          const char *driver = "opengl";
  
-@@ -122,6 +228,13 @@
+@@ -122,6 +292,13 @@
          SDL_SetHint(SDL_HINT_RENDER_DRIVER, driver);
          SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");
  
@@ -202,7 +268,7 @@
          scon->winctx = SDL_GL_CreateContext(scon->real_window);
          SDL_GL_SetSwapInterval(0);
  
-@@ -274,7 +387,7 @@
+@@ -274,7 +451,7 @@
      if (qemu_name && g_strcmp0(g_getenv("QEMU_SDL_TITLE_FROM_NAME"), "1") == 0) {
          /* An application running the VM names its windows after itself. */
          if (scon->idx) {
@@ -211,7 +277,7 @@
                       scon->idx + 1, status);
          } else {
              snprintf(win_title, sizeof(win_title), "%s%s", qemu_name, status);
-@@ -367,7 +480,7 @@
+@@ -367,7 +544,7 @@
      } else {
          sdl_hide_cursor(scon);
      }
@@ -220,7 +286,7 @@
          (qemu_input_is_absolute(con) || absolute_enabled)) {
          /* An absolute tablet needs keyboard capture, not pointer confinement. */
          sdl_focus_keyboard_grab(scon, true);
-@@ -405,6 +518,9 @@
+@@ -405,6 +582,9 @@
      }
      SDL_GetMouseState(&mouse_x, &mouse_y);
      SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
@@ -230,7 +296,7 @@
      if (mouse_x > 0 && mouse_x < scr_w - 1 &&
          mouse_y > 0 && mouse_y < scr_h - 1) {
          sdl_grab_start(scon);
-@@ -439,7 +555,7 @@
+@@ -439,7 +619,7 @@
              absolute_mouse_grab(&sdl2_console[0]);
          }
      } else if (absolute_enabled) {
@@ -239,7 +305,7 @@
              sdl_grab_end(&sdl2_console[0]);
          }
          absolute_enabled = 0;
-@@ -485,24 +601,53 @@
+@@ -485,24 +665,53 @@
  
  static void toggle_full_screen(struct sdl2_console *scon)
  {
@@ -301,7 +367,7 @@
  }
  
  static int get_mod_state(void)
-@@ -569,7 +714,7 @@
+@@ -569,7 +778,7 @@
                  sdl_release_keyboard(scon, !keyboard_released);
              } else if (!gui_grab) {
                  sdl_grab_start(scon);
@@ -310,7 +376,7 @@
                  sdl_grab_end(scon);
              }
              break;
-@@ -584,10 +729,13 @@
+@@ -584,10 +793,13 @@
  #if 0
          case SDL_SCANCODE_KP_PLUS:
          case SDL_SCANCODE_KP_MINUS:
@@ -325,7 +391,7 @@
  
                  width = MAX(scr_w + (ev->key.keysym.scancode ==
                                       SDL_SCANCODE_KP_PLUS ? 50 : -50),
-@@ -764,15 +912,19 @@
+@@ -764,15 +976,19 @@
      int scr_w, scr_h, surf_w, surf_h, x, y, dx, dy;
  
      sdl_drop_motion(&ev->motion);
@@ -347,7 +413,7 @@
              && (ev->motion.x == 0 || ev->motion.y == 0 ||
                  ev->motion.x == max_x || ev->motion.y == max_y)) {
              sdl_grab_end(scon);
-@@ -801,7 +953,8 @@
+@@ -801,7 +1017,8 @@
      struct sdl2_console *scon = get_scon_from_window(ev->button.windowID);
      int scr_w, scr_h, x, y;
  
@@ -357,7 +423,7 @@
          return;
      }
  
-@@ -810,6 +963,9 @@
+@@ -810,6 +1027,9 @@
          sdl_release_keyboard(scon, false);
      }
      SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
@@ -367,7 +433,7 @@
      x = (int64_t)bev->x * surface_width(scon->surface) / scr_w;
      y = (int64_t)bev->y * surface_height(scon->surface) / scr_h;
  
-@@ -954,7 +1110,7 @@
+@@ -954,7 +1174,7 @@
          sdl_drop_pointer_left(ev->window.windowID);
          /* Host panels need their shortcuts back on both X11 and Wayland. */
          if (sdl_pointer_outside(scon)) {
@@ -376,7 +442,7 @@
                  sdl_grab_end(scon);
              }
              sdl_focus_keyboard_grab(scon, false);
-@@ -963,7 +1119,7 @@
+@@ -963,7 +1183,7 @@
          break;
      case SDL_WINDOWEVENT_FOCUS_LOST:
          scon->scroll = (SDLScroll) {0};
@@ -385,7 +451,7 @@
              sdl_grab_end(scon);
          }
          sdl_focus_keyboard_grab(scon, false);
-@@ -1115,6 +1271,9 @@
+@@ -1115,6 +1335,9 @@
              idle = 0;
              handle_mousewheel(ev);
              break;
@@ -395,7 +461,7 @@
          case SDL_WINDOWEVENT:
              handle_windowevent(ev);
              break;
-@@ -1228,6 +1387,7 @@
+@@ -1228,6 +1451,7 @@
          qemu_console_unregister_listener(&sdl2_console[i].dcl);
          qkbd_state_free(sdl2_console[i].kbd);
          sdl2_window_destroy(&sdl2_console[i]);
@@ -403,7 +469,7 @@
      }
      g_clear_pointer(&sdl2_console, g_free);
      sdl2_num_outputs = 0;
-@@ -1358,7 +1518,7 @@
+@@ -1358,7 +1582,7 @@
      memset(&info, 0, sizeof(info));
      SDL_VERSION(&info.version);
  
@@ -412,7 +478,7 @@
  
      if (o->u.sdl.has_grab_mod) {
          if (o->u.sdl.grab_mod == HOT_KEY_MOD_LSHIFT_LCTRL_LALT) {
-@@ -1389,6 +1549,7 @@
+@@ -1389,6 +1613,7 @@
          }
          sdl2_console[i].idx = i;
          sdl2_console[i].opts = o;
@@ -420,7 +486,7 @@
  #ifdef CONFIG_OPENGL
          sdl2_console[i].opengl = display_opengl;
          sdl2_console[i].dgc.ops = display_opengl ? &gl_ctx_ops : NULL;
-@@ -1405,7 +1566,8 @@
+@@ -1405,7 +1630,8 @@
  #endif
          qemu_console_register_listener(con, &sdl2_console[i].dcl, ops);
  #if defined(SDL_VIDEO_DRIVER_WINDOWS) || defined(SDL_VIDEO_DRIVER_X11)
@@ -430,7 +496,7 @@
  #if defined(SDL_VIDEO_DRIVER_WINDOWS)
              qemu_console_set_window_id(con, (uintptr_t)info.info.win.window);
  #elif defined(SDL_VIDEO_DRIVER_X11)
-@@ -1438,7 +1600,7 @@
+@@ -1438,7 +1664,7 @@
      sdl_cursor_hidden = SDL_CreateCursor(&data, &data, 8, 1, 0, 0);
      sdl_cursor_normal = SDL_GetCursor();
  

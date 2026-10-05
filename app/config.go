@@ -35,6 +35,7 @@ type config struct {
 	displayWidth, displayHeight int
 	// Linux per-output placement and initial EDID sizes.
 	displayTargets    []string
+	displayBounds     [][4]int
 	displayFullscreen []bool
 	displaySizes      [][2]int
 	// kernel-irqchip=off keeps WHPX from requesting nested virtualization,

@@ -31,6 +31,7 @@ type linuxHostMonitor struct {
 	Connector string `json:"connector"`
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`
+	Bounds    [4]int `json:"bounds"`
 }
 
 func (p linuxDisplayPreferences) validate() error {
@@ -144,6 +145,7 @@ func probeLinuxMonitors() []linuxHostMonitor {
 }
 func setLinuxDisplaySizes(cfg *config, monitors []linuxHostMonitor, explicit map[string]bool) {
 	cfg.displaySizes = make([][2]int, guestDisplayCount(cfg.displays))
+	cfg.displayBounds = make([][4]int, len(cfg.displaySizes))
 	for i := range cfg.displaySizes {
 		size := [2]int{cfg.displayWidth, cfg.displayHeight}
 		target := ""
@@ -162,6 +164,9 @@ func setLinuxDisplaySizes(cfg *config, monitors []linuxHostMonitor, explicit map
 		}
 		if index >= 0 && index < len(monitors) {
 			m := monitors[index]
+			if validLinuxMonitorBounds(m.Bounds) {
+				cfg.displayBounds[i] = m.Bounds
+			}
 			// Resolve Automatic using the same ordering as the size probe. SDL's
 			// monitor ordering need not match GDK's.
 			if target == "" && i < len(cfg.displayTargets) && len(m.Connector) <= 64 && !strings.ContainsAny(m.Connector, ",\x00\r\n") {
@@ -176,6 +181,11 @@ func setLinuxDisplaySizes(cfg *config, monitors []linuxHostMonitor, explicit map
 		}
 		cfg.displaySizes[i] = size
 	}
+}
+
+// Logical coordinates match SDL_GetDisplayBounds, independently of EDID pixels.
+func validLinuxMonitorBounds(b [4]int) bool {
+	return b[0] >= -1048576 && b[0] <= 1048576 && b[1] >= -1048576 && b[1] <= 1048576 && b[2] > 0 && b[2] <= 32768 && b[3] > 0 && b[3] <= 32768
 }
 
 func linuxDisplayEnvironment(env []string, cfg *config) []string {
@@ -195,6 +205,10 @@ func linuxDisplayEnvironment(env []string, cfg *config) []string {
 			fullscreen = cfg.displayFullscreen[i]
 		}
 		clean = append(clean, fmt.Sprintf("QEMU_SDL_OUTPUT_%d=%s", i, target), fmt.Sprintf("QEMU_SDL_OUTPUT_FULLSCREEN_%d=%s", i, strconv.FormatBool(fullscreen)))
+		if i < len(cfg.displayBounds) && validLinuxMonitorBounds(cfg.displayBounds[i]) {
+			b := cfg.displayBounds[i]
+			clean = append(clean, fmt.Sprintf("QEMU_SDL_OUTPUT_BOUNDS_%d=%d,%d,%d,%d", i, b[0], b[1], b[2], b[3]))
+		}
 	}
 	return clean
 }

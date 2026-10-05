@@ -52,14 +52,20 @@
   <releases>
     <release version="0.3.0" date="2026-10-05" type="stable">
       <description>
-        <p>Open Omarchy on multiple displays and keep using your guest while its next image downloads.</p>
+        <p>Run Omarchy across several displays, with many fixes from the Windows app.</p>
         <ul>
-          <li>Open on two or more displays, with a separate size and scale for each output</li>
-          <li>Boot the working guest first, download image updates in the background, and apply them on the next launch</li>
-          <li>Use USB devices in the guest and follow this computer's keyboard layout</li>
-          <li>Keep audio output when the microphone is off, and pause the VM before this computer sleeps</li>
-          <li>Get night light, notifications, compositor recovery and safer guest package updates</li>
-          <li>The app now requests USB access, sleep coordination through login1, keyboard layout through locale1, and read access to KDE's kxkbrc file</li>
+          <li>Open Omarchy on two or more displays, each fullscreen on its own monitor with its own size and scale</li>
+          <li>Smooth touchpad scrolling</li>
+          <li>Omarchy pauses when this computer sleeps and resumes when it wakes</li>
+          <li>Attach USB devices to Omarchy</li>
+          <li>Battery health and details inside Omarchy</li>
+          <li>Follow this computer's keyboard layout on GNOME, KDE and other desktops</li>
+          <li>Start Try Omarchy when you log in</li>
+          <li>The launcher follows your system language where translations exist</li>
+          <li>Guest updates download in the background and apply on the next start</li>
+          <li>Recovery when Omarchy's desktop stops responding, larger clipboard images, night light and private lock screen notifications</li>
+          <li>Fixes for audio output with the microphone off, guest disk permissions, a stuck shutdown and the clipboard sharing setting</li>
+          <li>New permissions: USB devices, sleep coordination, the keyboard layout setting and KDE's keyboard settings file</li>
         </ul>
       </description>
     </release>

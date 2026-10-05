@@ -37,7 +37,7 @@ func escapeReply(s state) string {
 		return ""
 	}
 	switch s.Prompt {
-	case "home", "snapshots", "snapshot", "migration":
+	case "home", "snapshots", "snapshot", "migration", "usb":
 		return "close"
 	case "about", "settings-saved", "recovery", "message":
 		return "back"
@@ -55,7 +55,7 @@ func escapeReply(s state) string {
 // launcher sent, rather than the fixed footer.
 func dynamicActionsPrompt(prompt string) bool {
 	switch prompt {
-	case "home", "error", "snapshots", "snapshot", "migration":
+	case "home", "error", "snapshots", "snapshot", "migration", "usb":
 		return true
 	}
 	return false

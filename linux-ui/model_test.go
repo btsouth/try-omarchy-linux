@@ -16,6 +16,7 @@ func TestEscapeNeverStopsProgressOrAbandonsSetup(t *testing.T) {
 	}{
 		{"home closes", state{Prompt: "home"}, "close"},
 		{"settings cancels", state{Prompt: "settings"}, "cancel"},
+		{"USB closes without changing a grant", state{Prompt: "usb"}, "close"},
 		{"about goes back", state{Prompt: "about"}, "back"},
 		{"recovery goes back", state{Prompt: "recovery"}, "back"},
 		{"shutdown prompt keeps running", state{Prompt: "close"}, "keep"},
@@ -83,7 +84,7 @@ func TestSnapshotPagesUseLauncherButtonsAndSafeEscape(t *testing.T) {
 			t.Errorf("%s: Escape replies %q, want %q", prompt, got, want)
 		}
 	}
-	for prompt, want := range map[string]bool{"home": true, "error": true, "snapshots": true, "snapshot": true, "migration": true, "snapshot-name": false, "recovery": false} {
+	for prompt, want := range map[string]bool{"home": true, "error": true, "snapshots": true, "snapshot": true, "migration": true, "usb": true, "snapshot-name": false, "recovery": false} {
 		if got := dynamicActionsPrompt(prompt); got != want {
 			t.Errorf("%s: launcher buttons %v, want %v", prompt, got, want)
 		}

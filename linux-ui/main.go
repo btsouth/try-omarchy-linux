@@ -74,6 +74,7 @@ func acceptStateAfterCancel(cancelling bool, next state) bool {
 }
 
 type settingsForm struct {
+	OpenUSB            bool          `json:"openUSB,omitempty"`
 	Memory             string        `json:"memory"`
 	CPUs               string        `json:"cpus"`
 	Render             string        `json:"render"`
@@ -738,6 +739,10 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		formField(uiText("settings.camera.camera"), cameraChoice)
 		cameraNames := []string{""}
 		formHelp(uiText("settings.linux.your_desktop_asks_for_camera_permission_when_an"))
+		beginGroup(uiText("settings.section.usb"), "Devices")
+		usbChoice := gtk.NewButtonWithLabel(uiText("settings.usb.choose"))
+		groupContent.Append(usbChoice)
+		formHelp(uiText("usb.linux.next_start"))
 		beginGroup(uiText("settings.linux.audio"), "Devices")
 		audioOutput := gtk.NewDropDownFromStrings([]string{uiText("settings.linux.system_default")})
 		named(audioOutput, uiText("settings.linux.audio_output"))
@@ -1036,6 +1041,15 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 			data, _ := json.Marshal(settingsForm{ResourceProfile: []string{"balanced", "maximum-performance", "manual"}[min(int(resourceProfile.Selected()), 2)], RefreshAudio: refresh, StartReclaim: reclaim, Memory: memoryValue, CPUs: cpuValue, Render: modes[min(int(render.Selected()), 2)], Fullscreen: fullscreen.Active(), FullscreenDisplay: fullscreenDisplayNames[min(int(fullscreenDisplay.Selected()), len(fullscreenDisplayNames)-1)], Microphone: microphone.Active(), Camera: camera.Active(), CameraID: cameraNames[min(int(cameraChoice.Selected()), len(cameraNames)-1)], AudioOutput: audioOutputNames[min(int(audioOutput.Selected()), len(audioOutputNames)-1)], AudioInput: audioInputNames[min(int(audioInput.Selected()), len(audioInputNames)-1)], DiskGiB: diskValue, Scale: scaleNames[min(int(scale.Selected()), len(scaleNames)-1)], Keyboard: keyboardNames[min(int(keyboard.Selected()), len(keyboardNames)-1)], SSHEnabled: sshEnabled.Active(), SSHPort: strconv.Itoa(sshPort.ValueAsInt()), SSHKey: sshKey.Text(), Forwards: forwardText, StartAutomatically: startAutomatically.Active(), LaunchAtSignIn: launchAtSignIn.Active(), Share: sharePath, ShareEnabled: shareEnabled.Active(), CPUMax: current.Settings.CPUMax, ClipboardShare: clipboardShare.Active(), ClipboardAvailable: current.Settings.ClipboardAvailable, HostApps: append([]hostApp{}, hostApps...)})
 			return string(data)
 		}
+		usbChoice.ConnectClicked(func() {
+			if current.Prompt == "settings" {
+				var form settingsForm
+				_ = json.Unmarshal([]byte(settingsValue(false, false)), &form)
+				form.OpenUSB = true
+				data, _ := json.Marshal(form)
+				reply(string(data))
+			}
+		})
 		audioRefresh.ConnectClicked(func() {
 			if current.Prompt == "settings" {
 				reply(settingsValue(true, false))
@@ -1428,6 +1442,8 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 						pageTitle.SetText(uiText("launcher.linux.settings_saved"))
 						primary.SetLabel(uiText("install.button.done"))
 						button.SetLabel(uiText("launcher.close"))
+					case "usb":
+						pageTitle.SetText(next.Title)
 					case "message":
 						pageTitle.SetText(orDefault(next.Title, uiText("brand.name")))
 						primary.SetLabel(uiText("install.button.done"))

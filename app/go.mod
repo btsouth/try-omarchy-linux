@@ -7,4 +7,4 @@ require (
 	github.com/klauspost/compress v1.19.2
 )
 
-require golang.org/x/sys v0.27.0 // indirect
+require golang.org/x/sys v0.27.0

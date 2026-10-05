@@ -40,7 +40,7 @@ func TestLinuxTrayOffersSessionActions(t *testing.T) {
 			separators++
 		}
 	}
-	want := []string{"Open shared folder", "Settings...", "Reclaim disk space...", "Create diagnostics", "Help and shortcuts...", "Shut down Omarchy..."}
+	want := []string{"Open shared folder", "Settings...", "USB devices", "Reclaim disk space...", "Create diagnostics", "Help and shortcuts...", "Shut down Omarchy..."}
 	if len(labels) != len(want) || separators != 2 {
 		t.Fatalf("labels %q, %d separators", labels, separators)
 	}

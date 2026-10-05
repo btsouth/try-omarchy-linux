@@ -5,6 +5,10 @@ package main
 // linuxUILabels resolves GTK labels from the one launcher catalog.
 func linuxUILabels() map[string]string {
 	return map[string]string{
+		"settings.section.usb": uiTemplate("settings.section.usb"),
+		"settings.usb.choose":  uiTemplate("settings.usb.choose"),
+		"usb.linux.next_start": uiTemplate("usb.linux.next_start"),
+
 		"brand.linux":            uiTemplate("brand.linux"),
 		"about.title":            uiTemplate("about.title"),
 		"brand.name":             uiTemplate("brand.name"),

@@ -50,16 +50,18 @@ const (
 	linuxTrayHelp        int32 = 6
 	linuxTraySeparator1  int32 = 7
 	linuxTraySeparator2  int32 = 8
+	linuxTrayUSB         int32 = 9
 )
 
 var linuxTrayOrder = []int32{
 	linuxTrayShare, linuxTraySeparator1,
-	linuxTraySettings, linuxTrayReclaim, linuxTrayDiagnostics, linuxTrayHelp, linuxTraySeparator2,
+	linuxTraySettings, linuxTrayUSB, linuxTrayReclaim, linuxTrayDiagnostics, linuxTrayHelp, linuxTraySeparator2,
 	linuxTrayShutdown,
 }
 
 var linuxTrayLabels = map[int32]string{
 	linuxTrayShare:       uiText("tray.linux.open_shared_folder"),
+	linuxTrayUSB:         uiText("usb.title"),
 	linuxTraySettings:    uiText("tray.menu.settings"),
 	linuxTrayReclaim:     uiText("tray.menu.reclaim"),
 	linuxTrayDiagnostics: uiText("launcher.linux.create_diagnostics"),
@@ -93,6 +95,8 @@ func (*linuxTrayMenu) Event(id int32, event string, data dbus.Variant, timestamp
 		switch id {
 		case linuxTraySettings:
 			requestTraySettings()
+		case linuxTrayUSB:
+			requestLinuxTrayAction(linuxUSBRequests)
 		case linuxTrayReclaim:
 			requestTrayReclaim()
 		case linuxTrayShare:

@@ -1366,5 +1366,14 @@
   "error.linux.custom_image_flags": "a custom Omarchy image needs both -release and -sums-sha256",
   "error.linux.image_digest": "the Linux Omarchy image has no valid trusted SHA256SUMS digest",
   "error.linux.image_url": "the Linux Omarchy image URL is invalid",
-  "error.linux.image_https": "the Linux Omarchy image needs HTTPS outside local test fixtures"
+  "error.linux.image_https": "the Linux Omarchy image needs HTTPS outside local test fixtures",
+  "usb.linux.inaccessible": "This USB device is not accessible to your user account. The host must grant read and write access to its USB device node (usually through a udev uaccess rule). If you use Flatpak, USB device access must also be allowed. Omarchy will keep running without it.",
+  "usb.linux.intro": "Choose a device to Attach or Release. Host applications lose access while Omarchy owns it. Eject mounted storage first.",
+  "usb.linux.next_start": "Remember one device at its current USB port for the next start. Missing, busy or unsupported devices never block startup. Don’t attach keeps the saved choice.",
+  "usb.linux.selected": "Selected for next start",
+  "usb.linux.attach_confirm": "Attach {device} to Omarchy now? Host applications will lose access. Eject mounted storage first.",
+  "usb.linux.start_confirm": "Attach {device} at its current USB port when Omarchy next starts? Host applications will lose access while Omarchy owns it. Eject mounted storage first.",
+  "usb.linux.release_confirm": "Release {device} from Omarchy back to the host?",
+  "usb.linux.not_attached": "USB device was not attached",
+  "error.usb.release@linux": "The host could not give this USB device to Omarchy. Close applications using it and check access to its USB device node. {error}"
 }

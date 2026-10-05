@@ -61,6 +61,12 @@ func parseUSBHostDevices(text string) ([]usbDevice, error) {
 	return result, nil
 }
 func (b usbBroker) hostDevices(ctx context.Context) ([]usbDevice, error) {
+	// Linux enumerates sysfs without asking libusb to open host devices.
+	if inventory, ok := b.qmp.(interface {
+		USBHostDevices(context.Context) ([]usbDevice, error)
+	}); ok {
+		return inventory.USBHostDevices(ctx)
+	}
 	var text string
 	if err := b.qmp.Call(ctx, "human-monitor-command", map[string]any{"command-line": "info usbhost"}, &text); err != nil {
 		return nil, err

@@ -19,6 +19,7 @@ import (
 // linuxSettingsForm is one Settings snapshot. Reclaim is nil before launch;
 // StartReclaim asks for a reclaim pass without saving the form.
 type linuxSettingsForm struct {
+	OpenUSB            bool               `json:"openUSB,omitempty"`
 	Memory             string             `json:"memory"`
 	CPUs               string             `json:"cpus"`
 	Render             string             `json:"render"`
@@ -175,6 +176,7 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		audioOutputs, audioInputs := form.AudioOutputs, form.AudioInputs
 		cameras := form.Cameras
 		form.StartReclaim = false
+		form.OpenUSB = false
 		form.HostApps = nil
 		err = json.Unmarshal([]byte(value), form)
 		form.HostAppChoices = hostApps
@@ -201,6 +203,11 @@ func showLinuxSettingsInWindow(ctx context.Context, w *linuxSetupWindow, dir str
 		if err != nil {
 			status = uiText("settings.linux.could_not_read_the_settings")
 			notice = status
+			continue
+		}
+		if form.OpenUSB {
+			form.OpenUSB = false
+			showLinuxUSBInWindow(ctx, w, dir, true)
 			continue
 		}
 		if form.StartReclaim {

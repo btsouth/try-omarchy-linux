@@ -67,6 +67,8 @@ func superviseLinux(cfg *config, cmdline string, stop <-chan os.Signal) error {
 
 		qmp, died := connectLinuxQMP(exited)
 		if qmp != nil {
+			// Once per QEMU launch, independent of guest readiness and resets.
+			go startLinuxBootUSB(setupContext(), cfg.dir, vmDone)
 			stopPower := startLinuxPower(vmDone)
 			defer stopPower()
 			lines := qmp.readLines()
@@ -333,6 +335,8 @@ func watchLinux(cfg *config, qmp *qmpConn, proc *exec.Cmd, exited <-chan error, 
 			go openLinuxSharedFolder(cfg.share)
 		case <-linuxDiagnosticsRequests:
 			go createLinuxDiagnostics(cfg.dir)
+		case <-linuxUSBRequests:
+			go showLinuxUSBDevices(ctx)
 		case <-linuxHelpRequests:
 			go showLinuxHelp(ctx)
 		case <-linuxShutdownRequests:

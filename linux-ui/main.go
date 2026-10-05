@@ -96,6 +96,7 @@ type settingsForm struct {
 	DiskGiB            string        `json:"diskGiB"`
 	Scale              string        `json:"scale"`
 	Keyboard           string        `json:"keyboard"`
+	HostKeyboard       string        `json:"hostKeyboard,omitempty"`
 	SSHEnabled         bool          `json:"sshEnabled"`
 	SSHPort            string        `json:"sshPort"`
 	SSHKey             string        `json:"sshKey"`
@@ -132,6 +133,13 @@ type reclaimInfo struct {
 type audioDevice struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
+}
+
+func keyboardHelpText(host string) string {
+	if host != "" {
+		return uiTextWith("settings.linux.keyboard_detected", map[string]string{"layout": host})
+	}
+	return uiText("settings.linux.keyboard_undetected")
 }
 
 func namedChoices(defaultLabel, unavailableLabel string, devices []audioDevice, selected string) (labels, names []string, index uint) {
@@ -719,7 +727,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 		named(keyboard, uiText("settings.linux.guest_keyboard_layout"))
 		formField(uiText("settings.linux.guest_keyboard_layout"), keyboard)
 		keyboardNames := []string{""}
-		formHelp(uiText("settings.linux.host_layout_changes_while_omarchy_runs_apply_on"))
+		keyboardHelp := formHelp(keyboardHelpText(""))
 		beginGroup(uiText("settings.linux.microphone_and_camera"), "Devices")
 		microphone := gtk.NewCheckButtonWithLabel(uiText("settings.linux.allow_microphone_access"))
 		groupContent.Append(microphone)
@@ -1494,6 +1502,7 @@ func runUI(input io.Reader, output io.Writer, onWindow func(*adw.ApplicationWind
 							keyboardNames = selectedKeyboards
 							keyboard.SetModel(gtk.NewStringList(keyboardLabels))
 							keyboard.SetSelected(keyboardIndex)
+							keyboardHelp.SetText(keyboardHelpText(next.Settings.HostKeyboard))
 							sshEnabled.SetActive(next.Settings.SSHEnabled)
 							sshPortValue, _ := strconv.Atoi(next.Settings.SSHPort)
 							sshPort.SetValue(float64(max(sshPortValue, 1024)))

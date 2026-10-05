@@ -1300,5 +1300,7 @@
   "startup.linux.login.failed": "Could not change Start with login. Your saved choice has not changed. Try again when the desktop permission service is available.",
   "startup.linux.login.reason": "Open Try Omarchy when you log in.",
   "startup.linux.login.rollback_failed": "Could not save startup preferences or restore the login choice. Check Start with login in your desktop settings: {error}",
-  "share.linux.cannot_share_folder": "Cannot share that folder: {error}"
+  "share.linux.cannot_share_folder": "Cannot share that folder: {error}",
+  "settings.linux.keyboard_detected": "Detected host layout: {layout}. Host layout changes while Omarchy runs apply on its next launch. Press Ctrl+Alt+G to release keyboard capture.",
+  "settings.linux.keyboard_undetected": "Host layout could not be detected. Choose a layout explicitly, or keep the guest choice. Press Ctrl+Alt+G to release keyboard capture."
 }

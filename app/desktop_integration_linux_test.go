@@ -8,7 +8,7 @@ import (
 )
 
 func TestLinuxKeyboardEnvironment(t *testing.T) {
-	for _, c := range []struct{ layout, variant, want string }{{"us", "intl", "us"}, {"de", "", "de"}, {"us,de", "", ""}, {"us", "intl,", ""}, {";sh", "", ""}} {
+	for _, c := range []struct{ layout, variant, want string }{{"us", "intl", "us"}, {"de", "", "de"}, {"us,de", "", "us"}, {"us", "intl,", "us"}, {";sh", "", ""}} {
 		got, _ := linuxKeyboardEnvironment(c.layout, c.variant)
 		if got != c.want {
 			t.Errorf("%q %q: %q", c.layout, c.variant, got)

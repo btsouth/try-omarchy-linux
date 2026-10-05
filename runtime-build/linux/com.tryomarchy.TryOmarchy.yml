@@ -23,6 +23,10 @@ finish-args:
   - --filesystem=xdg-run/pipewire-0
   # Delay host sleep long enough to pause the VM, then resume after wake.
   - --system-talk-name=org.freedesktop.login1
+  # Follow the host keyboard: KDE's one config file, then localed as fallback.
+  # GNOME input sources are read through Settings portal, without dconf access.
+  - --filesystem=xdg-config/kxkbrc:ro
+  - --system-talk-name=org.freedesktop.locale1
   - --talk-name=org.kde.StatusNotifierWatcher
   # Starts the apps approved in Settings on this computer, outside the sandbox,
   # and reads the desktop entries Settings offers for approval.

@@ -6,12 +6,14 @@ package main
 // The helper owns no catalog; protocol IDs and replies remain untranslated.
 func linuxUILabels() map[string]string {
 	return map[string]string{
-		"about.title":            uiTemplate("about.title"),
-		"brand.name":             uiTemplate("brand.name"),
-		"install.button.done":    uiTemplate("install.button.done"),
-		"launcher.close":         uiTemplate("launcher.close"),
-		"launcher.linux.allowed": uiTemplate("launcher.linux.allowed"),
-		"launcher.linux.asking_omarchy_to_shut_down":                         uiTemplate("launcher.linux.asking_omarchy_to_shut_down"),
+		"settings.linux.keyboard_detected":           uiTemplate("settings.linux.keyboard_detected"),
+		"settings.linux.keyboard_undetected":         uiTemplate("settings.linux.keyboard_undetected"),
+		"about.title":                                uiTemplate("about.title"),
+		"brand.name":                                 uiTemplate("brand.name"),
+		"install.button.done":                        uiTemplate("install.button.done"),
+		"launcher.close":                             uiTemplate("launcher.close"),
+		"launcher.linux.allowed":                     uiTemplate("launcher.linux.allowed"),
+		"launcher.linux.asking_omarchy_to_shut_down": uiTemplate("launcher.linux.asking_omarchy_to_shut_down"),
 		"launcher.linux.audio_device_choices_apply_when_you_save_microphone": uiTemplate("launcher.linux.audio_device_choices_apply_when_you_save_microphone"),
 		"launcher.linux.back":                                                    uiTemplate("launcher.linux.back"),
 		"launcher.linux.cancelling_setup":                                        uiTemplate("launcher.linux.cancelling_setup"),

@@ -16,7 +16,7 @@ var (
 )
 
 // Measured on the pinned guest image (linux-v0.3.0): the archive, kernel and
-// initramfs total 2,285,052,324 bytes (2.13 GiB). The sparse factory image uses
+// initramfs total 2,285,052,324 bytes (2.13 GiB). The factory filesystem uses
 // about 5.86 GiB before boot.
 // Allow 14 GiB for setup, including the kernel, initramfs and room for writes.
 // Update these measurements with the pin; the release manifest lists the sizes.

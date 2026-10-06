@@ -8,8 +8,22 @@ on:
         type: boolean
         default: false
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+      - '.github/release-notes/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/pull_request_template.md'
   push:
     branches: [master]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+      - '.github/release-notes/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/pull_request_template.md'
 
 permissions:
   contents: read
@@ -43,39 +57,9 @@ jobs:
           python3 runtime-build/validate-lock.py
           bash -n runtime-build/*.sh
 
-      - name: Test Linux SDL input ownership
-        run: python3 runtime-build/test-sdl-focus.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
-
-      - name: Test Linux SDL drop positions
-        run: python3 runtime-build/test-sdl-drop-position.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
-
-      - name: Test Linux SDL display placement
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libglib2.0-dev
-          python3 runtime-build/linux/test-sdl-displays.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
-
-      - name: Test Linux camera frame packing
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev bubblewrap
-          cc -Wall -Wextra -Wno-unused-parameter runtime-build/linux/test-camera-capture.c -o /tmp/test-camera-capture $(pkg-config --cflags --libs gstreamer-app-1.0 gstreamer-video-1.0)
-          /tmp/test-camera-capture
-
       - name: Test launcher
         working-directory: app
         run: go test -race ./...
-
-      - name: Test Fedora Atomic home layout
-        run: |
-          cd app
-          CGO_ENABLED=0 go test -c -o "$RUNNER_TEMP/home-layout.test" .
-          cd ..
-          sudo scripts/linux/test-home-layout.sh "$RUNNER_TEMP/home-layout.test"
-
-      - name: Test Linux camera permission requests
-        working-directory: app
-        run: TRYOMARCHY_TEST_PRIVATE_BUS=1 dbus-run-session -- go test -race -run '^TestLinuxCameraPortalPrivateBus$' .
 
       - name: Vet launcher
         working-directory: app
@@ -94,6 +78,51 @@ jobs:
 
       - name: Validate current release pin
         run: scripts/release/validate-pin.py --require-public "$(sed -n 's/.*releases\/download\/\([^\"]*\).*/\1/p' app/manifest.go)"
+
+  linux-runtime:
+    timeout-minutes: 20
+    name: Linux runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev bubblewrap
+
+      - name: Test Linux SDL input ownership
+        run: python3 runtime-build/test-sdl-focus.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
+
+      - name: Test Linux SDL drop positions
+        run: python3 runtime-build/test-sdl-drop-position.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
+
+      - name: Test Linux SDL display placement
+        run: |
+          python3 runtime-build/linux/test-sdl-displays.py --manifest runtime-build/linux/com.tryomarchy.TryOmarchy.yml
+
+      - name: Test Linux camera frame packing
+        run: |
+          cc -Wall -Wextra -Wno-unused-parameter runtime-build/linux/test-camera-capture.c -o /tmp/test-camera-capture $(pkg-config --cflags --libs gstreamer-app-1.0 gstreamer-video-1.0)
+          /tmp/test-camera-capture
+
+      - name: Test Fedora Atomic home layout
+        run: |
+          cd app
+          CGO_ENABLED=0 go test -c -o "$RUNNER_TEMP/home-layout.test" .
+          cd ..
+          sudo scripts/linux/test-home-layout.sh "$RUNNER_TEMP/home-layout.test"
+
+      - name: Test Linux camera permission requests
+        working-directory: app
+        run: TRYOMARCHY_TEST_PRIVATE_BUS=1 dbus-run-session -- go test -race -run '^TestLinuxCameraPortalPrivateBus$' .
 
   windows-launcher:
     timeout-minutes: 20

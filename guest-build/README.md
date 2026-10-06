@@ -276,6 +276,9 @@ to the generated branch for manual review; `--check` reports drift without writi
 scripts/release/refresh-guest-lock.sh
 ```
 
+Patch 0142 refreshes the package lock for the next Linux guest image, updating
+iniparser to `4.3.2-1` and upower to `1.91.5-1`.
+
 Patch 0134 refreshes the package lock for the next Linux guest image, updating
 device-mapper to `2.03.43-2` and libutf8proc to `2.12.0-1`.
 

@@ -67,7 +67,7 @@ func TestLinuxHomeExplainsAFirstSetupBeforeAnythingIsDownloaded(t *testing.T) {
 		rows[row.Title] = row.Detail
 	}
 	for title, want := range map[string]string{
-		"Download": "About 2 GB, once. If it is interrupted, it continues where it stopped.",
+		"Download": "About 2.1 GB, once. If it is interrupted, it continues where it stopped.",
 		"Space":    "About 14 GB.",
 		"Location": linuxDisplayPath(root),
 		"Account":  "Your own username and password, or a quick-start account",

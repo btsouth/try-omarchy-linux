@@ -28,9 +28,10 @@ Pages. It serves the Linux page and a copy of the `.flatpakref` at
 App versions and guest images are separate. App releases are tagged
 `linux-app-vX.Y.Z` and carry the Flatpak. Guest
 images are tagged `linux-vX.Y.Z`, and each app version pins exactly one of them
-in `app/linux_release_linux.go`. A new app version with a newer pin downloads
-the new guest at the next launch and rolls back to the previous one if it does
-not reach the desktop.
+in `app/linux_release_linux.go`. A new app version with a newer pin boots the working guest first and stages
+its new image in the background. The next launch applies the completed image.
+If the new guest does not reach the desktop, the launcher rolls back to the
+previous image. Fresh installs download the pinned image before their first boot.
 
 ## The signing key
 

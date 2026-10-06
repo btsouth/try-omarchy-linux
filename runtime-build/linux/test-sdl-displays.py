@@ -27,12 +27,15 @@ def check(source, real_sdl=False):
 #include <glib.h>
 '''
     mock = r'''
+typedef struct { int x,y,w,h; } SDL_Rect;
 typedef struct { int display, fullscreen, flags; } SDL_Window;
 #define SDL_WINDOWPOS_CENTERED_DISPLAY(n) (1000+(n))
 #define SDL_WINDOW_FULLSCREEN_DESKTOP 1
 #define SDL_WINDOW_INPUT_FOCUS 2
 static int displays=2, positions, changes;
 static const char *names[]={"DP-1","HDMI-A-1","DP-3"};
+static SDL_Rect bounds[]={{0,0,1920,1080},{1920,0,1600,900},{3520,0,1280,720}};
+static int SDL_GetDisplayBounds(int i,SDL_Rect *b) {if(i<0||i>=displays)return -1;*b=bounds[i];return 0;}
 static int SDL_GetNumVideoDisplays(void) { return displays; }
 static const char *SDL_GetDisplayName(int i) { return names[i]; }
 static void SDL_SetWindowPosition(SDL_Window *w,int x,int y) { assert(x==y);w->display=x-1000;positions++; }
@@ -43,6 +46,7 @@ static void SDL_SetWindowMouseGrab(SDL_Window *w,int f) {}
 '''
     state = r'''
 struct sdl2_console {SDL_Window *real_window;int idx;char *target_monitor;
+ SDL_Rect target_bounds;bool has_target_bounds;
  bool fullscreen,fullscreen_requested;int saved_grab;};
 static struct sdl2_console consoles[4], *sdl2_console=consoles;
 static int sdl2_num_outputs=4, gui_grab;
@@ -57,7 +61,7 @@ static void sdl2_redraw(struct sdl2_console *s) {}
     # toggle references dcl.con in its input policy.
     state = state.replace('int saved_grab;}', 'int saved_grab;struct {void *con;} dcl;}')
     functions = ''.join(focus.function(source, name) for name in (
-        'sdl_target_display', 'sdl_display_available', 'sdl_set_fullscreen',
+        'sdl_target_display', 'sdl_pin_output', 'sdl_display_available', 'sdl_set_fullscreen',
         'sdl_configure_output', 'toggle_full_screen', 'sdl_host_displays_changed'))
     tests = r'''
 int main(void) {
@@ -89,6 +93,48 @@ int main(void) {
  consoles[2].real_window=NULL;toggle_full_screen(&consoles[0]);assert(consoles[0].fullscreen);
  assert(!sdl_set_fullscreen(&consoles[2],true));
  assert(positions && changes);
+ /* GTK connectors differ from SDL descriptions; GTK order differs from SDL. */
+ memset(consoles,0,sizeof(consoles));memset(windows,0,sizeof(windows));
+ displays=2;names[0]="Headless output 1";names[1]="Headless output 3";
+ bounds[0]=(SDL_Rect){0,0,1920,1080};bounds[1]=(SDL_Rect){1920,0,1600,900};
+ setenv("QEMU_SDL_OUTPUT_0","HEADLESS-2",1);
+ setenv("QEMU_SDL_OUTPUT_BOUNDS_0","1920,0,1600,900",1);
+ setenv("QEMU_SDL_OUTPUT_1","HEADLESS-1",1);
+ setenv("QEMU_SDL_OUTPUT_BOUNDS_1","0,0,1920,1080",1);
+ setenv("QEMU_SDL_OUTPUT_FULLSCREEN_1","true",1);
+ for(int i=0;i<2;i++) {consoles[i].idx=i;consoles[i].real_window=&windows[i];sdl_configure_output(&consoles[i]);toggle_full_screen(&consoles[i]);}
+ assert(consoles[0].fullscreen && windows[0].display==1);
+ assert(consoles[1].fullscreen && windows[1].display==0);
+ /* Connector name has priority over stale geometry. */
+ names[0]="HEADLESS-2";assert(sdl_target_display(&consoles[0])==0);
+ names[0]="Headless output 1";
+ /* Empty names still resolve by logical bounds, with independent toggles. */
+ names[0]="";names[1]="";
+ assert(sdl_target_display(&consoles[0])==1 && sdl_target_display(&consoles[1])==0);
+ toggle_full_screen(&consoles[0]);assert(!consoles[0].fullscreen && consoles[1].fullscreen);
+ toggle_full_screen(&consoles[0]);assert(consoles[0].fullscreen);
+ /* Reordering preserves bounds identity; unplug exits only the missing output. */
+ SDL_Rect swap=bounds[0];bounds[0]=bounds[1];bounds[1]=swap;
+ sdl_host_displays_changed();assert(windows[0].display==0 && windows[1].display==1);
+ displays=1;sdl_host_displays_changed();assert(consoles[0].fullscreen && !consoles[1].fullscreen);
+ displays=2;sdl_host_displays_changed();assert(!consoles[1].fullscreen);
+ /* SDL-only Automatic pins bounds, never an empty/duplicate name. */
+ memset(consoles,0,sizeof(consoles));
+ for(int i=0;i<2;i++) {
+  consoles[i].idx=i;consoles[i].real_window=&windows[i];
+  int d=sdl_target_display(&consoles[i]);sdl_pin_output(&consoles[i],d);
+  assert(consoles[i].target_monitor==NULL && consoles[i].has_target_bounds);
+  assert(sdl_set_fullscreen(&consoles[i],true));
+ }
+ assert(windows[0].display==0 && windows[1].display==1);
+ swap=bounds[0];bounds[0]=bounds[1];bounds[1]=swap;
+ sdl_host_displays_changed();assert(windows[0].display==1 && windows[1].display==0);
+ names[0]=names[1]="duplicate";
+ struct sdl2_console duplicate={0};sdl_pin_output(&duplicate,1);
+ assert(!duplicate.target_monitor && duplicate.has_target_bounds);
+ /* A selected but missing bounds target must not fall back by index. */
+ consoles[0].target_bounds.x=-999;assert(sdl_target_display(&consoles[0])==-1);
+
  return 0;
 }
 '''
@@ -102,7 +148,7 @@ int main(void) {
         invalid = prefix + mock + state + functions + 'int main(void) {sdl_configure_output(&consoles[0]);return 0;}'
         (root / 'invalid.c').write_text(invalid)
         subprocess.run(['cc', '-std=gnu11', '-O2', str(root / 'invalid.c'), '-o', str(root / 'invalid'), *flags], check=True)
-        for key, value in [('QEMU_SDL_OUTPUT_0','DP-1,DP-2'), ('QEMU_SDL_OUTPUT_FULLSCREEN_0','yes')]:
+        for key, value in [('QEMU_SDL_OUTPUT_0','DP-1,DP-2'), ('QEMU_SDL_OUTPUT_FULLSCREEN_0','yes'), *[('QEMU_SDL_OUTPUT_BOUNDS_0', b) for b in ('', '0,0,0,900', '0,0,1600,-1', '0,0,1600,900x', '0,0,1600,900,1', '0,0,1600', '1048577,0,1600,900', '0,0,32769,900', '0,0,999999999999999999999,900', ' 0,0,1600,900')]]:
             env = os.environ.copy();env[key] = value
             assert subprocess.run([str(root / 'invalid')], env=env).returncode == 1
         if real_sdl:
@@ -128,7 +174,7 @@ int main(void) {
             subprocess.run(['cc', '-std=gnu11', '-O2', str(root / 'real.c'), '-o', str(root / 'real'), *flags], check=True)
             env = os.environ.copy();env['SDL_VIDEODRIVER']='dummy'
             subprocess.run([str(root / 'real')], env=env, check=True)
-    print('ok - per-window fullscreen, targets, collisions, reorder, unplug/replug, validation' + (', actual SDL dummy' if real_sdl else ''))
+    print('ok - per-window fullscreen, connector/description and empty names, logical bounds, Automatic pinning, collisions, reorder, unplug/replug, validation' + (', actual SDL dummy' if real_sdl else ''))
 
 
 def check_qemu(qemu):

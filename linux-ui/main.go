@@ -285,6 +285,7 @@ func main() {
 			Connector string `json:"connector"`
 			Width     int    `json:"width"`
 			Height    int    `json:"height"`
+			Bounds    [4]int `json:"bounds"`
 		}
 		result := []monitorInfo{}
 		if display := gdk.DisplayGetDefault(); display != nil {
@@ -293,7 +294,12 @@ func main() {
 				if object := monitors.Item(i); object != nil {
 					monitor := &gdk.Monitor{Object: object}
 					geometry := monitor.Geometry()
-					result = append(result, monitorInfo{monitor.Connector(), int(math.Round(float64(geometry.Width()) * monitor.Scale())), int(math.Round(float64(geometry.Height()) * monitor.Scale()))})
+					result = append(result, monitorInfo{
+						Connector: monitor.Connector(),
+						Width:     int(math.Round(float64(geometry.Width()) * monitor.Scale())),
+						Height:    int(math.Round(float64(geometry.Height()) * monitor.Scale())),
+						Bounds:    [4]int{geometry.X(), geometry.Y(), geometry.Width(), geometry.Height()},
+					})
 				}
 			}
 		}

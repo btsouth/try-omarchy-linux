@@ -414,8 +414,11 @@ func main() {
 	cfg.displayWidth, cfg.displayHeight = *width, *height
 	// One display keeps the existing device string and video= mode. Typed
 	// per-output sizes only go into the JSON device built for several outputs.
+	monitors := probeLinuxMonitors()
 	if guestDisplayCount(cfg.displays) > 1 {
-		setLinuxDisplaySizes(cfg, probeLinuxMonitors(), explicitFlags)
+		setLinuxDisplaySizes(cfg, monitors, explicitFlags)
+	} else {
+		setLinuxDisplayTargets(cfg, monitors)
 	}
 	cmdline += linuxDisplayKernelOption(cfg)
 	if err := checkSetupCancelled(); err != nil {

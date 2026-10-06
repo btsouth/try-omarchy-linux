@@ -63,7 +63,7 @@ func TestLinuxDisplayFlagsAndOverrides(t *testing.T) {
 }
 func TestLinuxDisplaySizesAndArguments(t *testing.T) {
 	cfg := &config{displays: 3, displayWidth: 1280, displayHeight: 800, displayTargets: []string{"HDMI-A-1", "DP-1", "missing"}}
-	monitors := []linuxHostMonitor{{"DP-1", 1920, 1080}, {"HDMI-A-1", 2560, 1440}}
+	monitors := []linuxHostMonitor{{"DP-1", 1920, 1080, [4]int{0, 0, 1920, 1080}}, {"HDMI-A-1", 2560, 1440, [4]int{-1280, 100, 1280, 720}}}
 	setLinuxDisplaySizes(cfg, monitors, nil)
 	want := [][2]int{{2560, 1440}, {1920, 1080}, {1280, 800}}
 	if !reflect.DeepEqual(cfg.displaySizes, want) {
@@ -98,8 +98,8 @@ func TestLinuxDisplaySizesAndArguments(t *testing.T) {
 		t.Fatal("ignored explicit size")
 	}
 	cfg.displayFullscreen = []bool{true, false, true}
-	env := linuxDisplayEnvironment([]string{"PATH=/bin", "SDL_VIDEO_DISPLAY_PRIORITY=old", "QEMU_SDL_OUTPUT_0=stale"}, cfg)
-	if strings.Join(env, "\n") != "PATH=/bin\nQEMU_SDL_OUTPUT_0=HDMI-A-1\nQEMU_SDL_OUTPUT_FULLSCREEN_0=true\nQEMU_SDL_OUTPUT_1=DP-1\nQEMU_SDL_OUTPUT_FULLSCREEN_1=false\nQEMU_SDL_OUTPUT_2=missing\nQEMU_SDL_OUTPUT_FULLSCREEN_2=true" {
+	env := linuxDisplayEnvironment([]string{"PATH=/bin", "SDL_VIDEO_DISPLAY_PRIORITY=old", "QEMU_SDL_OUTPUT_0=stale", "QEMU_SDL_OUTPUT_BOUNDS_0=stale"}, cfg)
+	if strings.Join(env, "\n") != "PATH=/bin\nQEMU_SDL_OUTPUT_0=HDMI-A-1\nQEMU_SDL_OUTPUT_FULLSCREEN_0=true\nQEMU_SDL_OUTPUT_BOUNDS_0=-1280,100,1280,720\nQEMU_SDL_OUTPUT_1=DP-1\nQEMU_SDL_OUTPUT_FULLSCREEN_1=false\nQEMU_SDL_OUTPUT_BOUNDS_1=0,0,1920,1080\nQEMU_SDL_OUTPUT_2=missing\nQEMU_SDL_OUTPUT_FULLSCREEN_2=true" {
 		t.Fatalf("env: %v", env)
 	}
 }
@@ -144,5 +144,44 @@ func TestLinuxDisplaysLocationAndKernelMode(t *testing.T) {
 	cfg.displays = 1
 	if got := linuxDisplayKernelOption(cfg); got != " video=2560x1440" {
 		t.Fatalf("single mode: %s", got)
+	}
+}
+
+func TestLinuxDisplayAutomaticBoundsAndValidation(t *testing.T) {
+	cfg := &config{displays: 3, displayTargets: []string{"", "", "missing"}, displayWidth: 1280, displayHeight: 800}
+	monitors := []linuxHostMonitor{{Connector: "HEADLESS-2", Width: 3200, Height: 1800, Bounds: [4]int{1920, 0, 1600, 900}}, {Connector: "", Width: 1920, Height: 1080, Bounds: [4]int{0, 0, 1920, 1080}}}
+	setLinuxDisplaySizes(cfg, monitors, nil)
+	if cfg.displayTargets[0] != "HEADLESS-2" || cfg.displayTargets[1] != "" || cfg.displayBounds[0] != monitors[0].Bounds || cfg.displayBounds[1] != monitors[1].Bounds || cfg.displayBounds[2] != ([4]int{}) || cfg.displaySizes[0] != ([2]int{3200, 1800}) {
+		t.Fatalf("automatic geometry and pixel sizes: %+v", cfg)
+	}
+	for _, b := range [][4]int{{0, 0, 0, 900}, {0, 0, 1600, -1}, {1048577, 0, 1600, 900}, {0, -1048577, 1600, 900}, {0, 0, 32769, 900}} {
+		monitors[0].Bounds = b
+		setLinuxDisplaySizes(cfg, monitors, nil)
+		if strings.Contains(strings.Join(linuxDisplayEnvironment(nil, cfg), "\n"), "BOUNDS_0=") {
+			t.Fatalf("accepted invalid bounds %v", b)
+		}
+	}
+}
+
+func TestLinuxSingleDisplayTargetPreservesDeviceAndMode(t *testing.T) {
+	cfg := &config{displays: 1, displayWidth: 1280, displayHeight: 800, displayTargets: []string{"HEADLESS-2"}, displayFullscreen: []bool{true}}
+	monitors := []linuxHostMonitor{{Connector: "HEADLESS-1", Width: 1920, Height: 1080, Bounds: [4]int{0, 0, 1920, 1080}}, {Connector: "HEADLESS-2", Width: 3200, Height: 1800, Bounds: [4]int{1920, 0, 1600, 900}}}
+	setLinuxDisplayTargets(cfg, monitors)
+	if len(cfg.displaySizes) != 0 || linuxDisplayKernelOption(cfg) != " video=1280x800" || !strings.Contains(strings.Join(linuxDisplayEnvironment(nil, cfg), "\n"), "BOUNDS_0=1920,0,1600,900") {
+		t.Fatalf("single target changed sizing: %+v", cfg)
+	}
+	args := []string{"-device", "virtio-gpu-pci,id=gpu0"}
+	if got := linuxDisplayArgs(cfg, append([]string(nil), args...)); !reflect.DeepEqual(got, args) {
+		t.Fatalf("single device changed: %v", got)
+	}
+	cfg.displayTargets[0] = ""
+	setLinuxDisplayTargets(cfg, monitors)
+	if cfg.displayTargets[0] != "HEADLESS-1" || cfg.displayBounds[0] != monitors[0].Bounds {
+		t.Fatalf("single Automatic: %+v", cfg)
+	}
+	cfg.displayTargets[0] = "missing"
+	setLinuxDisplayTargets(cfg, monitors)
+	if cfg.displayBounds[0] != ([4]int{}) {
+		t.Fatal("missing single target acquired unrelated bounds")
 	}
 }

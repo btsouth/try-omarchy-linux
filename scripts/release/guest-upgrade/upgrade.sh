@@ -141,5 +141,8 @@ if (( revision >= 62 )); then
   grep -Fq 'tryomarchy.host=linux' /usr/local/bin/omarchy-native-display-sync
   grep -Fq 'omarchy_synced_display_outputs' /usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua
 fi
+if (( revision >= 63 )); then
+  grep -Fq 'Skip Snapper setup on the Try Omarchy ext4 guest' /usr/share/omarchy/install/config/snapper.sh
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

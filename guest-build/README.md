@@ -434,3 +434,13 @@ rules and reloads once to retire generated rules before applying the remaining
 outputs. Fake DRM/EDID contracts cover distinct modes and scales, explicit
 connector overrides, reloads, removal and the unchanged single-output result.
 Patches 0001-0140 and the legacy lineage markers remain unchanged.
+
+## Snapper setup
+
+Patch 0143 ports Windows 0138. Omarchy migration `1781984677` runs Omarchy's
+Snapper setup when snapshot services are missing, but the guest is ext4 with no
+Snapper or Limine bootloader, so **Update > Omarchy** failed there. The setup
+step becomes a message that completes without changes, including when another
+script sources it. Compatibility revision 63 delivers it to existing disks
+before login, and runtime `4.0.4-7` carries it through package updates. The
+migration runner and unrelated failures remain unchanged.

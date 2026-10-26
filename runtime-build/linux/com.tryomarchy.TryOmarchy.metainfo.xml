@@ -50,6 +50,18 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.1" date="2026-10-25" type="stable">
+      <description>
+        <p>Fixes for updating Omarchy.</p>
+        <ul>
+          <li>Omarchy's bar, menus and panels draw correctly after an update brings Qt 6.12</li>
+          <li>Update, Omarchy no longer stops at Omarchy's Snapper migration</li>
+          <li>Try Omarchy waits for a running package update instead of offering to restart Omarchy</li>
+          <li>Large images copied on this computer paste into Omarchy without stalling</li>
+          <li>New installs get current Omarchy packages</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-10-05" type="stable">
       <description>
         <p>Run Omarchy across several displays, with many fixes from the Windows app.</p>

@@ -1,0 +1,103 @@
+From 9e61e697bca9129c34a4d40bff6def02084a3862 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 25 Oct 2026 21:24:58 -0400
+Subject: [PATCH 146/150] Repair the Qt 6.12 palette in Linux-labeled shell
+ files
+
+Linux hosts relabel the menu and power panel, so the palette repair saw
+them as customized and left them broken. Compare with the Windows wording;
+the label selector restores the host wording after catch-up.
+---
+ .../lib/try-omarchy/install-qt612-palette     | 23 +++++++++++++---
+ guest/tests/test_qt612_palette.py             | 27 +++++++++++++++++++
+ 2 files changed, 47 insertions(+), 3 deletions(-)
+
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/install-qt612-palette b/guest/factory-overlay/usr/local/lib/try-omarchy/install-qt612-palette
+index 524df78..e828fbc 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/install-qt612-palette
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/install-qt612-palette
+@@ -66,10 +66,25 @@ TARGETS = {
+ }
+ 
+ 
++# apply-host-names gives Linux hosts this wording in the Windows payload. Compare
++# with the Windows wording so those files are repaired too; the label selector
++# runs after catch-up and gives the repaired file the host wording again.
++HOST_LABELS = (
++    (b"Managed by the host computer", b"Managed by Windows"),
++    (b"Power profiles are managed by the host computer", b"Power profiles are managed by Windows"),
++)
++
++
+ def digest(data):
+     return hashlib.sha256(data).hexdigest()
+ 
+ 
++def windows_labels(data):
++    for host, windows in HOST_LABELS:
++        data = data.replace(host, windows)
++    return data
++
++
+ def install_file(base, hook, data, previous=()):
+     target = base / hook["path"]
+     # Dotfiles checkouts and redirected system directories are user choices.
+@@ -79,12 +94,14 @@ def install_file(base, hook, data, previous=()):
+     if exists:
+         if not target.is_file():
+             return
+-        old = digest(target.read_bytes())
++        current = target.read_bytes()
++        old = digest(current)
++        labeled = digest(windows_labels(current))
+         versions = [(hook, data), *previous]
+-        if any(old == version["afterSha256"] for version, _ in versions):
++        if any(labeled == version["afterSha256"] for version, _ in versions):
+             return
+         matching = next((contents for version, contents in versions
+-                         if old in version["beforeSha256"]), None)
++                         if labeled in version["beforeSha256"]), None)
+         if matching is None:
+             print(f"Keeping customized {target}", flush=True)
+             return
+diff --git a/guest/tests/test_qt612_palette.py b/guest/tests/test_qt612_palette.py
+index e1af741..db77bf2 100644
+--- a/guest/tests/test_qt612_palette.py
++++ b/guest/tests/test_qt612_palette.py
+@@ -110,6 +110,33 @@ class Qt612PaletteTests(unittest.TestCase):
+                 installer.install(self.root, PAYLOAD)
+                 self.assertEqual(target.read_bytes(), fixed, version['asset'])
+ 
++    def test_linux_host_labels_are_repaired_and_kept_for_the_label_selector(self):
++        labeled = []
++        for hook in self.hooks:
++            target = self.root / hook['path']
++            text = target.read_bytes()
++            if b'Managed by Windows' in text:
++                text = text.replace(b'Managed by Windows', b'Managed by the host computer')
++                text = text.replace(b'Power profiles are managed by Windows',
++                                    b'Power profiles are managed by the host computer')
++                target.write_bytes(text)
++                labeled.append(hook)
++        self.assertEqual({h['path'].rsplit('/', 2)[-2] for h in labeled}, {'menu', 'power'})
++        installer.install(self.root, PAYLOAD)
++        for hook in labeled:
++            target = self.root / hook['path']
++            self.assertEqual(target.read_bytes(), (PAYLOAD / hook['asset']).read_bytes(), hook['path'])
++            fixed = target.read_bytes().replace(b'Managed by Windows', b'Managed by the host computer')
++            target.write_bytes(fixed)
++        installer.install(self.root, PAYLOAD)
++        for hook in labeled:
++            self.assertIn(b'Managed by the host computer', (self.root / hook['path']).read_bytes())
++        custom = self.root / labeled[0]['path']
++        custom.write_bytes(custom.read_bytes() + b'// mine\n')
++        before = custom.read_bytes()
++        installer.install(self.root, PAYLOAD)
++        self.assertEqual(custom.read_bytes(), before)
++
+     def test_custom_already_fixed_missing_and_linked_files_are_preserved(self):
+         custom, fixed, missing, linked = [self.root / h['path'] for h in self.hooks[:4]]
+         custom.write_text('user edits\n')
+-- 
+2.56.0
+

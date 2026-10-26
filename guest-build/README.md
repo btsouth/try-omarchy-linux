@@ -444,3 +444,25 @@ step becomes a message that completes without changes, including when another
 script sources it. Compatibility revision 63 delivers it to existing disks
 before login, and runtime `4.0.4-7` carries it through package updates. The
 migration runner and unrelated failures remain unchanged.
+
+## October Windows guest fixes
+
+| Windows patch | Linux patch | Compatibility revision | Behavior |
+| --- | --- | --- | --- |
+| 0139 | 0144 | 64 | Large clipboard frames stream without quadratic suffix matching. |
+| 0141 | Omitted | none | Keeps the Windows audio endpoint mirror selected; the Linux launcher has no mirror. |
+| 0143 | 0145 | 65 | Qt 6.12 shell palette backport; runtime `4.0.4-8`. |
+| none | 0146 | 65 | The palette repair also fixes the menu and power panel after Linux host labels changed them. |
+| 0144 | 0147 | none | Provenance verifies the final digest when backports touch the same file. |
+| 0145 | Omitted | none | Hardware cursor groundwork; there is no Linux host cursor work yet. |
+| 0147 | Omitted | none | Opening Windows links in Omarchy needs launcher support Linux does not have. |
+| 0150 | 0148 | 66 | The health probe reports busy while pacman runs, and the launcher waits instead of offering a restart. |
+| 0149 | 0149 | none | The factory image grows to 8192 MiB for the October packages. |
+
+Patch 0146 compares installed files with the Windows wording, so a menu or
+power panel showing "Managed by the host computer" is repaired like a Windows
+one. The label selector runs after catch-up and restores the host wording.
+Customized files are still kept.
+
+Patch 0150 refreshes the package lock for the factory image, including Qt
+6.12, Quickshell 0.3.2 and Linux 7.2.11.

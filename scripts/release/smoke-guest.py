@@ -67,6 +67,12 @@ def linux_guest_payload_checks(revision: int) -> dict[str, str]:
         checks["linux-output-scale-payload"] = "grep -Fq 'configured_output_scale()' /usr/local/bin/omarchy-native-display-sync && grep -Fq 'tryomarchy.host=linux' /usr/local/bin/omarchy-native-display-sync && grep -Fq 'omarchy_synced_display_outputs' /usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua"
     if revision >= 63:
         checks["linux-snapper-payload"] = "grep -Fq 'Skip Snapper setup on the Try Omarchy ext4 guest' /usr/share/omarchy/install/config/snapper.sh"
+    if revision >= 64:
+        checks["linux-clipboard-frames-payload"] = "grep -Fq 'A suffix pattern scans huge LF-only frames' /usr/local/bin/clipboard-bridge"
+    if revision >= 65:
+        checks["linux-qt612-palette-payload"] = "grep -Fq 'HOST_LABELS' /usr/local/lib/try-omarchy/install-qt612-palette && test -f /usr/share/try-omarchy/qt612-palette/manifest.json && grep -Fq 'previous_revision < 65' /usr/local/lib/try-omarchy/catch-up"
+    if revision >= 66:
+        checks["linux-busy-health-payload"] = "grep -Fq 'def package_transaction' /usr/local/lib/try-omarchy/compositor-health"
     return {name: command + " && echo yes || echo no" for name, command in checks.items()}
 
 

@@ -144,5 +144,15 @@ fi
 if (( revision >= 63 )); then
   grep -Fq 'Skip Snapper setup on the Try Omarchy ext4 guest' /usr/share/omarchy/install/config/snapper.sh
 fi
+if (( revision >= 64 )); then
+  grep -Fq 'A suffix pattern scans huge LF-only frames' /usr/local/bin/clipboard-bridge
+fi
+if (( revision >= 65 )); then
+  grep -Fq 'HOST_LABELS' /usr/local/lib/try-omarchy/install-qt612-palette
+  grep -Fq 'previous_revision < 65' /usr/local/lib/try-omarchy/catch-up
+fi
+if (( revision >= 66 )); then
+  grep -Fq 'def package_transaction' /usr/local/lib/try-omarchy/compositor-health
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
 sync

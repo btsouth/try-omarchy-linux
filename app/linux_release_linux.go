@@ -8,20 +8,20 @@ import (
 )
 
 // The Linux guest is built from the shared guest series plus the Linux patches
-// (compatibility revision 62) and published on this repository's releases.
+// (compatibility revision 66) and published on this repository's releases.
 // Windows release defaults in manifest.go are deliberately untouched.
 var (
-	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.3.0"
-	linuxGuestSumsSHA256 = "f101b139d441a2b27b9ac9d32d4e2abc626e11636a755255b344039c384fd80e"
+	linuxGuestReleaseURL = "https://github.com/btsouth/try-omarchy-linux/releases/download/linux-v0.3.1"
+	linuxGuestSumsSHA256 = "34c9596f51a4d666f52d0f5817643382402b262be9c46c48edfd78001df8a3ff"
 )
 
-// Measured on the pinned guest image (linux-v0.3.0): the archive, kernel and
-// initramfs total 2,285,052,324 bytes (2.13 GiB). The factory filesystem uses
-// about 5.86 GiB before boot.
+// Measured on the pinned guest image (linux-v0.3.1): the archive, kernel and
+// initramfs total 2,236,081,207 bytes (2.08 GiB). The factory filesystem uses
+// about 5.88 GiB before boot.
 // Allow 14 GiB for setup, including the kernel, initramfs and room for writes.
 // Update these measurements with the pin; the release manifest lists the sizes.
 const (
-	linuxGuestDownloadBytes = 2_285_052_324
+	linuxGuestDownloadBytes = 2_236_081_207
 	linuxGuestSpaceBytes    = int64(14) << 30
 	// A sparse VM disk can grow past what its drive has left. Below this the
 	// guest can hit write errors, so the home says so.

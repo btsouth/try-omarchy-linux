@@ -1,4 +1,4 @@
-From 1c1199fbc2987636c62fb80f5dbe29ca252eb81b Mon Sep 17 00:00:00 2001
+From b8ebd2d733919ea5f7c80a1c580038bef68f87b1 Mon Sep 17 00:00:00 2001
 From: Try Omarchy Release <actions@users.noreply.github.com>
 Date: Thu, 8 Oct 2026 23:36:06 -0400
 Subject: [PATCH 147/150] Verify final backport digests when patches overlap

@@ -1,4 +1,4 @@
-From 431f8c8c4ff60e01bb042065abbd397e752f82f1 Mon Sep 17 00:00:00 2001
+From 9e61e697bca9129c34a4d40bff6def02084a3862 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Sun, 25 Oct 2026 21:24:58 -0400
 Subject: [PATCH 146/150] Repair the Qt 6.12 palette in Linux-labeled shell

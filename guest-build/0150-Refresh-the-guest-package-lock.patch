@@ -1,4 +1,4 @@
-From 2315d5efae56d846f3b686d5e8754e0dc1b7e088 Mon Sep 17 00:00:00 2001
+From 43286ba9b9e91ec563a2a6feca19a6c8fda8771a Mon Sep 17 00:00:00 2001
 From: Try Omarchy Release <actions@users.noreply.github.com>
 Date: Sun, 25 Oct 2026 21:28:43 -0400
 Subject: [PATCH 150/150] Refresh the guest package lock

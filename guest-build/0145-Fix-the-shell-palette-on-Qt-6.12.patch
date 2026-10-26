@@ -1,4 +1,4 @@
-From f33446e66ae0af53353c2613ba5c8bcd10c33b41 Mon Sep 17 00:00:00 2001
+From 4fea9c241e2d163bbc722b62e34ab3a0ae04a843 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Thu, 8 Oct 2026 23:23:15 -0400
 Subject: [PATCH 145/150] Fix the shell palette on Qt 6.12
@@ -88,8 +88,8 @@ Subject: [PATCH 145/150] Fix the shell palette on Qt 6.12
  guest/tests/test_notification_privacy.py      |    4 +-
  guest/tests/test_qt612_palette.py             |  196 ++
  guest/tests/test_snapper_guest.py             |    4 +-
- guest/tests/verify.py                         |    2 +-
- 85 files changed, 35781 insertions(+), 41 deletions(-)
+ guest/tests/verify.py                         |    6 +-
+ 85 files changed, 35783 insertions(+), 43 deletions(-)
  create mode 100755 guest/factory-overlay/usr/local/lib/try-omarchy/install-qt612-palette
  create mode 100644 guest/factory-overlay/usr/share/try-omarchy/qt612-palette/manifest.json
  create mode 100644 guest/factory-overlay/usr/share/try-omarchy/qt612-palette/shell_Commons_Border.qml
@@ -36664,9 +36664,27 @@ index 68d71e3..24d6822 100644
 +        self.assertIn('compat_revision=65', finalizer)
 +        self.assertEqual(json.loads((GUEST / 'spec.json').read_text())['upstream']['packageRelease'], 8)
 diff --git a/guest/tests/verify.py b/guest/tests/verify.py
-index 4f61f00..7910d56 100755
+index 4f61f00..22b17d3 100755
 --- a/guest/tests/verify.py
 +++ b/guest/tests/verify.py
+@@ -67,7 +67,7 @@ def main() -> None:
+     backports = authenticity["backports"]
+     check(
+         [backport.get("id") for backport in backports]
+-        == ["notification-hover-close", "notification-screen-privacy", "host-window-idle", "setup-host-timezone", "clock-timezone-refresh", "screensaver-terminal-fit", "update-free-space-message", "first-run-update-notification", "windows-power-profile", "virtio-nightlight"],
++        == ["notification-hover-close", "notification-screen-privacy", "host-window-idle", "setup-host-timezone", "clock-timezone-refresh", "screensaver-terminal-fit", "update-free-space-message", "first-run-update-notification", "windows-power-profile", "virtio-nightlight", "qt612-palette"],
+         "Omarchy backports are explicitly ordered and identified",
+     )
+     for backport in backports:
+@@ -82,7 +82,7 @@ def main() -> None:
+             (backport["id"] == "host-window-idle"
+              and backport.get("reference") == "guest/factory-overlay/usr/local/lib/try-omarchy/host-window")
+             or backport.get("reference", "").startswith(
+-                ("https://github.com/basecamp/omarchy/", "https://github.com/omacom/try-omarchy/commit/", "https://doc.qt.io/qt-6/qml-qtqml-date.html#timeZoneUpdated-method")
++                ("https://github.com/basecamp/omarchy/", "https://github.com/omacom/omarchy/pull/", "https://github.com/omacom/try-omarchy/commit/", "https://doc.qt.io/qt-6/qml-qtqml-date.html#timeZoneUpdated-method")
+             ),
+             f"backport has a review reference: {backport['id']}",
+         )
 @@ -326,7 +326,7 @@ def main() -> None:
          "system services run without watchdogs, which fire after Windows sleeps",
      )

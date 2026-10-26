@@ -1,0 +1,256 @@
+From f5e9eb4a40731f507ca06f7f70064406cb124583 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 25 Oct 2026 21:00:25 -0400
+Subject: [PATCH] Skip Omarchy snapper setup on the ext4 guest
+
+---
+ guest/fragments/snapper-guest.sh         |  4 ++
+ guest/scripts/finalize-rootfs.sh         |  4 +-
+ guest/scripts/materialize-omarchy.sh     |  9 ++++-
+ guest/spec.json                          |  2 +-
+ guest/tests/test_battery_details.py      |  2 +-
+ guest/tests/test_compositor_health.py    |  2 +-
+ guest/tests/test_display_output_scale.py |  2 +-
+ guest/tests/test_guest_qol.py            |  2 +-
+ guest/tests/test_live_update.py          |  2 +-
+ guest/tests/test_native_nightlight.py    |  2 +-
+ guest/tests/test_notification_privacy.py |  4 +-
+ guest/tests/test_snapper_guest.py        | 48 ++++++++++++++++++++++++
+ guest/tests/verify.py                    |  2 +-
+ 13 files changed, 73 insertions(+), 12 deletions(-)
+ create mode 100644 guest/fragments/snapper-guest.sh
+ create mode 100644 guest/tests/test_snapper_guest.py
+
+diff --git a/guest/fragments/snapper-guest.sh b/guest/fragments/snapper-guest.sh
+new file mode 100644
+index 0000000..08ffed7
+--- /dev/null
++++ b/guest/fragments/snapper-guest.sh
+@@ -0,0 +1,4 @@
++# Try Omarchy boots an ext4 disk with the launcher-supplied kernel. It has no
++# Snapper snapshots or Limine bootloader. This file is also sourced by setup
++# commands, so finish normally instead of exiting their shell.
++echo "Skip Snapper setup on the Try Omarchy ext4 guest"
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index dcb2089..9b72fa3 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -79,6 +79,7 @@ install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/
+ install -m 0644 /usr/share/omarchy/shell/plugins/panels/clock/BarWidget.qml /usr/share/try-omarchy/clock-timezone-refresh.qml
+ 
+ compat_paths=(
++  usr/share/omarchy/install/config/snapper.sh
+   usr/local/lib/try-omarchy/live-update
+   etc/pacman.d/hooks/00-try-omarchy-live-update.hook
+   etc/pacman.d/hooks/zz-try-omarchy-live-update.hook
+@@ -266,7 +267,8 @@ tar -C / -cf /usr/share/try-omarchy/compat-overlay.tar "${compat_paths[@]}"
+ # Revision 60 pauses config autoreload during live package updates.
+ # Revision 61 lets pacman adopt the catch-up night-light backend on update.
+ # Revision 62 gives Linux outputs independent EDID modes and scales.
+-compat_revision=62
++# Revision 63 makes Omarchy's Snapper setup inert on the ext4 guest.
++compat_revision=63
+ printf '%s:%s\n' "$compat_revision" "$kernel_release" >/usr/share/try-omarchy/compat-version
+ 
+ # Fail the build if DKMS or networking modules were not packaged for this kernel.
+diff --git a/guest/scripts/materialize-omarchy.sh b/guest/scripts/materialize-omarchy.sh
+index 4d2a2d8..66f1c82 100755
+--- a/guest/scripts/materialize-omarchy.sh
++++ b/guest/scripts/materialize-omarchy.sh
+@@ -122,7 +122,7 @@ rm -rf "$omarchy_root"
+ mkdir -p "$omarchy_root/bin" "$omarchy_root/themes"
+ 
+ # Match the upstream package's runtime layout. Every copied byte comes from the
+-# pinned Basecamp repository, except the one migration replaced below; the
++# pinned Basecamp repository, except the guest system setup steps below; the
+ # web-only profile is applied later in /etc/skel.
+ for tree in config default install migrations shell applications; do
+   copy_tree "$source_dir/$tree" "$omarchy_root/$tree"
+@@ -139,6 +139,13 @@ cat >"$kernel_migration" <<'MIGRATION'
+ echo "Keep the kernel the Try Omarchy launcher supplies; this guest has no bootloader"
+ MIGRATION
+ 
++# The guest disk is ext4 and has neither Snapper nor a Limine bootloader.
++# Keep the upstream migration runner intact, but make this bare-metal setup
++# step inert, including when a future migration or setup command sources it.
++snapper_config="$omarchy_root/install/config/snapper.sh"
++[[ -f $snapper_config ]] || fail "Omarchy's Snapper setup moved; review it before skipping: $snapper_config"
++install_file 0644 "$guest_dir/fragments/snapper-guest.sh" "$snapper_config"
++
+ while IFS= read -r theme; do
+   [[ -n $theme ]] || continue
+   copy_tree "$source_dir/themes/$theme" "$omarchy_root/themes/$theme"
+diff --git a/guest/spec.json b/guest/spec.json
+index 9ef12b9..1409282 100644
+--- a/guest/spec.json
++++ b/guest/spec.json
+@@ -30,7 +30,7 @@
+     "versionFile": "4.0.0.alpha",
+     "channel": "quattro",
+     "license": "MIT",
+-    "packageRelease": 6,
++    "packageRelease": 7,
+     "integrationDepends": [
+       "fcitx5",
+       "fcitx5-chewing",
+diff --git a/guest/tests/test_battery_details.py b/guest/tests/test_battery_details.py
+index 15084d5..5c14816 100644
+--- a/guest/tests/test_battery_details.py
++++ b/guest/tests/test_battery_details.py
+@@ -204,7 +204,7 @@ class BatteryDetailsFlowTests(unittest.TestCase):
+     def test_compatibility_delivery_and_dkms_version(self):
+         overlay = GUEST / "factory-overlay"
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+-        self.assertIn("compat_revision=62", finalize)
++        self.assertIn("compat_revision=63", finalize)
+         self.assertIn("usr/src/try-omarchy-battery-1.1.0", finalize)
+         self.assertIn("usr/local/lib/try-omarchy/update-battery-dkms", finalize)
+         self.assertIn('PACKAGE_VERSION="1.1.0"', (MODULE_SOURCE.parent / "dkms.conf").read_text())
+diff --git a/guest/tests/test_compositor_health.py b/guest/tests/test_compositor_health.py
+index 4715b0e..7285305 100644
+--- a/guest/tests/test_compositor_health.py
++++ b/guest/tests/test_compositor_health.py
+@@ -34,7 +34,7 @@ class CompositorHealthTests(unittest.TestCase):
+ 
+     def test_existing_disks_receive_health_files(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+-        self.assertIn('compat_revision=62', finalizer)
++        self.assertIn('compat_revision=63', finalizer)
+         for name in ['agent', 'compositor-health']:
+             self.assertIn('  usr/local/lib/try-omarchy/' + name, finalizer)
+         self.assertTrue(HELPER.stat().st_mode & 0o111)
+diff --git a/guest/tests/test_display_output_scale.py b/guest/tests/test_display_output_scale.py
+index 9bb3ec4..26bafc0 100644
+--- a/guest/tests/test_display_output_scale.py
++++ b/guest/tests/test_display_output_scale.py
+@@ -214,7 +214,7 @@ dofile(arg[1])
+ 
+     def test_payload_and_revision_delivery(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+-        self.assertIn('compat_revision=62', finalizer)
++        self.assertIn('compat_revision=63', finalizer)
+         self.assertIn('usr/local/bin/omarchy-native-display-sync', finalizer)
+         self.assertIn('usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua', finalizer)
+         self.assertEqual((GUEST / 'fragments/hypr-monitors-qemu.append.lua').read_bytes(),
+diff --git a/guest/tests/test_guest_qol.py b/guest/tests/test_guest_qol.py
+index 1904939..cd7db42 100644
+--- a/guest/tests/test_guest_qol.py
++++ b/guest/tests/test_guest_qol.py
+@@ -215,7 +215,7 @@ class GuestQolTests(unittest.TestCase):
+     def test_compatibility_delivers_guarded_payload_once_per_revision(self):
+         finalize = (GUEST / "scripts/finalize-rootfs.sh").read_text()
+         paths = finalize.split("compat_paths=(", 1)[1].split(")", 1)[0]
+-        self.assertIn("compat_revision=62", finalize)
++        self.assertIn("compat_revision=63", finalize)
+         for path in ("usr/local/bin/omarchy-native-screensaver-text", "usr/local/lib/try-omarchy/install-guest-qol", "usr/share/try-omarchy/guest-qol", "usr/local/bin/omarchy-windows-audio-bridge"):
+             self.assertIn(path, paths)
+         self.assertNotIn("etc/fonts/conf.d/30-try-omarchy.conf", paths)
+diff --git a/guest/tests/test_live_update.py b/guest/tests/test_live_update.py
+index 9efe36d..76ef7e4 100644
+--- a/guest/tests/test_live_update.py
++++ b/guest/tests/test_live_update.py
+@@ -176,7 +176,7 @@ class LiveUpdateTests(unittest.TestCase):
+ 
+     def test_delivery_and_best_effort_hook(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+-        self.assertIn('compat_revision=62', finalizer)
++        self.assertIn('compat_revision=63', finalizer)
+         for path in ['usr/local/lib/try-omarchy/live-update', 'etc/pacman.d/hooks/00-try-omarchy-live-update.hook', 'etc/pacman.d/hooks/zz-try-omarchy-live-update.hook']:
+             self.assertIn(path, finalizer)
+         pre = (GUEST / 'factory-overlay/etc/pacman.d/hooks/00-try-omarchy-live-update.hook').read_text()
+diff --git a/guest/tests/test_native_nightlight.py b/guest/tests/test_native_nightlight.py
+index 7c7f891..c637f9e 100644
+--- a/guest/tests/test_native_nightlight.py
++++ b/guest/tests/test_native_nightlight.py
+@@ -214,5 +214,5 @@ class PersistentNightlightTests(unittest.TestCase):
+         catch_up = (self.overlay / 'usr/local/lib/try-omarchy/catch-up').read_text()
+         for path in ['usr/local/bin/omarchy-native-nightlight', 'usr/local/share/try-omarchy/nightlight.frag', 'usr/local/lib/try-omarchy/install-nightlight', 'usr/share/try-omarchy/nightlight']:
+             self.assertIn(path, finalizer)
+-        self.assertIn('compat_revision=62', finalizer)
++        self.assertIn('compat_revision=63', finalizer)
+         self.assertIn('previous_revision < 61', catch_up)
+diff --git a/guest/tests/test_notification_privacy.py b/guest/tests/test_notification_privacy.py
+index ea10192..713a9b6 100644
+--- a/guest/tests/test_notification_privacy.py
++++ b/guest/tests/test_notification_privacy.py
+@@ -116,8 +116,8 @@ for (const state of [null, {screensaverStateKnown:false}, {screensaverStateKnown
+     def test_compatibility_overlay_and_catch_up_revision(self):
+         finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
+         catch_up = (GUEST / 'factory-overlay/usr/local/lib/try-omarchy/catch-up').read_text()
+-        self.assertIn('compat_revision=62', finalizer)
++        self.assertIn('compat_revision=63', finalizer)
+         self.assertIn('usr/share/try-omarchy/notifications', finalizer)
+         self.assertIn('usr/local/lib/try-omarchy/install-notifications', finalizer)
+         self.assertIn('previous_revision < 58', catch_up)
+-        self.assertEqual(json.loads((GUEST / 'spec.json').read_text())['upstream']['packageRelease'], 6)
++        self.assertEqual(json.loads((GUEST / 'spec.json').read_text())['upstream']['packageRelease'], 7)
+diff --git a/guest/tests/test_snapper_guest.py b/guest/tests/test_snapper_guest.py
+new file mode 100644
+index 0000000..71182e1
+--- /dev/null
++++ b/guest/tests/test_snapper_guest.py
+@@ -0,0 +1,48 @@
++"""Snapper setup must be inert on the launcher's ext4 guest disk."""
++import json
++import os
++from pathlib import Path
++import subprocess
++import tempfile
++import unittest
++
++GUEST = Path(__file__).resolve().parents[1]
++SETUP = GUEST / 'fragments/snapper-guest.sh'
++TARGET = 'usr/share/omarchy/install/config/snapper.sh'
++
++
++class GuestSnapperTests(unittest.TestCase):
++    def test_setup_and_repeated_setup_leave_snapshot_tools_untouched(self):
++        with tempfile.TemporaryDirectory() as directory:
++            root = Path(directory)
++            calls = root / 'calls'
++            for name in ('snapper', 'systemctl', 'mkdir', 'install'):
++                tool = root / name
++                tool.write_text('#!/bin/bash\necho "$0 $*" >> "$CALLS"\nexit 99\n')
++                tool.chmod(0o755)
++            env = dict(os.environ, PATH=f'{root}:' + os.environ['PATH'], CALLS=str(calls), BASH_ENV='/dev/null')
++            for _ in range(2):
++                result = subprocess.run(['bash', '-euo', 'pipefail', str(SETUP)],
++                                        env=env, text=True, capture_output=True)
++                self.assertEqual(result.returncode, 0, result.stderr)
++                self.assertIn('ext4', result.stdout)
++            self.assertFalse(calls.exists())
++
++    def test_sourcing_setup_continues_and_does_not_mask_later_failure(self):
++        for suffix, expected in (('echo continued', 0), ('false', 1)):
++            result = subprocess.run(['bash', '-euo', 'pipefail', '-c',
++                                     'source "$1"; ' + suffix, 'test', str(SETUP)],
++                                    env=dict(os.environ, BASH_ENV='/dev/null'), text=True, capture_output=True)
++            self.assertEqual(result.returncode, expected, result.stderr)
++            if expected == 0:
++                self.assertIn('continued', result.stdout)
++
++    def test_factory_runtime_and_compatibility_delivery_use_same_setup(self):
++        materialize = (GUEST / 'scripts/materialize-omarchy.sh').read_text()
++        self.assertIn('install_file 0644 "$guest_dir/fragments/snapper-guest.sh" "$snapper_config"', materialize)
++        self.assertIn('[[ -f $snapper_config ]] || fail', materialize)
++        finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
++        paths = finalizer.split('compat_paths=(', 1)[1].split(')', 1)[0]
++        self.assertIn(TARGET, paths)
++        self.assertIn('compat_revision=63', finalizer)
++        self.assertEqual(json.loads((GUEST / 'spec.json').read_text())['upstream']['packageRelease'], 7)
+diff --git a/guest/tests/verify.py b/guest/tests/verify.py
+index 255c88f..b157ce5 100755
+--- a/guest/tests/verify.py
++++ b/guest/tests/verify.py
+@@ -326,7 +326,7 @@ def main() -> None:
+         "system services run without watchdogs, which fire after Windows sleeps",
+     )
+     check(
+-        "compat_revision=62" in finalize_rootfs
++        "compat_revision=63" in finalize_rootfs
+         and "usr/local/lib/try-omarchy/host-window" in compat_paths
+         and "usr/local/lib/try-omarchy/repair-host-window" in compat_paths
+         and "usr/share/try-omarchy/host-window-idle.qml" in compat_paths
+-- 
+2.56.0
+

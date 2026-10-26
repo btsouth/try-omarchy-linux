@@ -65,6 +65,8 @@ def linux_guest_payload_checks(revision: int) -> dict[str, str]:
         checks["linux-nightlight-adoption-payload"] = "grep -Fq 'previous_revision < 61' /usr/local/lib/try-omarchy/catch-up && test -f /usr/share/try-omarchy/nightlight/bin_omarchy-update-system-pkgs-when-conflicted"
     if revision >= 62:
         checks["linux-output-scale-payload"] = "grep -Fq 'configured_output_scale()' /usr/local/bin/omarchy-native-display-sync && grep -Fq 'tryomarchy.host=linux' /usr/local/bin/omarchy-native-display-sync && grep -Fq 'omarchy_synced_display_outputs' /usr/share/try-omarchy/skel-fragments/hypr-monitors-qemu.append.lua"
+    if revision >= 63:
+        checks["linux-snapper-payload"] = "grep -Fq 'Skip Snapper setup on the Try Omarchy ext4 guest' /usr/share/omarchy/install/config/snapper.sh"
     return {name: command + " && echo yes || echo no" for name, command in checks.items()}
 
 

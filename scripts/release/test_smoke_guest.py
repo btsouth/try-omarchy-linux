@@ -33,7 +33,7 @@ class ParseFactsTests(unittest.TestCase):
 
 class GuestRevisionTests(unittest.TestCase):
     def test_unified_revision_is_read_from_appended_patches(self):
-        self.assertEqual(smoke_guest.guest_compat_revision(), 62)
+        self.assertEqual(smoke_guest.guest_compat_revision(), 63)
 
     def test_linux_payload_checks_follow_delivery_revisions(self):
         self.assertEqual(smoke_guest.linux_guest_payload_checks(49), {})
@@ -42,7 +42,7 @@ class GuestRevisionTests(unittest.TestCase):
                                (53, "ready"), (54, "app"), (55, "notices"),
                                (56, "labels-hook"), (57, "nightlight"), (58, "notifications"),
                                (59, "health"), (60, "live-update"), (61, "nightlight-adoption"),
-                               (62, "output-scale")]:
+                               (62, "output-scale"), (63, "snapper")]:
             with self.subTest(revision=revision):
                 checks = smoke_guest.linux_guest_payload_checks(revision)
                 self.assertEqual(set(checks) - previous, {f"linux-{name}-payload"})

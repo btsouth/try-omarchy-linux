@@ -1,7 +1,7 @@
-From 88a86461c9a5ce2af381887e9a27e320d9f07464 Mon Sep 17 00:00:00 2001
+From f33446e66ae0af53353c2613ba5c8bcd10c33b41 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Thu, 8 Oct 2026 23:23:15 -0400
-Subject: [PATCH 145/149] Fix the shell palette on Qt 6.12
+Subject: [PATCH 145/150] Fix the shell palette on Qt 6.12
 
 ---
  guest/README.md                               |    5 +
@@ -156,7 +156,7 @@ Subject: [PATCH 145/149] Fix the shell palette on Qt 6.12
  create mode 100644 guest/tests/test_qt612_palette.py
 
 diff --git a/guest/README.md b/guest/README.md
-index 1f29e91..4ebdf85 100644
+index 1f29e91..3b87068 100644
 --- a/guest/README.md
 +++ b/guest/README.md
 @@ -33,6 +33,11 @@ The Omarchy shell includes two narrowly scoped fixes reviewed upstream after
@@ -165,7 +165,7 @@ index 1f29e91..4ebdf85 100644
  `spec.json`, and the generated provenance identifies the modified shell tree.
 +The Qt 6.12 palette backport qualifies every affected shell QML reference as
 +`Commons.Color`, retaining the pinned shell and previous guest backports.
-+Compatibility revision 60 repairs only matching reviewed defaults before login;
++Compatibility revision 65 repairs only matching reviewed defaults before login;
 +modified, missing, linked and already-fixed files are kept. Runtime `4.0.4-8`
 +packages the same fixed files for fresh images and subsequent updates.
  

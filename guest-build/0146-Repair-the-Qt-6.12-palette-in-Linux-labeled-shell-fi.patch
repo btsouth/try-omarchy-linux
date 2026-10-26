@@ -1,7 +1,7 @@
-From 515228e3b9f83ced2e922dd94cf44a11a3016be1 Mon Sep 17 00:00:00 2001
+From 431f8c8c4ff60e01bb042065abbd397e752f82f1 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Sun, 25 Oct 2026 21:24:58 -0400
-Subject: [PATCH 146/149] Repair the Qt 6.12 palette in Linux-labeled shell
+Subject: [PATCH 146/150] Repair the Qt 6.12 palette in Linux-labeled shell
  files
 
 Linux hosts relabel the menu and power panel, so the palette repair saw

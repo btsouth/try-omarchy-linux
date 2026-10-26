@@ -95,6 +95,15 @@ on disks where its completion marker is missing. Other migrations still fail
 normally on errors. Runtime `4.0.4-7` includes the same setup step for fresh
 installations and subsequent updates. Resetting the disk is not required.
 
+Compatibility revision 64 delivers a clipboard bridge that receives large
+images from the host without stalling. Revision 65 repairs Omarchy shell files
+for Qt 6.12 before login, replacing only reviewed old files, including the
+menu and power panel that carry Linux host wording. Runtime `4.0.4-8` ships
+the corrected shell for fresh installations and subsequent updates. Revision
+66 makes the compositor health probe report busy while pacman runs, so the
+launcher waits for a package update instead of offering a restart that would
+interrupt it.
+
 If repository publication fails, inspect:
 
 ```sh

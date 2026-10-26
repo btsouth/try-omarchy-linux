@@ -1,7 +1,7 @@
-From 3d7178ef4b28e66e4025296f71958da5bc3deec4 Mon Sep 17 00:00:00 2001
+From 3dcca9d664f4bcdcc0bead476f8b5cc7fc185fef Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Wed, 21 Oct 2026 18:39:32 -0400
-Subject: [PATCH 149/149] Give the factory image room for the October packages
+Subject: [PATCH 149/150] Give the factory image room for the October packages
 
 The October 21 lock refresh grows the staged root to 6.0 GiB, past the
 85% fill limit of the 7168 MiB image. New disks are still expanded to their

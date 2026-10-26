@@ -1,7 +1,7 @@
-From 549424012e3b10cabe9dac2f7d6e68f471e1af87 Mon Sep 17 00:00:00 2001
+From 1c1199fbc2987636c62fb80f5dbe29ca252eb81b Mon Sep 17 00:00:00 2001
 From: Try Omarchy Release <actions@users.noreply.github.com>
 Date: Thu, 8 Oct 2026 23:36:06 -0400
-Subject: [PATCH 147/149] Verify final backport digests when patches overlap
+Subject: [PATCH 147/150] Verify final backport digests when patches overlap
 
 ---
  guest/README.md                      |   5 +-
@@ -10,7 +10,7 @@ Subject: [PATCH 147/149] Verify final backport digests when patches overlap
  3 files changed, 128 insertions(+), 10 deletions(-)
 
 diff --git a/guest/README.md b/guest/README.md
-index 4ebdf85..c743461 100644
+index 3b87068..a2a378a 100644
 --- a/guest/README.md
 +++ b/guest/README.md
 @@ -32,7 +32,10 @@ The Omarchy shell includes two narrowly scoped fixes reviewed upstream after
@@ -24,7 +24,7 @@ index 4ebdf85..c743461 100644
 +backport. Consecutive targets for a path must form an unbroken digest chain.
  The Qt 6.12 palette backport qualifies every affected shell QML reference as
  `Commons.Color`, retaining the pinned shell and previous guest backports.
- Compatibility revision 60 repairs only matching reviewed defaults before login;
+ Compatibility revision 65 repairs only matching reviewed defaults before login;
 diff --git a/guest/scripts/write-provenance.py b/guest/scripts/write-provenance.py
 index ba5ff7a..8320e8e 100755
 --- a/guest/scripts/write-provenance.py

@@ -1,7 +1,7 @@
-From 89fa81294199e74a5dc4618b04ed330958fb12a3 Mon Sep 17 00:00:00 2001
+From 228ea1e528cf2858fcefe5014fca0218a38b19f2 Mon Sep 17 00:00:00 2001
 From: Tyler South <tsouth2@gmail.com>
 Date: Wed, 21 Oct 2026 20:56:06 -0400
-Subject: [PATCH 148/149] Report a slow compositor as busy during package
+Subject: [PATCH 148/150] Report a slow compositor as busy during package
  updates
 
 A large package update on CPU rendering can keep Hyprland from answering

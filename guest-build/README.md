@@ -10,6 +10,14 @@ scripts/release/build-guest.sh --contract-only
 scripts/release/build-guest.sh --output /path/to/artifacts
 ```
 
+Patch 0151 lets Omarchy's default terminal setting choose the terminal. The
+image used to put a Foot-only `xdg-terminal-exec` in `/usr/local/bin`, ahead of
+the packaged one, so Super+Return and the Omarchy menu always opened Foot. The
+packaged tool already starts with Foot in Omarchy's list, and Omarchy's
+`foot.desktop` maps the app id, title and directory arguments. Catch-up removes
+the shim from existing disks when it is still the unchanged copy, delivered by
+compatibility revision 67.
+
 Patches 0121 and 0122 port the everyday guest fixes from Try Omarchy for Mac:
 screensaver text fits the terminal and tracks its effect PID; low disk space
 messages distinguish the guest disk from the PC and point to **Settings >

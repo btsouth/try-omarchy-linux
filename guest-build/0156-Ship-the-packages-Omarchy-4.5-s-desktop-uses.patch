@@ -1,0 +1,123 @@
+From d599244e2b3adfcbb50f824f6d9546e84d96937a Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 8 Nov 2026 00:11:53 -0500
+Subject: [PATCH] Ship the packages Omarchy 4.5's desktop uses
+
+Screenshots now open in Omasnap, Disk Usage is Disktree, and 4.5 adds vi,
+xorg-xsetroot for the XWayland root cursor and the Qt and ffmpeg pieces
+for building Omarchy-style apps. Add them in place of Tensaku and dua-cli,
+which 4.5's migrations remove. The runtime also depends on the four new
+desktop packages, so Update > Omarchy brings them to existing disks.
+
+Leave out the optional apps, OWE video backgrounds, floating titlebars,
+the extra input methods and power profiles; their migrations are inert.
+---
+ guest/packages.txt | 17 +++++++++++++++--
+ guest/spec.json    |  4 ++++
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/guest/packages.txt b/guest/packages.txt
+index 8b9df7f..326c67a 100644
+--- a/guest/packages.txt
++++ b/guest/packages.txt
+@@ -10,7 +10,7 @@ clang
+ coreutils
+ dbus
+ desktop-file-utils
+-dua-cli
++disktree-bin
+ e2fsprogs
+ eza
+ fastfetch
+@@ -19,6 +19,7 @@ fcitx5-chewing
+ fcitx5-gtk
+ fcitx5-qt
+ fd
++ffmpeg
+ fontconfig
+ foot
+ fzf
+@@ -58,6 +59,7 @@ omacalc
+ omacut
+ omarchy-keyring
+ omarchy-nvim
++omasnap
+ omawrite
+ pacman-contrib
+ pamixer
+@@ -70,6 +72,10 @@ polkit
+ python
+ python-gobject
+ qrencode
++qt6-base
++qt6-declarative
++qt6-multimedia
++qt6-svg
+ qt6-wayland
+ quickshell
+ ripgrep
+@@ -82,7 +88,6 @@ starship
+ sudo
+ systemd
+ systemd-resolvconf
+-tensaku
+ tesseract
+ tesseract-data-eng
+ tmux
+@@ -92,6 +97,7 @@ udiskie
+ unzip
+ uwsm
+ v4l2loopback-dkms
++vi
+ vulkan-swrast
+ vulkan-virtio
+ wayland
+@@ -104,9 +110,16 @@ xdg-desktop-portal-hyprland
+ xdg-terminal-exec
+ xdg-user-dirs
+ xdg-utils
++xorg-xsetroot
+ xorg-xwayland
+ yay
+ zbar
+ zoxide
+ zram-generator
+ zstd
++
++# Omarchy 4.5 base packages left out of this VM image: optional apps (hype,
++# monologue, signed, gliff, superwhisper-bin, kdenlive, obs-studio, xournalpp),
++# video backgrounds (owe), floating titlebars (omarchy-hyprland-titlebars),
++# extra input methods (fcitx5-mozc, fcitx5-chinese-addons, fcitx5-table-extra)
++# and power profiles (the host manages power). Their migrations are inert.
+diff --git a/guest/spec.json b/guest/spec.json
+index 8b39eb7..b06e95e 100644
+--- a/guest/spec.json
++++ b/guest/spec.json
+@@ -32,6 +32,7 @@
+     "license": "MIT",
+     "packageRelease": 10,
+     "integrationDepends": [
++      "disktree-bin",
+       "fcitx5",
+       "fcitx5-chewing",
+       "fcitx5-gtk",
+@@ -44,13 +45,16 @@
+       "libpulse",
+       "man-db",
+       "noto-fonts-cjk",
++      "omasnap",
+       "openssl",
+       "polkit",
+       "python",
+       "python-gobject",
+       "socat",
++      "vi",
+       "wl-clipboard",
+       "xdg-user-dirs",
++      "xorg-xsetroot",
+       "zstd"
+     ]
+   },
+-- 
+2.56.0
+

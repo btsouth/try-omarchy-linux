@@ -10,6 +10,43 @@ scripts/release/build-guest.sh --contract-only
 scripts/release/build-guest.sh --output /path/to/artifacts
 ```
 
+Patches 0153 to 0162 move the guest to Omarchy 4.5.0 (omacom/omarchy
+`v4.5.0`, ac2690cd), the same move as Try Omarchy for Windows' 0160 to 0167.
+It is not a descendant of the 4.0.4 quattro commit, so every backport was
+checked against it again. Hover-close and the Qt 6.12 palette are upstream now
+and are dropped; notification privacy, the host time zone (fed through the
+setup form's new preset slot), first-run update urgency, the power profile, the
+virtio night light and the host window idle lease are re-ported; the clock,
+screensaver, free-space message and bell mute rebase. Existing disks run 4.5's
+new migrations on **Update > Omarchy**, while fresh users have them marked done,
+so `materialize-omarchy.sh` makes the ones that install apps the image leaves
+out, reorder the package repositories or apply sysctl files the guest does not
+ship print a message instead. Each is guarded by its reviewed digest, so an
+upstream change stops the build. The input-method migration keeps its shortcut
+defaults but does not add Mozc or the Chinese add-ons. The kernel reboot check
+now matches 4.5's indented line. The image ships 4.5's XKB option, the language
+and sudo-timeout sudoers rules, the mise tool and agent account declarations and
+the shell keep-alive drop-in, and replaces Osaka Jade with Jade Horse and
+Starship as upstream did. The 4.0.x repair payloads still serve disks on the
+old runtime; their tests read a frozen copy of the 4.0.4 backport registry in
+`tests/fixtures/omarchy-4.0.4`.
+
+Patch 0154 leaves the 82 MiB of theme intro videos out; they play only through
+OWE, which the image does not ship. Patch 0155 pins mise 2026.10.25, which 4.5's
+lazy tool shims need. Patch 0156 ships Omasnap, Disktree, vi, xorg-xsetroot and
+the Qt and ffmpeg pieces 4.5 adds, in place of Tensaku and dua-cli; the runtime
+depends on the four desktop packages so existing disks get them. Patch 0157
+ships the patched 4.0.4 idle service and clock in the factory overlay: the build
+used to copy its own files into those repair payloads, which on a 4.5 image
+would put 4.5's idle service on a 4.0.4 shell. Patch 0158 refreshes the package
+lock, which brings Hyprland 0.57.1, aquamarine 0.16.0 and kernel 7.2.14. Patch
+0159 keeps "Managed by the host computer" in 4.5's power menu and panel by
+recording the runtime's own power files for `apply-host-names`. Patch 0160 lets
+catch-up finish on early preview disks without DKMS. Patch 0161 keeps a stopped
+build from deleting the host's device nodes: pacstrap mounts the kernel's
+devtmpfs inside the staged root, and cleanup used to `rm -rf` through it. Patch
+0162 raises the compatibility revision to 68. Runtime `4.5.0-10` carries it all.
+
 Patch 0152 mutes Hyprland's sound for every terminal bell. Hyprland 0.57
 plays one for each bell, and Foot rings it on missed Tab completions and
 Backspace at an empty prompt. It backports Omarchy's `bell_sound = "none"`

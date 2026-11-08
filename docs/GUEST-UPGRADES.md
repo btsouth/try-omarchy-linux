@@ -104,6 +104,19 @@ the corrected shell for fresh installations and subsequent updates. Revision
 launcher waits for a package update instead of offering a restart that would
 interrupt it.
 
+Compatibility revision 68 moves existing disks to Omarchy 4.5.0. The next
+**Update > Omarchy** installs runtime `4.5.0-10`, mise 2026.10.25 and the new
+desktop packages (Omasnap, Disktree, vi, xorg-xsetroot), then runs Omarchy's
+migrations. Those replace Tensaku with Omasnap and dua-cli with Disktree, and
+turn earlier mise wrappers into lazy shims. Migrations for apps the image leaves
+out (OWE, Hype, Monologue, Signed, Gliff, floating titlebars, Mozc and the
+Chinese add-ons), the repository reorder, the kernel switch and the BBR and ARP
+sysctls print a message and change nothing, so updated and fresh disks match.
+Omarchy 4.5 also removes orphaned packages without asking during the update;
+packages the guest needs are explicit or runtime dependencies, so they are not
+orphans. The idle and clock repairs keep carrying the 4.0.4 files, so they only
+ever touch disks still on that runtime.
+
 If repository publication fails, inspect:
 
 ```sh

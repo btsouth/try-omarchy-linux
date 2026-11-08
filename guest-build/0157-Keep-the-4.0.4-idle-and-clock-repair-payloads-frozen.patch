@@ -1,0 +1,747 @@
+From b166a94aab6ba3da36cda5eea427ee90bcbe8088 Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 8 Nov 2026 00:53:00 -0500
+Subject: [PATCH] Keep the 4.0.4 idle and clock repair payloads frozen
+
+The build copied its own idle service and clock widget into the repair payloads for disks on the 4.0.4 runtime. With the image on Omarchy 4.5 that would put 4.5's files on a 4.0.4 shell, whose idle service then fails to load. Ship the patched 4.0.4 files in the factory overlay instead, checked against the frozen 4.0.4 backport registry.
+---
+ .../try-omarchy/clock-timezone-refresh.qml    | 181 +++++++
+ .../share/try-omarchy/host-window-idle.qml    | 461 ++++++++++++++++++
+ guest/scripts/finalize-rootfs.sh              |   8 +-
+ guest/tests/test_legacy_repair_payloads.py    |  49 ++
+ 4 files changed, 694 insertions(+), 5 deletions(-)
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/clock-timezone-refresh.qml
+ create mode 100644 guest/factory-overlay/usr/share/try-omarchy/host-window-idle.qml
+ create mode 100644 guest/tests/test_legacy_repair_payloads.py
+
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/clock-timezone-refresh.qml b/guest/factory-overlay/usr/share/try-omarchy/clock-timezone-refresh.qml
+new file mode 100644
+index 0000000..33c5b7b
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/clock-timezone-refresh.qml
+@@ -0,0 +1,181 @@
++import QtQuick
++import Quickshell
++import Quickshell.Io
++import qs.Commons
++import qs.Ui
++import "Model.js" as Model
++
++// Date/time label for the bar, and the host for the calendar popup.
++//
++// Left click reveals the calendar — asking "what is the date?" is what a
++// click on a clock means — right click walks the common label formats, and
++// middle click opens the timezone picker.
++BarWidget {
++  id: root
++  moduleName: "omarchy.clock"
++
++  property date displayDate: clock.date
++
++  readonly property string configuredFormat: vertical
++    ? setting("verticalFormat", "HH\n—\nmm")
++    : setting("format", "dddd HH:mm")
++  readonly property string configuredAltFormat: vertical
++    ? setting("verticalFormatAlt", "dd\nMMM\n'W'ww\n''yy")
++    : setting("formatAlt", "d MMMM 'W'ww yyyy")
++
++  readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical))
++
++  // What the bar shows is what shell.json stores, so a cycled format is the
++  // format from then on rather than something that reverts on restart.
++  readonly property string activeFormat: configuredFormat
++  readonly property string displayText: formatted(displayDate)
++  readonly property var verticalLines: displayText.split("\n")
++
++  function refresh() {
++    Date.timeZoneUpdated()
++    displayDate = new Date()
++    if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
++  }
++
++  function cycleFormat() {
++    var current = String(configuredFormat)
++    var next = Model.nextClockFormat(formatRing, current)
++    if (next === "" || next === current) return
++
++    var entry = { id: root.moduleName }
++    for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
++    entry[vertical ? "verticalFormat" : "format"] = next
++
++    // Applied locally first so the label changes on the click itself; the
++    // shell.json write comes back through the bar as the same value.
++    root.settings = entry
++    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
++      root.bar.shell.updateEntryInline(root.moduleName, entry)
++  }
++
++  function formatted(date) {
++    return Qt.formatDateTime(date, activeFormat.replace(/ww/g, Model.isoWeekLiteral(date.getFullYear(), date.getMonth(), date.getDate())))
++  }
++
++  // ---- Calendar popup. Shape contract for shell.summon/hide/toggle
++  //      routing: Bar.findPanelWidget requires open/close/opened on the
++  //      bar-widget root.
++  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
++
++  function open() {
++    if (panelLoader.item) panelLoader.item.open()
++  }
++
++  function close() {
++    if (panelLoader.item) panelLoader.item.close()
++  }
++
++  function togglePanel() {
++    if (panelLoader.item) panelLoader.item.toggle()
++  }
++
++  function toggleWeekStart() {
++    if (panelLoader.item) panelLoader.item.toggleWeekStart()
++  }
++
++  // The clock fills more slot than it paints a mark for, at both
++  // orientations: horizontally it is a text label in a padded slot, so the
++  // dot takes the label width; vertically it is a stack of icon-sized lines,
++  // so the dot takes one line — the same mark every icon widget gets, rather
++  // than a rule running the height of the whole stack.
++  readonly property real openPanelIndicatorWidth: button.labelWidth
++  readonly property real openPanelIndicatorHeight: Math.max(Style.space(10), Math.round(Style.bar.iconSlot * 0.55))
++
++  // Forwarded so this widget can stand in for the panel as the bar's popout
++  // identity: Bar.requestPopout prefers closeForPopoutSwitch over close, and
++  // KeyboardPanel reads popoutSwitchClosing back off its owner.
++  readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
++
++  function closeForPopoutSwitch() {
++    if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
++  }
++
++  function injectPanel() {
++    var target = panelLoader.item
++    if (!target) return
++    if ("bar" in target) target.bar = root.bar
++    if ("settings" in target) target.settings = root.settings
++    if ("anchorItem" in target) target.anchorItem = button
++    if ("hostWidget" in target) target.hostWidget = root
++  }
++
++  implicitWidth: button.implicitWidth
++  implicitHeight: button.implicitHeight
++
++  onBarChanged: injectPanel()
++  onSettingsChanged: injectPanel()
++
++  SystemClock {
++    id: clock
++    precision: SystemClock.Minutes
++    onDateChanged: root.displayDate = date
++  }
++
++  Loader {
++    id: panelLoader
++    active: true
++    source: Qt.resolvedUrl("Panel.qml")
++    visible: false
++    onLoaded: {
++      root.injectPanel()
++      Qt.callLater(root.injectPanel)
++    }
++  }
++
++  IpcHandler {
++    target: "omarchy.clock"
++
++    function refresh(): void { root.broadcast("refresh") }
++    function cycleFormat(): void { root.cycleFormat() }
++    function toggleWeekStart(): void { root.toggleWeekStart() }
++    function open(): void { root.open() }
++    function close(): void { root.close() }
++    function show(): void { root.open() }
++    function hide(): void { root.close() }
++    function toggle(): void { root.togglePanel() }
++  }
++
++  WidgetButton {
++    id: button
++    anchors.fill: parent
++    bar: root.bar
++    text: root.vertical ? "" : root.displayText
++    labelVisible: !root.vertical
++    hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""
++    fixedHeight: root.vertical ? root.verticalLines.length * Style.bar.iconSlot : -1
++    horizontalMargin: 8.75
++    verticalPadding: 8.75
++
++    onPressed: function(b) {
++      if (b === Qt.RightButton) root.cycleFormat()
++      else if (b === Qt.MiddleButton) { if (root.bar) root.bar.run("omarchy-menu-timezone") }
++      else root.togglePanel()
++    }
++
++    Column {
++      visible: root.vertical
++      anchors.fill: parent
++
++      Repeater {
++        model: root.verticalLines
++
++        OpticalGlyph {
++          required property string modelData
++          width: button.width
++          height: Style.bar.iconSlot
++          text: modelData
++          fontFamily: button.fontFamily
++          fontSize: modelData.length > 3
++            ? button.fontSize * 0.9
++            : button.fontSize
++          color: button.foreground
++        }
++      }
++    }
++  }
++}
+diff --git a/guest/factory-overlay/usr/share/try-omarchy/host-window-idle.qml b/guest/factory-overlay/usr/share/try-omarchy/host-window-idle.qml
+new file mode 100644
+index 0000000..6b97a4b
+--- /dev/null
++++ b/guest/factory-overlay/usr/share/try-omarchy/host-window-idle.qml
+@@ -0,0 +1,461 @@
++import QtQuick
++import Quickshell
++import Quickshell.Hyprland
++import Quickshell.Io
++import Quickshell.Wayland
++import "IdleModel.js" as IdleModel
++
++Item {
++  id: root
++
++  // Injected by omarchy-shell (the first-party service loader).
++  property var shell: null
++
++  readonly property string home: Quickshell.env("HOME")
++  readonly property string stayAwakeStateDir: home + "/.local/state/omarchy/indicators"
++  readonly property string stayAwakeStatePath: stayAwakeStateDir + "/stay-awake"
++  readonly property int defaultScreensaverSeconds: 150
++  readonly property int defaultLockSeconds: 300
++  readonly property var idleConfig: shell && shell.shellConfig && shell.shellConfig.idle
++    ? shell.shellConfig.idle : (shell && shell.idleConfig ? shell.idleConfig : ({}))
++  readonly property int screensaverTimeoutSeconds: secondsFromConfig(idleConfig.screensaver, defaultScreensaverSeconds)
++  readonly property int lockTimeoutSeconds: secondsFromConfig(idleConfig.lock, defaultLockSeconds)
++  readonly property int firstIdleTimeoutSeconds: Math.min(screensaverTimeoutSeconds, lockTimeoutSeconds)
++  readonly property int screensaverDelaySeconds: Math.max(0, screensaverTimeoutSeconds - firstIdleTimeoutSeconds)
++  readonly property int lockDelaySeconds: Math.max(0, lockTimeoutSeconds - firstIdleTimeoutSeconds)
++  readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake && !hostWindowVisible
++  readonly property string screensaverClass: "org.omarchy.screensaver"
++
++  // A host lease never writes the user's persistent stay-awake indicator.
++  property bool hostWindowVisible: false
++  onHostWindowVisibleChanged: {
++    if (hostWindowVisible) cancelIdleCycle("host-window-visible")
++    else Qt.callLater(handleIdleChanged)
++  }
++  Timer {
++    interval: 5000
++    running: true
++    repeat: true
++    triggeredOnStart: true
++    onTriggered: {
++      if (!hostWindowProbe.running) hostWindowProbe.running = true
++    }
++  }
++  Timer {
++    id: hostWindowProbeExpiry
++    interval: 10000
++    onTriggered: root.hostWindowVisible = false
++  }
++  Process {
++    id: hostWindowProbe
++    command: ["/usr/local/lib/try-omarchy/host-window", "active"]
++    stdout: SplitParser {
++      onRead: function(line) {
++        root.hostWindowVisible = String(line).trim() === "true"
++        if (root.hostWindowVisible) hostWindowProbeExpiry.restart()
++        else hostWindowProbeExpiry.stop()
++      }
++    }
++    onExited: function(exitCode) { if (exitCode !== 0) root.hostWindowVisible = false }
++  }
++
++  property bool stayAwake: false
++  property bool stayAwakeStateLoaded: false
++  property bool hasPendingStayAwakePersist: false
++  property bool pendingStayAwakePersist: false
++  property bool idledThisCycle: false
++  property bool screensaverStartedThisCycle: false
++  property string lastEvent: "starting"
++  property string lastEventAt: ""
++  property var screensaverWindows: ({})
++  property int screensaverWindowCount: 0
++  property bool screensaverStateKnown: false
++  property var screensaverWindowsClosedDuringProbe: ({})
++
++  function secondsFromConfig(value, fallback) {
++    return IdleModel.secondsFromConfig(value, fallback)
++  }
++
++  function nowIso() {
++    return new Date().toISOString()
++  }
++
++  function logEvent(event, details) {
++    var suffix = details === undefined || details === null || details === "" ? "" : ": " + String(details)
++    root.lastEventAt = nowIso()
++    root.lastEvent = event + suffix
++    console.log("omarchy idle " + root.lastEventAt + " " + root.lastEvent)
++  }
++
++  function runProcess(process, label, command) {
++    if (process.running) {
++      logEvent("process-skip", label + " already running")
++      return false
++    }
++    logEvent("process-start", label + " " + command)
++    process.command = ["bash", "-lc", command]
++    process.running = true
++    return true
++  }
++
++  function launchScreensaver() {
++    root.screensaverStartedThisCycle = true
++    screensaverLaunchGraceTimer.restart()
++    runProcess(screensaverProcess, "screensaver", "[[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]] || omarchy-launch-screensaver")
++  }
++
++  function lockSystem(reason) {
++    logEvent("lock-system", reason || "requested")
++    screensaverTimer.stop()
++    lockTimer.stop()
++    screensaverLaunchGraceTimer.stop()
++    root.idledThisCycle = false
++    root.screensaverStartedThisCycle = false
++    resetScreensaverWindows()
++    runProcess(lockProcess, "lock", "omarchy-system-lock")
++  }
++
++  function startIdleCycle() {
++    if (root.idledThisCycle) {
++      logEvent("idle-cycle-already-running")
++      return
++    }
++
++    logEvent("idle-cycle-start", "screensaver=" + root.screensaverTimeoutSeconds + " lock=" + root.lockTimeoutSeconds)
++    root.idledThisCycle = true
++    root.screensaverStartedThisCycle = false
++    resetScreensaverWindows()
++
++    if (root.screensaverDelaySeconds === 0) launchScreensaver()
++    else screensaverTimer.restart()
++
++    if (root.lockDelaySeconds === 0) lockSystem("lock-timeout-immediate")
++    else lockTimer.restart()
++  }
++
++  function cancelIdleCycle(reason) {
++    logEvent("idle-cycle-cancel", reason || "requested")
++    screensaverTimer.stop()
++    lockTimer.stop()
++    screensaverLaunchGraceTimer.stop()
++
++    if (root.idledThisCycle) runProcess(wakeProcess, "wake", "omarchy-system-wake")
++
++    root.idledThisCycle = false
++    root.screensaverStartedThisCycle = false
++    resetScreensaverWindows()
++  }
++
++  function resetScreensaverWindows() {
++    root.screensaverWindows = ({})
++    root.screensaverWindowCount = 0
++  }
++
++  function normalizeWindowAddress(address) {
++    var normalized = String(address || "").toLowerCase()
++    return normalized.indexOf("0x") === 0 ? normalized.slice(2) : normalized
++  }
++  function setScreensaverWindow(address, visible) {
++    var next = IdleModel.screensaverWindowsAfter(root.screensaverWindows, normalizeWindowAddress(address), visible)
++    root.screensaverWindows = next.windows
++    root.screensaverWindowCount = next.count
++  }
++
++  function setScreensaverProbeClosed(address, closed) {
++    var normalized = normalizeWindowAddress(address)
++    if (!normalized) return
++
++    var next = ({})
++    for (var existing in root.screensaverWindowsClosedDuringProbe) {
++      if (existing !== normalized && root.screensaverWindowsClosedDuringProbe[existing]) next[existing] = true
++    }
++    if (closed) next[normalized] = true
++    root.screensaverWindowsClosedDuringProbe = next
++  }
++  function reconcileScreensaverWindows(payload) {
++    var clients
++    try {
++      clients = JSON.parse(String(payload || ""))
++    } catch (error) {
++      logEvent("screensaver-state-probe-invalid", error)
++      screensaverStateProbeRetry.restart()
++      return
++    }
++    if (!Array.isArray(clients)) {
++      logEvent("screensaver-state-probe-invalid", "expected client array")
++      screensaverStateProbeRetry.restart()
++      return
++    }
++
++    for (var index = 0; index < clients.length; index++) {
++      var client = clients[index] || ({})
++      if (String(client.class || "") !== root.screensaverClass) continue
++      var address = normalizeWindowAddress(client.address)
++      if (address && !root.screensaverWindowsClosedDuringProbe[address]) setScreensaverWindow(address, true)
++    }
++    root.screensaverWindowsClosedDuringProbe = ({})
++    root.screensaverStateKnown = true
++    logEvent("screensaver-state-ready", root.screensaverWindowCount + " window(s)")
++  }
++
++  function handleScreensaverWindowOpened(address) {
++    setScreensaverWindow(address, true)
++    screensaverLaunchGraceTimer.stop()
++    if (!root.screensaverStateKnown) setScreensaverProbeClosed(address, false)
++  }
++
++  function handleScreensaverWindowClosed(address) {
++    setScreensaverWindow(address, false)
++
++    if (!root.idleEnabled || !root.idledThisCycle || !root.screensaverStartedThisCycle) return
++    if (root.screensaverWindowCount > 0) return
++
++    // The user dismissed the screensaver before the lock deadline. Treat that
++    // as activity and cancel the pending lock; the lock timer is only allowed
++    // to fire while the screensaver remains up.
++    root.cancelIdleCycle("screensaver-dismissed")
++  }
++
++  function eventParts(event, count) {
++    return IdleModel.eventParts(event, count)
++  }
++
++  function handleHyprlandEvent(event) {
++    var name = String(event && event.name ? event.name : "")
++    if (name === "openwindow") {
++      var open = eventParts(event, 4)
++      if (String(open[2] || "") === root.screensaverClass) root.handleScreensaverWindowOpened(open[0])
++    } else if (name === "closewindow") {
++      var close = eventParts(event, 1)
++      var address = normalizeWindowAddress(close[0])
++      if (!root.screensaverStateKnown) setScreensaverProbeClosed(address, true)
++      if (root.screensaverWindows[address]) root.handleScreensaverWindowClosed(address)
++    }
++  }
++
++  function handleActiveSignal() {
++    if (!root.idledThisCycle) return
++
++    // Starting the screensaver can make the compositor report activity. Keep
++    // the lock timer running once the screensaver exists (or during its short
++    // launch grace); Hyprland window events cancel the cycle if it exits before
++    // the normal lock deadline.
++    if (root.screensaverStartedThisCycle && (root.screensaverWindowCount > 0 || screensaverLaunchGraceTimer.running)) {
++      logEvent("idle-monitor-active", "screensaver cycle remains armed")
++      return
++    }
++
++    cancelIdleCycle("activity")
++  }
++
++  function handleIdleChanged() {
++    logEvent("idle-monitor", idleMonitor.isIdle ? "idle" : "active")
++    if (!root.idleEnabled) return
++
++    if (idleMonitor.isIdle) startIdleCycle()
++    else handleActiveSignal()
++  }
++
++  function statusJson() {
++    return JSON.stringify({
++      enabled: root.idleEnabled,
++      stayAwake: root.stayAwake,
++      hostWindowVisible: root.hostWindowVisible,
++      stayAwakeStateLoaded: root.stayAwakeStateLoaded,
++      stayAwakeStatePath: root.stayAwakeStatePath,
++      idle: idleMonitor.isIdle,
++      inIdleCycle: root.idledThisCycle,
++      screensaverStarted: root.screensaverStartedThisCycle,
++      screensaver: root.screensaverTimeoutSeconds,
++      lock: root.lockTimeoutSeconds,
++      screensaverDelay: root.screensaverDelaySeconds,
++      lockDelay: root.lockDelaySeconds,
++      screensaverWindows: root.screensaverWindowCount,
++      timers: {
++        screensaver: screensaverTimer.running,
++        lock: lockTimer.running,
++        screensaverLaunchGrace: screensaverLaunchGraceTimer.running
++      },
++      processes: {
++        screensaver: screensaverProcess.running,
++        lock: lockProcess.running,
++        wake: wakeProcess.running
++      },
++      lastEvent: root.lastEvent,
++      lastEventAt: root.lastEventAt
++    })
++  }
++
++  function persistStayAwake(value) {
++    var command = value
++      ? "mkdir -p \"$HOME/.local/state/omarchy/indicators\" && touch \"$HOME/.local/state/omarchy/indicators/stay-awake\""
++      : "rm -f \"$HOME/.local/state/omarchy/indicators/stay-awake\""
++
++    if (stayAwakeStateWriter.running) {
++      root.pendingStayAwakePersist = !!value
++      root.hasPendingStayAwakePersist = true
++      return
++    }
++
++    stayAwakeStateWriter.command = ["bash", "-lc", command]
++    stayAwakeStateWriter.running = true
++  }
++
++  function refreshStayAwakeState() {
++    if (!stayAwakeStateProbe.running) stayAwakeStateProbe.running = true
++  }
++
++  function applyStayAwake(value, persist, reason) {
++    var enabled = !!value
++    var changed = !root.stayAwakeStateLoaded || root.stayAwake !== enabled
++
++    if (persist) persistStayAwake(enabled)
++
++    root.stayAwake = enabled
++    root.stayAwakeStateLoaded = true
++
++    if (!changed) return enabled ? "disabled" : "enabled"
++
++    logEvent("stay-awake", (enabled ? "enabled" : "disabled") + (reason ? " " + reason : ""))
++    if (enabled) cancelIdleCycle("stay-awake")
++    else Qt.callLater(root.handleIdleChanged)
++
++    return enabled ? "disabled" : "enabled"
++  }
++
++  function setIdleEnabled(value) {
++    return applyStayAwake(!value, true, "ipc")
++  }
++
++  IdleMonitor {
++    id: idleMonitor
++    enabled: root.idleEnabled
++    timeout: root.firstIdleTimeoutSeconds
++    respectInhibitors: true
++    onIsIdleChanged: root.handleIdleChanged()
++  }
++
++  Timer {
++    id: screensaverTimer
++    interval: root.screensaverDelaySeconds * 1000
++    repeat: false
++    onTriggered: root.launchScreensaver()
++  }
++
++  Timer {
++    id: lockTimer
++    interval: root.lockDelaySeconds * 1000
++    repeat: false
++    onTriggered: if (root.idleEnabled && root.idledThisCycle) root.lockSystem("lock-timeout")
++  }
++
++  Timer {
++    id: screensaverLaunchGraceTimer
++    interval: 3000
++    repeat: false
++    onTriggered: {
++      if (root.idleEnabled && root.idledThisCycle && root.screensaverStartedThisCycle && root.screensaverWindowCount === 0 && !idleMonitor.isIdle) {
++        root.cancelIdleCycle("screensaver-not-running")
++      }
++    }
++  }
++
++  Timer {
++    id: screensaverStateProbeRetry
++    interval: 2000
++    repeat: false
++    onTriggered: if (!root.screensaverStateKnown && !screensaverStateProbe.running) screensaverStateProbe.running = true
++  }
++  Connections {
++    target: Hyprland
++    function onRawEvent(event) { root.handleHyprlandEvent(event) }
++  }
++
++  Process {
++    id: screensaverProcess
++    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "screensaver exitCode=" + exitCode + " status=" + exitStatus) }
++  }
++  Process {
++    id: lockProcess
++    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "lock exitCode=" + exitCode + " status=" + exitStatus) }
++  }
++
++  Process {
++    id: screensaverStateProbe
++    command: ["hyprctl", "-j", "clients"]
++    stdout: StdioCollector {
++      waitForEnd: true
++      onStreamFinished: root.reconcileScreensaverWindows(text)
++    }
++    onExited: function(exitCode, exitStatus) {
++      if (!root.screensaverStateKnown) {
++        root.logEvent("screensaver-state-probe-failed", "exitCode=" + exitCode + " status=" + exitStatus)
++        screensaverStateProbeRetry.restart()
++      }
++    }
++  }
++  Process {
++    id: wakeProcess
++    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "wake exitCode=" + exitCode + " status=" + exitStatus) }
++  }
++
++  Process {
++    id: stayAwakeStateProbe
++    command: ["bash", "-c", "mkdir -p \"$HOME/.local/state/omarchy/indicators\"; if [[ -f $HOME/.local/state/omarchy/indicators/stay-awake ]]; then echo yes; else echo no; fi"]
++    stdout: SplitParser {
++      onRead: function(line) { root.applyStayAwake(String(line).trim() === "yes", false, "state-file") }
++    }
++    onExited: function() { stayAwakeStateDirWatcher.reload() }
++  }
++
++  Process {
++    id: stayAwakeStateWriter
++    onExited: function() {
++      if (root.hasPendingStayAwakePersist) {
++        var pending = root.pendingStayAwakePersist
++        root.hasPendingStayAwakePersist = false
++        root.persistStayAwake(pending)
++        return
++      }
++
++      root.refreshStayAwakeState()
++    }
++  }
++
++  FileView {
++    id: stayAwakeStateDirWatcher
++    path: root.stayAwakeStateDir
++    watchChanges: true
++    printErrors: false
++    onFileChanged: root.refreshStayAwakeState()
++  }
++
++  Component.onCompleted: {
++    logEvent("service-ready")
++    refreshStayAwakeState()
++    screensaverStateProbe.running = true
++  }
++  IpcHandler {
++    target: "idle"
++
++    function status(): string {
++      return root.statusJson()
++    }
++
++    function debug(): string {
++      return root.statusJson()
++    }
++
++    function enable(): string {
++      return root.setIdleEnabled(true)
++    }
++
++    function disable(): string {
++      return root.setIdleEnabled(false)
++    }
++
++    function toggle(): string {
++      return root.setIdleEnabled(!root.idleEnabled)
++    }
++  }
++}
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index eb9894d..9b7c693 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -72,11 +72,9 @@ version = subprocess.check_output(["pacman", "-Q", "try-omarchy-runtime"], text=
+ (root / "manifest.json").write_text(json.dumps({"schema": 1, "runtimeVersion": version, "files": files}, sort_keys=True) + "\n")
+ UPDATE_MANIFEST
+ 
+-# Carry the exact patched idle service for a digest-gated repair on old disks.
+-install -m 0644 /usr/share/omarchy/shell/plugins/services/idle/Service.qml /usr/share/try-omarchy/host-window-idle.qml
+-
+-# Carry the already patched clock for a Linux-only digest-gated old-disk repair.
+-install -m 0644 /usr/share/omarchy/shell/plugins/panels/clock/BarWidget.qml /usr/share/try-omarchy/clock-timezone-refresh.qml
++# The factory overlay carries the patched Omarchy 4.0.4 idle service and clock
++# for the digest-gated repairs on disks still on that runtime. They are frozen
++# copies: this image's own files belong to a newer Omarchy.
+ 
+ compat_paths=(
+   usr/local/lib/try-omarchy/install-qt612-palette
+diff --git a/guest/tests/test_legacy_repair_payloads.py b/guest/tests/test_legacy_repair_payloads.py
+new file mode 100644
+index 0000000..7b7debe
+--- /dev/null
++++ b/guest/tests/test_legacy_repair_payloads.py
+@@ -0,0 +1,49 @@
++"""The 4.0.4 repair payloads stay the files that runtime shipped."""
++import hashlib
++import json
++from pathlib import Path
++import re
++import unittest
++
++GUEST = Path(__file__).resolve().parents[1]
++OVERLAY = GUEST / 'factory-overlay'
++LEGACY = json.loads((GUEST / 'tests/fixtures/omarchy-4.0.4/backports.json').read_text())
++
++
++def target(backport_id, path):
++    backport = next(b for b in LEGACY['backports'] if b['id'] == backport_id)
++    return next(t for t in backport['targets'] if t['path'] == path)
++
++
++class LegacyRepairPayloadTests(unittest.TestCase):
++    CASES = [
++        ('host-window-idle', 'shell/plugins/services/idle/Service.qml',
++         'usr/share/try-omarchy/host-window-idle.qml', 'usr/local/lib/try-omarchy/repair-host-window'),
++        ('clock-timezone-refresh', 'shell/plugins/panels/clock/BarWidget.qml',
++         'usr/share/try-omarchy/clock-timezone-refresh.qml', 'usr/local/lib/try-omarchy/repair-clock-timezone'),
++    ]
++
++    def test_payloads_are_the_patched_4_0_4_files(self):
++        for backport_id, path, payload, _ in self.CASES:
++            with self.subTest(payload=payload):
++                digest = hashlib.sha256((OVERLAY / payload).read_bytes()).hexdigest()
++                self.assertEqual(digest, target(backport_id, path)['afterSha256'])
++
++    def test_repairs_only_match_4_0_4_files(self):
++        spec = json.loads((GUEST / 'spec.json').read_text())
++        current = {t['afterSha256'] for b in spec['authenticity']['backports'] for t in b['targets']}
++        current |= {t['beforeSha256'] for b in spec['authenticity']['backports'] for t in b['targets']}
++        for backport_id, path, _, repair in self.CASES:
++            with self.subTest(repair=repair):
++                digests = set(re.findall(r'\b[0-9a-f]{64}\b', (OVERLAY / repair).read_text()))
++                self.assertTrue(digests)
++                self.assertTrue(digests.isdisjoint(current), digests & current)
++
++    def test_build_does_not_overwrite_the_frozen_payloads(self):
++        finalizer = (GUEST / 'scripts/finalize-rootfs.sh').read_text()
++        for _, _, payload, _ in self.CASES:
++            self.assertNotIn(f'/{payload}\n', finalizer.replace(f'  {payload}\n', ''))
++
++
++if __name__ == '__main__':
++    unittest.main()
+-- 
+2.56.0
+

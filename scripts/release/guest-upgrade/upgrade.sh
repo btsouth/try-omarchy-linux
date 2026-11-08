@@ -45,8 +45,20 @@ for package in $runtime_dependencies; do
   pacman -Q "$package" >/dev/null
 done
 pacman -Qq | sort > /tmp/packages-after
-comm -23 <(sort "$HOME/upgrade-packages-before.txt") /tmp/packages-after > /tmp/packages-missing
-[[ ! -s /tmp/packages-missing ]]
+# Every package survives except the ones Omarchy's own migrations retire:
+# Omarchy 4.5 replaces Tensaku with Omasnap and dua-cli with Disktree.
+comm -23 <(sort "$HOME/upgrade-packages-before.txt") /tmp/packages-after |
+  { grep -vxF -e tensaku -e dua-cli || true; } > /tmp/packages-missing
+[[ ! -s /tmp/packages-missing ]] || { cat /tmp/packages-missing; exit 1; }
+for package in ${CANDIDATE_ADDED_PACKAGES:-}; do
+  pacman -Q "$package"
+done
+# The image leaves these out, so the update must not bring them either.
+for package in ${CANDIDATE_OMITTED_PACKAGES:-}; do
+  if pacman -Q "$package" 2>/dev/null; then exit 1; fi
+done
+[[ -z ${CANDIDATE_AQUAMARINE:-} || $(pacman -Q aquamarine) == "aquamarine $CANDIDATE_AQUAMARINE" ]]
+[[ -z ${CANDIDATE_MISE:-} || $(pacman -Q try-omarchy-mise) == "try-omarchy-mise $CANDIDATE_MISE-1" ]]
 sudo pacman -Dk
 sha256sum -c "$HOME/upgrade-nvim.sha256"
 [[ $(readlink /usr/bin/omarchy-nvim-refresh) == "$(cat "$HOME/upgrade-nvim-link")" ]]
@@ -61,6 +73,8 @@ expected_theme_link="../../../../.local/state/omarchy/current/theme/neovim.lua"
 [[ $(readlink /etc/skel/.config/nvim/lua/plugins/theme.lua) == "$expected_theme_link" ]]
 [[ $(readlink "$HOME/.config/nvim/lua/plugins/theme.lua") == "$expected_theme_link" ]]
 omarchy-migrate
+# Every migration completed, including the ones the guest makes inert.
+if omarchy-migrate --pending; then exit 1; fi
 sha256sum -c "$HOME/upgrade-preserve.sha256"
 # Revision 34 loads the pinch device rules once, keeps the personal override,
 # and leaves the pre-upgrade file beside it unless the skeleton already had them.
@@ -154,5 +168,12 @@ fi
 if (( revision >= 66 )); then
   grep -Fq 'def package_transaction' /usr/local/lib/try-omarchy/compositor-health
 fi
+if (( revision >= 68 )); then
+  # The 4.0.4 repairs carry that runtime's patched files, not the image's own.
+  [[ $(sha256sum < /usr/share/try-omarchy/host-window-idle.qml) == '815579bfb4ed4d0d87587927d8d10cb018cc055e2cafe4919d97427750e4f242  -' ]]
+  [[ $(sha256sum < /usr/share/try-omarchy/clock-timezone-refresh.qml) == '29cd6b0c67dd97f18f9f5f9ee7e402f13d79d4ddc5e78dc08a838a3e03565a51  -' ]]
+fi
 sha256sum "$input" > "$HOME/upgrade-input-after.sha256"
+systemctl --failed --no-pager
+df -h /
 sync

@@ -20,8 +20,7 @@ virtio night light and the host window idle lease are re-ported; the clock,
 screensaver, free-space message and bell mute rebase. Existing disks run 4.5's
 new migrations on **Update > Omarchy**, while fresh users have them marked done,
 so `materialize-omarchy.sh` makes the ones that install apps the image leaves
-out, reorder the package repositories or apply sysctl files the guest does not
-ship print a message instead. Each is guarded by its reviewed digest, so an
+out or apply sysctl files the guest does not ship print a message instead. Each is guarded by its reviewed digest, so an
 upstream change stops the build. The input-method migration keeps its shortcut
 defaults but does not add Mozc or the Chinese add-ons. The kernel reboot check
 now matches 4.5's indented line. The image ships 4.5's XKB option, the language
@@ -46,6 +45,21 @@ catch-up finish on early preview disks without DKMS. Patch 0161 keeps a stopped
 build from deleting the host's device nodes: pacstrap mounts the kernel's
 devtmpfs inside the staged root, and cleanup used to `rm -rf` through it. Patch
 0162 raises the compatibility revision to 68. Runtime `4.5.0-10` carries it all.
+
+Patches 0163 to 0166 keep fresh and updated 4.5 disks alike, as Try Omarchy for
+Windows' 0168 to 0171 do. Patch 0163 lists `[omarchy]` ahead of the Arch
+repositories, as 4.5 does, and lets the reorder migration run. The Omarchy
+repository has no aquamarine or Hyprland, so the only package it takes over is
+quickshell, whose snapshot build the 4.5 shell is made for. It also adds
+qt6-imageformats, which the shell needs to decode the .webp theme backgrounds,
+and patch 0164 refreshes the lock for both. Patch 0165 keeps 4.5's new VM step
+from turning off animations and transparency for fresh users, since updated
+disks never run it; the step is guarded by its reviewed digest. Patch 0166 has
+the runtime package bring the icon font, fontconfig rules, systemd user units
+and the shipped fastfetch layout up to date after every install and upgrade. No
+package owns those files, so a runtime update alone left updated disks with
+4.0.4's copies. A file some package owns, or a fastfetch layout an
+administrator edited, is left alone.
 
 Patch 0152 mutes Hyprland's sound for every terminal bell. Hyprland 0.57
 plays one for each bell, and Foot rings it on missed Tab completions and

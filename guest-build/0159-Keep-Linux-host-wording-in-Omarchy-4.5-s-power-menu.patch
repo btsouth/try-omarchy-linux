@@ -1,0 +1,123 @@
+From 9f7e5a581d1d2e44b10690502bc83984e49cbc5c Mon Sep 17 00:00:00 2001
+From: Tyler South <tsouth2@gmail.com>
+Date: Sun, 8 Nov 2026 01:01:22 -0500
+Subject: [PATCH] Keep Linux host wording in Omarchy 4.5's power menu
+
+apply-host-names gives Linux hosts "Managed by the host computer" only in power files it recognizes, and it knew only the 4.0.x payload. On the 4.5 runtime the menu, panel and powerprofiles-set would say Windows again. The image now records its own runtime's power files and the helper recognizes those too; older files are left alone.
+---
+ .../local/lib/try-omarchy/apply-host-names    | 13 ++++++--
+ guest/scripts/finalize-rootfs.sh              | 21 ++++++++++++
+ guest/tests/test_host_names.py                | 33 +++++++++++++++++++
+ 3 files changed, 64 insertions(+), 3 deletions(-)
+
+diff --git a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+index 11abb79..9259a5f 100755
+--- a/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
++++ b/guest/factory-overlay/usr/local/lib/try-omarchy/apply-host-names
+@@ -36,10 +36,17 @@ for name in ("try-omarchy-file-transfers.desktop", "try-omarchy-host-settings.de
+         temporary.replace(path)
+ 
+ # The Windows quality-of-life payload is immutable. Select host wording only
+-# in its recognized installed versions, including the older power panels.
++# in its recognized installed versions, including the older power panels. The
++# image also records its own runtime's power files, which a newer Omarchy
++# changed, so those are recognized once that runtime is installed.
+ root = Path(os.environ.get("TRY_OMARCHY_POWER_ROOT", "/"))
+-payload = Path(os.environ.get("TRY_OMARCHY_POWER_PAYLOAD", "/usr/share/try-omarchy/guest-qol"))
+-if (payload / "manifest.json").is_file():
++payloads = (
++    Path(os.environ.get("TRY_OMARCHY_POWER_PAYLOAD", "/usr/share/try-omarchy/guest-qol")),
++    Path(os.environ.get("TRY_OMARCHY_RUNTIME_LABELS", "/usr/share/try-omarchy/host-labels")),
++)
++for payload in payloads:
++    if not (payload / "manifest.json").is_file():
++        continue
+     for hook in json.loads((payload / "manifest.json").read_text()):
+         if hook["path"] not in ("usr/bin/omarchy-powerprofiles-set",
+                                 "usr/share/omarchy/shell/plugins/menu/Menu.qml",
+diff --git a/guest/scripts/finalize-rootfs.sh b/guest/scripts/finalize-rootfs.sh
+index 9b7c693..68ddc5f 100755
+--- a/guest/scripts/finalize-rootfs.sh
++++ b/guest/scripts/finalize-rootfs.sh
+@@ -76,6 +76,26 @@ UPDATE_MANIFEST
+ # for the digest-gated repairs on disks still on that runtime. They are frozen
+ # copies: this image's own files belong to a newer Omarchy.
+ 
++# Record this runtime's power files, so apply-host-names gives Linux hosts their
++# wording once the runtime is installed. A disk on an older runtime has other
++# files, which it leaves alone.
++python3 - <<'HOST_LABELS'
++import hashlib, json, pathlib
++root = pathlib.Path("/usr/share/try-omarchy/host-labels")
++root.mkdir(parents=True, exist_ok=True)
++hooks = []
++for path in ("usr/bin/omarchy-powerprofiles-set",
++             "usr/share/omarchy/shell/plugins/menu/Menu.qml",
++             "usr/share/omarchy/shell/plugins/panels/power/Panel.qml"):
++    data = (pathlib.Path("/") / path).read_bytes()
++    if b"Managed by Windows" not in data:
++        raise SystemExit(f"{path} lost its host wording")
++    asset = path.replace("/", "_")
++    (root / asset).write_bytes(data)
++    hooks.append({"path": path, "asset": asset, "afterSha256": hashlib.sha256(data).hexdigest()})
++(root / "manifest.json").write_text(json.dumps(hooks, indent=2) + "\n")
++HOST_LABELS
++
+ compat_paths=(
+   usr/local/lib/try-omarchy/install-qt612-palette
+   usr/share/try-omarchy/qt612-palette
+@@ -100,6 +120,7 @@ compat_paths=(
+   usr/local/bin/omarchy-native-screensaver-text
+   usr/local/lib/try-omarchy/install-guest-qol
+   usr/share/try-omarchy/guest-qol
++  usr/share/try-omarchy/host-labels
+   usr/local/bin/try-omarchy-timezone
+   usr/share/applications/try-omarchy-follow-timezone.desktop
+   etc/systemd/system/try-omarchy-timezone.service
+diff --git a/guest/tests/test_host_names.py b/guest/tests/test_host_names.py
+index 321bdee..fbc38f4 100644
+--- a/guest/tests/test_host_names.py
++++ b/guest/tests/test_host_names.py
+@@ -96,6 +96,39 @@ class HostNamesTests(unittest.TestCase):
+         service = (OVERLAY / 'etc/systemd/system/try-omarchy-catch-up.service').read_text()
+         self.assertIn('ExecStartPost=/usr/local/lib/try-omarchy/apply-host-names', service)
+ 
++    def test_the_image_records_its_own_runtime_power_files(self):
++        finalizer = (Path(__file__).resolve().parents[1] / 'scripts/finalize-rootfs.sh').read_text()
++        program = finalizer.split("python3 - <<'HOST_LABELS'\n", 1)[1].split('\nHOST_LABELS\n', 1)[0]
++        self.assertIn('  usr/share/try-omarchy/host-labels\n', finalizer.split('compat_paths=(', 1)[1].split(')', 1)[0])
++        paths = ('usr/bin/omarchy-powerprofiles-set', 'usr/share/omarchy/shell/plugins/menu/Menu.qml',
++                 'usr/share/omarchy/shell/plugins/panels/power/Panel.qml')
++        with tempfile.TemporaryDirectory() as tmp:
++            image, disk = Path(tmp) / 'image', Path(tmp) / 'disk'
++            for path in paths:
++                (image / path).parent.mkdir(parents=True, exist_ok=True)
++                (image / path).write_text(f'# {path} from a newer Omarchy\necho "Managed by Windows"\n')
++            program = program.replace('pathlib.Path("/usr/share/try-omarchy/host-labels")', f'pathlib.Path({str(image / "labels")!r})')
++            program = program.replace('pathlib.Path("/")', f'pathlib.Path({str(image)!r})')
++            subprocess.run(['python3', '-c', program], check=True)
++            cmdline = Path(tmp) / 'cmdline'
++            cmdline.write_text('tryomarchy.host=linux')
++            for path in paths:
++                (disk / path).parent.mkdir(parents=True, exist_ok=True)
++                shutil.copy(image / path, disk / path)
++            older = disk / paths[0]
++            older.write_text('# the older runtime\necho "Managed by Windows"\n')
++            env = dict(os.environ, TRY_OMARCHY_CMDLINE=str(cmdline), TRY_OMARCHY_APPLICATIONS=str(disk / 'absent'),
++                       TRY_OMARCHY_POWER_ROOT=str(disk), TRY_OMARCHY_POWER_PAYLOAD=str(disk / 'absent-payload'),
++                       TRY_OMARCHY_RUNTIME_LABELS=str(image / 'labels'))
++            subprocess.run([str(HELPER)], env=env, check=True)
++            self.assertEqual(older.read_text(), '# the older runtime\necho "Managed by Windows"\n')
++            for path in paths[1:]:
++                self.assertIn('Managed by the host computer', (disk / path).read_text())
++            cmdline.write_text('root=/dev/vda')
++            subprocess.run([str(HELPER)], env=env, check=True)
++            for path in paths[1:]:
++                self.assertEqual((disk / path).read_bytes(), (image / path).read_bytes())
++
+     def test_runtime_transaction_hook_reapplies_linux_power_labels(self):
+         hook = (OVERLAY / 'etc/pacman.d/hooks/95-try-omarchy-host-names.hook').read_text()
+         trigger, action = hook.split('[Action]')
+-- 
+2.56.0
+

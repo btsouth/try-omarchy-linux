@@ -1,0 +1,87 @@
+From 0dc32d24e0467b53870369b5897512d3ab5e5423 Mon Sep 17 00:00:00 2001
+From: Try Omarchy Release <actions@users.noreply.github.com>
+Date: Sun, 8 Nov 2026 11:03:21 -0500
+Subject: [PATCH] Refresh the guest package lock
+
+fastfetch 2.70.0-1 -> 2.71.0-1
+inotify-tools 4.26.270-1 -> 4.26.272-1
+quickshell 0.3.2-1 -> 0.3.2.r7.g2b4501a-1
+freeglut 3.8.0-1 (new)
+jasper 4.2.9-1 (new)
+libmng 2.0.3-4 (new)
+qt6-imageformats 6.12.0-1 (new)
+---
+ guest/packages.lock.json | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/guest/packages.lock.json b/guest/packages.lock.json
+index 8a59b05..85aa6c4 100644
+--- a/guest/packages.lock.json
++++ b/guest/packages.lock.json
+@@ -70,7 +70,7 @@
+     "expat": "2.10.0-1",
+     "eza": "0.23.5-2",
+     "fakeroot": "1:2.1.4-1",
+-    "fastfetch": "2.70.0-1",
++    "fastfetch": "2.71.0-1",
+     "fcft": "3.3.3-1",
+     "fcitx5": "5.1.23-1",
+     "fcitx5-chewing": "5.1.13-1",
+@@ -86,6 +86,7 @@
+     "flex": "2.6.4-6",
+     "fontconfig": "2:2.18.3-2",
+     "foot": "1.28.0-2",
++    "freeglut": "3.8.0-1",
+     "freetype2": "2.15.0-1",
+     "fribidi": "1.0.18-1",
+     "fuse-common": "3.18.3-1",
+@@ -181,13 +182,14 @@
+     "imagemagick": "7.1.2.35-1",
+     "imv": "5.0.1-2",
+     "iniparser": "4.3.2-1",
+-    "inotify-tools": "4.26.270-1",
++    "inotify-tools": "4.26.272-1",
+     "iproute2": "7.3.0-1",
+     "iptables": "1:1.8.13-1",
+     "iputils": "20250605-1",
+     "iso-codes": "4.20.1-1",
+     "jack2": "1.9.22-2",
+     "jansson": "2.15.1-1",
++    "jasper": "4.2.9-1",
+     "jbig2dec": "0.20-2",
+     "jbigkit": "2.2-1",
+     "jemalloc": "1:5.4.0-1",
+@@ -300,6 +302,7 @@
+     "libmediainfo": "26.10-1",
+     "libmm-glib": "1.24.2-2",
+     "libmms": "0.6.4-6",
++    "libmng": "2.0.3-4",
+     "libmnl": "1.0.5-2",
+     "libmodplug": "0.8.9.0-7",
+     "libmpc": "1.4.1-1",
+@@ -539,12 +542,13 @@
+     "qrencode": "4.1.1-4",
+     "qt6-base": "6.12.0-3",
+     "qt6-declarative": "6.12.0-4",
++    "qt6-imageformats": "6.12.0-1",
+     "qt6-multimedia": "6.12.0-1",
+     "qt6-multimedia-ffmpeg": "6.12.0-1",
+     "qt6-svg": "6.12.0-1",
+     "qt6-translations": "6.12.0-1",
+     "qt6-wayland": "6.12.0-1",
+-    "quickshell": "0.3.2-1",
++    "quickshell": "0.3.2.r7.g2b4501a-1",
+     "rav1e": "0.8.1-3",
+     "re2": "2:2025.11.05-6",
+     "readline": "8.3.6-1",
+@@ -683,6 +687,6 @@
+     "zram-generator": "1.2.1-1",
+     "zstd": "1.5.7-3"
+   },
+-  "requestedFileSha256": "84906082c94d33e92c8b155bed1fe122a66e2d1e85b859b18aba229e4d8cc9e1",
++  "requestedFileSha256": "533e62c45075553a4c1f402afa725f12ababe434dd13e8e00c52cc7357171925",
+   "schemaVersion": 1
+ }
+-- 
+2.53.0
+

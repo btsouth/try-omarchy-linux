@@ -33,7 +33,7 @@ class ParseFactsTests(unittest.TestCase):
 
 class GuestRevisionTests(unittest.TestCase):
     def test_unified_revision_is_read_from_appended_patches(self):
-        self.assertEqual(smoke_guest.guest_compat_revision(), 67)
+        self.assertEqual(smoke_guest.guest_compat_revision(), 68)
 
     def test_linux_payload_checks_follow_delivery_revisions(self):
         self.assertEqual(smoke_guest.linux_guest_payload_checks(49), {})
